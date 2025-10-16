@@ -5,7 +5,8 @@ const {
     createCaseStudyFromAlert,
     getCaseStudyById,
     deleteCaseStudy,
-    updateCaseStudyStatus // 1. Import hàm mới
+    updateCaseStudyStatus,
+    createBulkCaseStudies
 } = require('../controllers/caseStudyController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -17,7 +18,9 @@ router.route('/')
     .get(getAllCaseStudies)
     .post(createCaseStudyFromAlert);
 
-// === ROUTE MỚI ĐỂ CẬP NHẬT TRẠNG THÁI ===
+router.route('/bulk-create')
+    .post(protect, createBulkCaseStudies);
+
 // PUT /api/casestudies/:id/status
 router.route('/:id/status')
     .put(updateCaseStudyStatus); // 2. Thêm route này

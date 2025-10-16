@@ -1,59 +1,72 @@
 // backend/controllers/alertController.js
 const { Op } = require('sequelize');
-const Alert = require('../models/Alert');
-const Post = require('../models/Post');
-const User = require('../models/User');
+const { Alert, Post } = require('../models/associations');
 
-// ... (các hàm getAlertById, createAlert... giữ nguyên) ...
-
-// @desc    Lấy tất cả Alerts cho người dùng đã đăng nhập (CÓ PHÂN TRANG)
-// @route   GET /api/alerts
-// @access  Private
+// @desc    Lấy tất cả Alerts cho người dùng (CÓ PHÂN TRANG VÀ TÌM KIẾM)
 exports.getAlerts = async (req, res) => {
     try {
         const userId = req.user.id;
-
-        // Lấy tham số page và limit từ query string, có giá trị mặc định
         const page = parseInt(req.query.page, 10) || 1;
-        const limit = parseInt(req.query.limit, 10) || 10;
+        const limit = parseInt(req.query.limit, 10) || 5;
         const offset = (page - 1) * limit;
+        const { search, fields } = req.query;
 
-        // Sử dụng findAndCountAll để lấy cả dữ liệu và tổng số lượng
+        const whereCondition = { userId: userId };
+
+        if (search && fields) {
+            const searchTerms = search.toLowerCase().split('|').map(t => t.trim()).filter(Boolean);
+            const searchFields = fields.split(',');
+            if (searchTerms.length > 0 && searchFields.length > 0) {
+                const orConditions = [];
+                searchTerms.forEach(term => {
+                    searchFields.forEach(field => {
+                        if (['title', 'description', 'keywords', 'platforms'].includes(field)) {
+                            orConditions.push({ [field]: { [Op.like]: `%${term}%` } });
+                        }
+                    });
+                });
+                if (orConditions.length > 0) { whereCondition[Op.or] = orConditions; }
+            }
+        }
+
         const { count, rows } = await Alert.findAndCountAll({
-            where: { userId: userId },
+            where: whereCondition,
             order: [['createdAt', 'DESC']],
             limit: limit,
             offset: offset
         });
 
-        // Trả về một object chứa cả dữ liệu và thông tin phân trang
         res.status(200).json({
             alerts: rows,
             totalPages: Math.ceil(count / limit),
             currentPage: page
         });
-
     } catch (error) {
         console.error("Error fetching alerts:", error);
         res.status(500).json({ message: 'Server error while fetching alerts' });
     }
 };
 
-// ... (các hàm còn lại giữ nguyên, tôi sẽ rút gọn ở đây)
+// @desc    Lấy chi tiết một Alert và các posts liên quan
 exports.getAlertById = async (req, res) => {
     try {
-        const alertId = req.params.id;
-        const userId = req.user.id;
-        const alert = await Alert.findOne({ where: { id: alertId, userId: userId } });
-        if (!alert) {
-            return res.status(404).json({ message: 'Alert not found or you do not have permission' });
-        }
+        const { id: alertId } = req.params;
+        const alert = await Alert.findOne({
+            where: { id: alertId, userId: req.user.id },
+            include: [{
+                model: Post,
+                through: { attributes: [] } // Bỏ qua bảng trung gian trong kết quả
+            }],
+            order: [[Post, 'publishedAt', 'DESC']] // Sắp xếp các post được include
+        });
+        if (!alert) { return res.status(404).json({ message: 'Alert not found' }); }
         res.status(200).json(alert);
     } catch (error) {
         console.error("Error fetching single alert:", error);
-        res.status(500).json({ message: 'Server error while fetching alert' });
+        res.status(500).json({ message: 'Server error' });
     }
 };
+
 exports.createAlert = async (req, res) => {
     const { title, description, severity, keywords, platforms } = req.body;
     const userId = req.user.id;
@@ -71,17 +84,14 @@ exports.createAlert = async (req, res) => {
         res.status(500).json({ message: 'Server error while creating alert' });
     }
 };
+
 exports.updateAlert = async (req, res) => {
     const { title, description, severity, status, keywords, platforms } = req.body;
     const alertId = req.params.id;
     try {
         const alert = await Alert.findByPk(alertId);
-        if (!alert) {
-            return res.status(404).json({ message: 'Alert not found' });
-        }
-        if (alert.userId !== req.user.id) {
-            return res.status(403).json({ message: 'Not authorized to update this alert' });
-        }
+        if (!alert) { return res.status(404).json({ message: 'Alert not found' }); }
+        if (alert.userId !== req.user.id) { return res.status(403).json({ message: 'Not authorized to update this alert' }); }
         const updateData = { title, description, severity, status, keywords, platforms };
         await Alert.update(updateData, { where: { id: alertId } });
         const updatedAlert = await Alert.findByPk(alertId);
@@ -91,81 +101,97 @@ exports.updateAlert = async (req, res) => {
         res.status(500).json({ message: 'Server error while updating alert' });
     }
 };
-exports.scanForMatches = async (req, res) => {
-    try {
-        const alertId = req.params.id;
-        const userId = req.user.id;
-        const alert = await Alert.findOne({ where: { id: alertId, userId: userId } });
-        if (!alert) {
-            return res.status(404).json({ message: 'Alert not found or you do not have permission.' });
-        }
-        if (alert.status !== 'ACTIVE') {
-            return res.status(400).json({ message: 'Cannot scan for an inactive alert.' });
-        }
-        const unlinkedPosts = await Post.findAll({
-            where: { [Op.or]: [{ alertId: null }, { alertId: { [Op.ne]: alert.id } }] }
-        });
-        let matchesFound = 0;
-        for (const post of unlinkedPosts) {
-            const postContent = `${post.title} ${post.content}`.toLowerCase();
-            const hasMatch = alert.keywords.some(keyword => postContent.includes(keyword.toLowerCase()));
-            if (hasMatch) {
-                matchesFound++;
-                await post.update({ alertId: alert.id });
-                await alert.increment('postCount');
-            }
-        }
-        console.log(`Scan complete for alert "${alert.title}". Found and linked ${matchesFound} existing posts.`);
-        res.status(200).json({ message: `Scan complete. Found and linked ${matchesFound} existing posts.` });
-    } catch (error) {
-        console.error(`Error during manual scan for alert ${req.params.id}:`, error);
-        res.status(500).json({ message: 'Server error during scan.' });
-    }
-};
-exports.scanAllActiveAlerts = async (req, res) => {
-    try {
-        const userId = req.user.id;
-        const activeAlerts = await Alert.findAll({ where: { userId, status: 'ACTIVE' } });
-        if (activeAlerts.length === 0) {
-            return res.status(200).json({ message: 'No active alerts to scan.' });
-        }
-        const unlinkedPosts = await Post.findAll({ where: { alertId: null } });
-        let totalMatches = 0;
-        for (const alert of activeAlerts) {
-            let alertMatches = 0;
-            for (const post of unlinkedPosts) {
-                const postContent = `${post.title} ${post.content}`.toLowerCase();
-                const hasMatch = alert.keywords.some(keyword => postContent.includes(keyword.toLowerCase()));
-                if (hasMatch) {
-                    alertMatches++;
-                    await post.update({ alertId: alert.id });
-                }
-            }
-            if (alertMatches > 0) {
-                await alert.increment('postCount', { by: alertMatches });
-                totalMatches += alertMatches;
-            }
-        }
-        res.status(200).json({ message: `Scan complete. Found and linked ${totalMatches} new posts across your active alerts.` });
-    } catch (error) {
-        console.error('Error scanning all active alerts:', error);
-        res.status(500).json({ message: 'Server error during scan.' });
-    }
-};
+
 exports.deleteAlert = async (req, res) => {
     const alertId = req.params.id;
     try {
         const alert = await Alert.findByPk(alertId);
-        if (!alert) {
-            return res.status(404).json({ message: 'Alert not found' });
-        }
-        if (alert.userId !== req.user.id) {
-            return res.status(403).json({ message: 'Not authorized to delete this alert' });
-        }
+        if (!alert) { return res.status(404).json({ message: 'Alert not found' }); }
+        if (alert.userId !== req.user.id) { return res.status(403).json({ message: 'Not authorized to delete this alert' }); }
         await Alert.destroy({ where: { id: alertId } });
         res.status(200).json({ message: 'Alert deleted successfully' });
     } catch (error) {
         console.error("Error deleting alert:", error);
         res.status(500).json({ message: 'Server error while deleting alert' });
+    }
+};
+
+// @desc    Quét các post để tìm và liên kết với một alert
+exports.scanForMatches = async (req, res) => {
+    try {
+        const { id: alertId } = req.params;
+        const alert = await Alert.findByPk(alertId);
+        if (!alert) return res.status(404).json({ message: 'Alert not found' });
+        if (alert.status !== 'ACTIVE') return res.status(400).json({ message: 'Cannot scan inactive alert.' });
+
+        const keywordConditions = alert.keywords.map(keyword => ({
+            [Op.or]: [
+                { title: { [Op.like]: `%${keyword}%` } },
+                { content: { [Op.like]: `%${keyword}%` } }
+            ]
+        }));
+        if (keywordConditions.length === 0) return res.status(200).json({ message: 'Scan complete. No keywords.' });
+
+        const matchingPosts = await Post.findAll({ where: { [Op.or]: keywordConditions } });
+        if (matchingPosts.length === 0) return res.status(200).json({ message: 'Scan complete. No new matches.' });
+
+        await alert.addPosts(matchingPosts);
+        const count = await alert.countPosts();
+        await alert.update({ postCount: count });
+
+        res.status(200).json({ message: `Scan complete. Linked ${matchingPosts.length} posts.` });
+    } catch (error) {
+        console.error(`Error during manual scan:`, error);
+        res.status(500).json({ message: 'Server error during scan.' });
+    }
+};
+
+// @desc    Quét tất cả các posts cho tất cả alerts đang active
+exports.scanAllActiveAlerts = async (req, res) => {
+    try {
+        const activeAlerts = await Alert.findAll({ where: { userId: req.user.id, status: 'ACTIVE' } });
+        if (activeAlerts.length === 0) return res.status(200).json({ message: 'No active alerts to scan.' });
+
+        const allPosts = await Post.findAll();
+        for (const alert of activeAlerts) {
+            const postContentMatches = allPosts.filter(post => {
+                const postContent = `${post.title} ${post.content}`.toLowerCase();
+                return alert.keywords.some(keyword => postContent.includes(keyword.toLowerCase()));
+            });
+            if (postContentMatches.length > 0) {
+                await alert.addPosts(postContentMatches);
+            }
+            const count = await alert.countPosts();
+            await alert.update({ postCount: count });
+        }
+        res.status(200).json({ message: `Scan complete. Scanned ${activeAlerts.length} alerts.` });
+    } catch (error) {
+        console.error('Error scanning all active alerts:', error);
+        res.status(500).json({ message: 'Server error during scan.' });
+    }
+};
+
+// @desc    Lấy các số liệu thống kê cho dashboard
+exports.getStats = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const totalAlerts = await Alert.count({ where: { userId: userId } });
+        const activeAlerts = await Alert.count({ where: { userId: userId, status: 'ACTIVE' } });
+
+        const userAlerts = await Alert.findAll({
+            where: { userId: userId },
+            include: [{ model: Post, attributes: ['id'], through: { attributes: [] } }]
+        });
+
+        const uniquePostIds = new Set();
+        userAlerts.forEach(alert => {
+            alert.Posts.forEach(post => uniquePostIds.add(post.id));
+        });
+        const totalMentionedPosts = uniquePostIds.size;
+
+        res.status(200).json({ totalAlerts, activeAlerts, totalMentionedPosts });
+    } catch (error) {
+        console.error("Error fetching dashboard stats:", error);
+        res.status(500).json({ message: "Server error while fetching stats" });
     }
 };

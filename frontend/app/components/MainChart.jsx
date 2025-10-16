@@ -5,11 +5,10 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { api } from '@/utils/api';
 import { Loader2 } from 'lucide-react';
 
-// Custom Tooltip để có giao diện đẹp hơn
 const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
         return (
-            <div className="bg-slate-900/80 backdrop-blur-sm p-3 rounded-md border border-slate-700">
+            <div className="bg-slate-900/80 backdrop-blur-sm p-3 rounded-md border border-slate-700 text-sm sm:text-base">
                 <p className="label text-white font-bold">{`${label}`}</p>
                 {payload.map((pld, index) => (
                     <p key={index} style={{ color: pld.fill }}>{`${pld.name}: ${pld.value}`}</p>
@@ -43,29 +42,20 @@ export default function MainChart() {
 
     const chartData = useMemo(() => {
         const dayCounts = new Map();
-
-        // Tạo các mốc cho 7 ngày gần nhất
         for (let i = 6; i >= 0; i--) {
             const d = new Date();
             d.setDate(d.getDate() - i);
-            // === THAY ĐỔI Ở ĐÂY: Dùng định dạng "Tháng Ngày" ===
-            const dayLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); // e.g., "Oct 14"
+            const dayLabel = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
             dayCounts.set(dayLabel, { name: dayLabel, negative: 0, positive: 0 });
         }
 
-        // Đếm số lượng posts cho mỗi ngày
         posts.forEach(post => {
             const postDate = new Date(post.publishedAt);
-            // === THAY ĐỔI Ở ĐÂY: Dùng định dạng "Tháng Ngày" ===
             const dayLabel = postDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-
             if (dayCounts.has(dayLabel)) {
                 const dayData = dayCounts.get(dayLabel);
-                if (post.sentiment === 'POSITIVE') {
-                    dayData.positive += 1;
-                } else if (post.sentiment === 'NEGATIVE') {
-                    dayData.negative += 1;
-                }
+                if (post.sentiment === 'POSITIVE') dayData.positive += 1;
+                else if (post.sentiment === 'NEGATIVE') dayData.negative += 1;
             }
         });
 
@@ -74,41 +64,46 @@ export default function MainChart() {
 
     if (isLoading) {
         return (
-            <div className="bg-slate-800/50 p-6 rounded-lg h-96 flex flex-col items-center justify-center">
-                <Loader2 size={32} className="animate-spin text-blue-400 mb-4" />
-                <p className="text-gray-400">Loading Chart Data...</p>
+            <div className="bg-slate-800/50 p-4 sm:p-6 rounded-lg h-64 sm:h-80 md:h-96 flex flex-col items-center justify-center">
+                <Loader2 size={28} className="animate-spin text-blue-400 mb-3 sm:mb-4" />
+                <p className="text-gray-400 text-sm sm:text-base">Loading Chart Data...</p>
             </div>
         );
     }
 
     return (
-        <div className="bg-slate-800/50 p-4 md:p-6 rounded-lg h-96">
-            <h2 className="text-xl font-semibold text-white mb-4">Mentions Over Time (Last 7 Days)</h2>
+        <div className="bg-slate-800/50 p-4 sm:p-6 md:p-6 rounded-lg h-64 sm:h-80 md:h-96 w-full overflow-x-hidden">
+            <h2 className="text-lg sm:text-xl md:text-2xl font-semibold text-white mb-3 sm:mb-4">Mentions Over Time (Last 7 Days)</h2>
 
-            <ResponsiveContainer width="100%" height="90%">
+            <ResponsiveContainer width="100%" height="85%">
                 <BarChart
                     data={chartData}
-                    margin={{ top: 5, right: 20, left: -15, bottom: 35 }} // Tăng bottom margin
+                    margin={{ top: 5, right: 15, left: -10, bottom: 35 }}
                 >
                     <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
                     <XAxis
                         dataKey="name"
                         stroke="#94a3b8"
-                        // === THAY ĐỔI Ở ĐÂY: Xoay chữ để dễ đọc hơn ===
                         angle={-45}
                         textAnchor="end"
-                        tick={{ fill: '#94a3b8', fontSize: 12 }}
+                        tick={{ fill: '#94a3b8', fontSize: 10 }}
                         interval={0}
                     />
                     <YAxis
                         stroke="#94a3b8"
-                        tick={{ fill: '#94a3b8', fontSize: 12 }}
+                        tick={{ fill: '#94a3b8', fontSize: 10 }}
                         allowDecimals={false}
                     />
                     <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(100, 116, 139, 0.1)' }} />
                     <Legend
                         verticalAlign="bottom"
-                        wrapperStyle={{ paddingTop: '30px', fontSize: '14px' }} // Tăng paddingTop
+                        wrapperStyle={{
+                            paddingTop: '20px',
+                            fontSize: '12px',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                        }}
                     />
                     <Bar dataKey="negative" stackId="a" fill="#ef4444" name="Negative" radius={[4, 4, 0, 0]} />
                     <Bar dataKey="positive" stackId="a" fill="#22c55e" name="Positive" radius={[4, 4, 0, 0]} />

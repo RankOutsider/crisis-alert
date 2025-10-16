@@ -1,3 +1,4 @@
+// frontend/app/dashboard/layout.jsx
 'use client';
 
 import { useState } from 'react';
@@ -10,17 +11,18 @@ export default function DashboardLayout({ children }) {
 
     return (
         <AuthGuard>
-            <div className="flex h-screen bg-slate-900 text-gray-300">
+            <div className="flex flex-col md:flex-row h-screen bg-slate-900 text-gray-300 overflow-x-hidden">
+                {/* Sidebar */}
                 <Sidebar
                     isOpen={isSidebarOpen}
                     onClose={() => setIsSidebarOpen(false)}
                 />
 
-                <div className="flex-1 flex flex-col overflow-hidden">
-                    <header className="md:hidden flex items-center justify-between p-4 bg-slate-800/50 border-b border-slate-700">
-                        <div className="flex items-center gap-2">
-                            <h1 className="text-lg font-bold text-white">Crisis Alert</h1>
-                        </div>
+                {/* Content area */}
+                <div className="flex-1 flex flex-col min-h-0">
+                    {/* Header chỉ hiện trên mobile */}
+                    <header className="md:hidden z-10 flex items-center justify-between p-2 bg-slate-800/50 border-b border-slate-700">
+                        <h1 className="text-lg font-bold text-white">Crisis Alert</h1>
                         <button
                             onClick={() => setIsSidebarOpen(true)}
                             className="p-2 rounded-md hover:bg-slate-700"
@@ -29,7 +31,8 @@ export default function DashboardLayout({ children }) {
                         </button>
                     </header>
 
-                    <main className="flex-1 overflow-x-hidden overflow-y-auto p-6 md:p-8">
+                    {/* Main content */}
+                    <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 md:p-8 scroll-mt-20">
                         {children}
                     </main>
                 </div>

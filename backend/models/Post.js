@@ -1,6 +1,6 @@
+// backend/models/Post.js
 const { DataTypes, Model } = require('sequelize');
 const { sequelize } = require('../config/db');
-const Alert = require('./Alert');
 
 class Post extends Model { }
 
@@ -46,16 +46,8 @@ Post.init({
     tableName: 'posts',
     timestamps: true,
     indexes: [
-        {
-            fields: ['alertId']
-        },
-        {
-            fields: ['publishedAt']
-        }
+        { fields: ['publishedAt'] }
     ]
 });
-
-Post.belongsTo(Alert, { foreignKey: 'alertId', onDelete: 'CASCADE' });
-Alert.hasMany(Post, { foreignKey: 'alertId' });
 
 module.exports = Post;

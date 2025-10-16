@@ -31,7 +31,6 @@ const User = sequelize.define('User', {
         type: DataTypes.STRING,
         allowNull: false
     },
-    // === TRƯỜNG MỚI ĐƯỢC THÊM VÀO ===
     notificationsEnabled: {
         type: DataTypes.BOOLEAN,
         defaultValue: true // Mặc định là bật khi người dùng mới đăng ký

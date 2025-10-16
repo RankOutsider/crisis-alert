@@ -1,6 +1,6 @@
+// backend/models/Alert.js
 const { DataTypes, Model } = require('sequelize');
 const { sequelize } = require('../config/db');
-const User = require('./User'); // Import User để tạo mối quan hệ
 
 class Alert extends Model { }
 
@@ -46,21 +46,9 @@ Alert.init({
     tableName: 'alerts',
     timestamps: true,
     indexes: [
-        {
-            fields: ['userId']
-        },
-        {
-            fields: ['status']
-        }
+        { fields: ['userId'] },
+        { fields: ['status'] }
     ]
-});
-
-Alert.belongsTo(User, {
-    foreignKey: 'userId',
-    onDelete: 'CASCADE'
-});
-User.hasMany(Alert, {
-    foreignKey: 'userId'
 });
 
 module.exports = Alert;
