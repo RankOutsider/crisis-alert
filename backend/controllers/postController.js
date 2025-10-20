@@ -139,23 +139,33 @@ exports.getPostsByCaseStudy = async (req, res) => {
     }
 };
 
+// @desc    Hàm nội bộ: Quét tìm các alert khớp khi một post mới được tạo
 const findMatchesAndNotify = async (newPost) => {
     try {
         const postContent = `${newPost.title} ${newPost.content}`.toLowerCase();
         const activeAlerts = await Alert.findAll({ where: { status: 'ACTIVE' } });
-        console.log(`Scanning ${activeAlerts.length} active alerts for matches...`);
-        for (const alert of activeAlerts) {
-            const hasMatch = alert.keywords.some(keyword => postContent.includes(keyword.toLowerCase()));
-            if (hasMatch) {
+
+        // ĐIỀU CHỈNH: Lọc cả keyword và platform
+        const matchingAlerts = activeAlerts.filter(alert => {
+            const keywordMatch = alert.keywords.some(keyword => postContent.includes(keyword.toLowerCase()));
+            const platformMatch = alert.platforms.includes(newPost.platform);
+            return keywordMatch && platformMatch;
+        });
+
+        if (matchingAlerts.length > 0) {
+            // Dùng `addAlerts` để tạo nhiều liên kết
+            await newPost.addAlerts(matchingAlerts);
+
+            // Lặp qua các alert đã khớp để cập nhật postCount và gửi email
+            for (const alert of matchingAlerts) {
+                const count = await alert.countPosts();
+                await alert.update({ postCount: count });
+
                 const user = await User.findByPk(alert.userId);
                 if (user && user.email && user.notificationsEnabled) {
-                    console.log(`✅ Match found! Sending email to ${user.email} for alert "${alert.title}" (Notifications ON)`);
+                    console.log(`✅ Match found! Sending email to ${user.email} for alert "${alert.title}"`);
                     await sendNotificationEmail(user.email, alert.title, newPost);
-                } else {
-                    console.log(`ℹ️ Match found for user ${user.username}, but notifications are OFF. Skipping email.`);
                 }
-                await newPost.setAlert(alert);
-                await alert.increment('postCount');
             }
         }
     } catch (error) {

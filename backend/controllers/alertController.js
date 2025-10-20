@@ -116,13 +116,18 @@ exports.deleteAlert = async (req, res) => {
     }
 };
 
-// @desc    Quét các post để tìm và liên kết với một alert
+// @desc    Quét các post để tìm và liên kết với một alert (quét theo tháng)
 exports.scanForMatches = async (req, res) => {
     try {
         const { id: alertId } = req.params;
         const alert = await Alert.findByPk(alertId);
         if (!alert) return res.status(404).json({ message: 'Alert not found' });
         if (alert.status !== 'ACTIVE') return res.status(400).json({ message: 'Cannot scan inactive alert.' });
+
+        // Lấy ngày alert được tạo
+        const alertCreationDate = new Date(alert.createdAt);
+        // Tính toán ngày đầu tiên của tháng đó
+        const startOfMonth = new Date(alertCreationDate.getFullYear(), alertCreationDate.getMonth(), 1);
 
         const keywordConditions = alert.keywords.map(keyword => ({
             [Op.or]: [
@@ -132,16 +137,29 @@ exports.scanForMatches = async (req, res) => {
         }));
         if (keywordConditions.length === 0) return res.status(200).json({ message: 'Scan complete. No keywords.' });
 
-        const matchingPosts = await Post.findAll({ where: { [Op.or]: keywordConditions } });
-        if (matchingPosts.length === 0) return res.status(200).json({ message: 'Scan complete. No new matches.' });
+        const matchingPosts = await Post.findAll({
+            where: {
+                [Op.and]: [
+                    { [Op.or]: keywordConditions },
+                    { platform: { [Op.in]: alert.platforms } },
+
+                    // Dùng ngày đầu tháng làm điều kiện
+                    { publishedAt: { [Op.gte]: startOfMonth } }
+                ]
+            }
+        });
+
+        if (matchingPosts.length === 0) {
+            return res.status(200).json({ message: 'Scan complete. No new matches found for this month.' });
+        }
 
         await alert.addPosts(matchingPosts);
         const count = await alert.countPosts();
         await alert.update({ postCount: count });
 
-        res.status(200).json({ message: `Scan complete. Linked ${matchingPosts.length} posts.` });
+        res.status(200).json({ message: `Scan complete. Linked ${matchingPosts.length} posts from this month.` });
     } catch (error) {
-        console.error(`Error during manual scan:`, error);
+        console.error(`Error during smart scan:`, error);
         res.status(500).json({ message: 'Server error during scan.' });
     }
 };
@@ -154,13 +172,19 @@ exports.scanAllActiveAlerts = async (req, res) => {
 
         const allPosts = await Post.findAll();
         for (const alert of activeAlerts) {
-            const postContentMatches = allPosts.filter(post => {
+            // ĐIỀU CHỈNH: Lọc cả keyword và platform
+            const matchingPosts = allPosts.filter(post => {
                 const postContent = `${post.title} ${post.content}`.toLowerCase();
-                return alert.keywords.some(keyword => postContent.includes(keyword.toLowerCase()));
+                const keywordMatch = alert.keywords.some(keyword => postContent.includes(keyword.toLowerCase()));
+                const platformMatch = alert.platforms.includes(post.platform); // Điều kiện mới
+                return keywordMatch && platformMatch; // Phải khớp cả hai
             });
-            if (postContentMatches.length > 0) {
-                await alert.addPosts(postContentMatches);
+
+            if (matchingPosts.length > 0) {
+                // `addPosts` sẽ tự động bỏ qua các liên kết đã tồn tại
+                await alert.addPosts(matchingPosts);
             }
+            // Cập nhật lại postCount cho từng alert
             const count = await alert.countPosts();
             await alert.update({ postCount: count });
         }
