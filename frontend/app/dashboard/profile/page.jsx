@@ -253,7 +253,7 @@ export default function ProfilePage() {
 
             {/* Danger Zone */}
             <div className="mt-10 p-5 sm:p-6 rounded-xl bg-red-900/20 border border-red-500/30">
-                <h2 className="text-lg sm:text-xl font-semibold text-red-400 mb-2">Danger Zone</h2>
+                <h2 className="text-lg sm:text-xl font-semibold text-red-400 mb-2">Warning</h2>
                 <p className="text-slate-300 mb-4 text-sm sm:text-base">
                     Once you delete your account, there is no going back.
                 </p>

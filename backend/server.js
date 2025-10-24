@@ -32,8 +32,6 @@ const PORT = process.env.PORT || 5000;
 const startServer = async () => {
     try {
         await connectDB();
-        await sequelize.sync();
-        console.log("🔄 Database synchronized with { force: true }. All tables were dropped and recreated.");
 
         app.listen(PORT, () => console.log(`🚀 Backend running at: http://localhost:${PORT}`));
 

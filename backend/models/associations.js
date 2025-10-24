@@ -14,12 +14,12 @@ Alert.hasOne(CaseStudy, { foreignKey: 'alertId', onDelete: 'SET NULL' });
 CaseStudy.belongsTo(Alert, { foreignKey: 'alertId' });
 
 // --- QUAN HỆ NHIỀU-NHIỀU GIỮA POST VÀ ALERT ---
-Alert.belongsToMany(Post, { through: 'PostAlerts' });
-Post.belongsToMany(Alert, { through: 'PostAlerts' });
+Alert.belongsToMany(Post, { through: 'postalerts' });
+Post.belongsToMany(Alert, { through: 'postalerts' });
 
 // --- QUAN HỆ NHIỀU-NHIỀU GIỮA POST VÀ CASE STUDY ---
-CaseStudy.belongsToMany(Post, { through: 'PostCaseStudies' });
-Post.belongsToMany(CaseStudy, { through: 'PostCaseStudies' });
+CaseStudy.belongsToMany(Post, { through: 'postcasestudies' });
+Post.belongsToMany(CaseStudy, { through: 'postcasestudies' });
 
 console.log("✅ Database associations have been set up.");
 

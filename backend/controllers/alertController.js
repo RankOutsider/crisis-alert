@@ -1,65 +1,180 @@
 // backend/controllers/alertController.js
 const { Op } = require('sequelize');
-const { Alert, Post } = require('../models/associations');
+const { Alert, Post, sequelize } = require('../models/associations');
 
-// @desc    Lấy tất cả Alerts cho người dùng (CÓ PHÂN TRANG VÀ TÌM KIẾM)
+// @desc    Lấy tất cả Alerts cho người dùng (CÓ PHÂN TRANG, TÌM KIẾM, LỌC)
 exports.getAlerts = async (req, res) => {
     try {
         const userId = req.user.id;
         const page = parseInt(req.query.page, 10) || 1;
         const limit = parseInt(req.query.limit, 10) || 5;
         const offset = (page - 1) * limit;
-        const { search, fields } = req.query;
 
-        const whereCondition = { userId: userId };
+        const { search, fields, statuses, severities, platforms } = req.query;
 
-        if (search && fields) {
-            const searchTerms = search.toLowerCase().split('|').map(t => t.trim()).filter(Boolean);
-            const searchFields = fields.split(',');
-            if (searchTerms.length > 0 && searchFields.length > 0) {
-                const orConditions = [];
-                searchTerms.forEach(term => {
-                    searchFields.forEach(field => {
-                        if (['title', 'description', 'keywords', 'platforms'].includes(field)) {
-                            orConditions.push({ [field]: { [Op.like]: `%${term}%` } });
-                        }
-                    });
-                });
-                if (orConditions.length > 0) { whereCondition[Op.or] = orConditions; }
+        // --- BƯỚC 1: XÂY DỰNG BỘ LỌC CSDL CƠ BẢN ---
+        // (Chỉ lọc các trường string/enum đơn giản)
+        const whereCondition = { userId };
+        const andConditions = [];
+
+        // 1. Lọc Status (Phần này đã đúng)
+        if (statuses) {
+            const statusArray = statuses.split(',').filter(Boolean).map(s => s.toUpperCase());
+            if (statusArray.length > 0) {
+                andConditions.push({ status: { [Op.in]: statusArray } });
             }
         }
 
-        const { count, rows } = await Alert.findAndCountAll({
+        // 2. Lọc Severity (Phần này đã đúng)
+        if (severities) {
+            const severityArray = severities.split(',').filter(Boolean);
+            if (severityArray.length > 0) {
+                andConditions.push({ severity: { [Op.in]: severityArray } });
+            }
+        }
+
+        if (andConditions.length > 0) {
+            whereCondition[Op.and] = andConditions;
+        }
+
+        // --- BƯỚC 2: LẤY TẤT CẢ DỮ LIỆU KHỚP BỘ LỌC CƠ BẢN ---
+        // (Không dùng limit/offset vội)
+        const allMatchingAlerts = await Alert.findAll({
             where: whereCondition,
-            order: [['createdAt', 'DESC']],
-            limit: limit,
-            offset: offset
+            order: [['createdAt', 'DESC']]
         });
 
+        // --- BƯỚC 3: LỌC NÂNG CAO (MẢNG/JSON) BẰNG JAVASCRIPT ---
+        let filteredAlerts = allMatchingAlerts;
+
+        // 3a. Lọc Platforms (bằng Javascript)
+        if (platforms) {
+            const platformArray = platforms.split(',').filter(Boolean);
+            if (platformArray.length > 0) {
+                filteredAlerts = filteredAlerts.filter(alert => {
+                    // Kiểm tra xem 'alert.platforms' (mảng trong DB)
+                    // có chứa BẤT KỲ phần tử nào trong 'platformArray' không
+                    if (!alert.platforms || alert.platforms.length === 0) return false;
+                    return alert.platforms.some(p => platformArray.includes(p));
+                });
+            }
+        }
+
+        // 3b. Lọc Search (bằng Javascript)
+        if (search && fields) {
+            const searchFields = fields.split(',').map(f => f.trim().toLowerCase());
+            const activeFields = searchFields.filter(f => ['title', 'description', 'keywords'].includes(f));
+
+            if (activeFields.length > 0) {
+                const orGroups = search.split('|').map(g => g.trim().toLowerCase()).filter(Boolean);
+
+                if (orGroups.length > 0) {
+                    filteredAlerts = filteredAlerts.filter(alert => {
+                        // Phải khớp VỚI BẤT KỲ (some) nhóm OR nào
+                        return orGroups.some(group => {
+                            const andTerms = group.split('&').map(t => t.trim().toLowerCase()).filter(Boolean);
+                            if (andTerms.length === 0) return true; // (Trường hợp chỉ có dấu |)
+
+                            // Phải khớp VỚI TẤT CẢ (every) các từ AND
+                            return andTerms.every(term => {
+                                // Phải khớp VỚI BẤT KỲ (some) field nào đang active
+                                return activeFields.some(field => {
+                                    if (field === 'keywords') {
+                                        // Lọc mảng 'keywords'
+                                        if (!alert.keywords) return false;
+                                        return alert.keywords.some(kw => kw.toLowerCase().includes(term));
+                                    } else {
+                                        // Lọc string 'title' hoặc 'description'
+                                        return alert[field] && alert[field].toLowerCase().includes(term);
+                                    }
+                                });
+                            });
+                        });
+                    });
+                }
+            }
+        }
+
+        // --- BƯỚC 4: PHÂN TRANG THỦ CÔNG ---
+        const count = filteredAlerts.length;
+        const paginatedAlerts = filteredAlerts.slice(offset, offset + limit);
+
         res.status(200).json({
-            alerts: rows,
+            alerts: paginatedAlerts,
             totalPages: Math.ceil(count / limit),
             currentPage: page
         });
+
     } catch (error) {
-        console.error("Error fetching alerts:", error);
+        // Log lỗi này ra terminal để xem
+        console.error("LỖI KHI FETCH ALERTS:", error);
         res.status(500).json({ message: 'Server error while fetching alerts' });
     }
 };
 
-// @desc    Lấy chi tiết một Alert và các posts liên quan
+// @desc    Lấy chi tiết một Alert và các posts liên quan (có filter nâng cao)
 exports.getAlertById = async (req, res) => {
     try {
         const { id: alertId } = req.params;
+        const { platforms, sentiments, search, fields } = req.query;
+
+        // Điều kiện lọc post
+        const postWhere = {};
+
+        // 1. Lọc Platform
+        if (platforms) {
+            const platformArray = platforms.split(',').filter(Boolean);
+            if (platformArray.length > 0) {
+                postWhere.platform = { [Op.in]: platformArray };
+            }
+        }
+
+        // 2. Lọc Sentiment
+        if (sentiments) {
+            const sentimentArray = sentiments.split(',').filter(Boolean);
+            if (sentimentArray.length > 0) {
+                postWhere.sentiment = { [Op.in]: sentimentArray };
+            }
+        }
+
+        // 3. Lọc Search nâng cao (AND/OR)
+        if (search && fields) {
+            const searchFields = fields.split(',').map(f => f.trim().toLowerCase());
+            const validFields = ['title', 'content', 'source'];
+            const activeFields = searchFields.filter(f => validFields.includes(f));
+
+            if (activeFields.length > 0) {
+                const orGroups = search.split('|').map(g => g.trim()).filter(Boolean);
+
+                postWhere[Op.or] = orGroups.map(group => {
+                    const andTerms = group.split('&').map(t => t.trim().toLowerCase()).filter(Boolean);
+
+                    return {
+                        [Op.and]: andTerms.map(term => ({
+                            [Op.or]: activeFields.map(field => ({
+                                [field]: { [Op.like]: `%${term}%` }
+                            }))
+                        }))
+                    };
+                });
+            }
+        }
+
         const alert = await Alert.findOne({
             where: { id: alertId, userId: req.user.id },
             include: [{
                 model: Post,
-                through: { attributes: [] } // Bỏ qua bảng trung gian trong kết quả
+                where: Object.keys(postWhere).length > 0 ? postWhere : undefined,
+                through: { attributes: [] },
+                required: false
             }],
-            order: [[Post, 'publishedAt', 'DESC']] // Sắp xếp các post được include
+            order: [[Post, 'publishedAt', 'DESC']]
         });
-        if (!alert) { return res.status(404).json({ message: 'Alert not found' }); }
+
+        if (!alert) {
+            return res.status(404).json({ message: 'Alert not found' });
+        }
+
         res.status(200).json(alert);
     } catch (error) {
         console.error("Error fetching single alert:", error);

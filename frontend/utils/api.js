@@ -1,4 +1,5 @@
-const API_BASE_URL = 'http://localhost:5000/api';
+// frontend/utils/api.js
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
 /**
  * Lưu Token sau khi đăng nhập thành công
@@ -82,3 +83,5 @@ export const api = async (endpoint, options = {}) => {
 
     return data;
 };
+
+export const fetcher = (url) => api(url.substring(5));

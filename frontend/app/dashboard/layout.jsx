@@ -11,7 +11,7 @@ export default function DashboardLayout({ children }) {
 
     return (
         <AuthGuard>
-            <div className="flex flex-col md:flex-row h-screen bg-slate-900 text-gray-300 overflow-x-hidden">
+            <div className="flex flex-col md:flex-row h-screen bg-slate-900 text-gray-300">
                 {/* Sidebar */}
                 <Sidebar
                     isOpen={isSidebarOpen}
@@ -32,7 +32,7 @@ export default function DashboardLayout({ children }) {
                     </header>
 
                     {/* Main content */}
-                    <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 md:p-8 scroll-mt-20">
+                    <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 scroll-mt-20">
                         {children}
                     </main>
                 </div>

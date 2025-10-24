@@ -2,31 +2,46 @@
 const { Op } = require('sequelize');
 const { CaseStudy, Alert, Post } = require('../models/associations');
 
-// @desc    Lấy tất cả Case Studies của người dùng (có tìm kiếm và phân trang)
+// @desc    Lấy tất cả Case Studies của người dùng (có tìm kiếm nâng cao AND/OR và phân trang)
 exports.getAllCaseStudies = async (req, res) => {
     try {
         const userId = req.user.id;
         const { search, fields, page = 1, limit = 6 } = req.query;
         const offset = (parseInt(page, 10) - 1) * parseInt(limit, 10);
+
+        // Điều kiện mặc định: chỉ lấy case study của user
         const whereCondition = { userId: userId };
 
         if (search && fields) {
-            const searchTerm = search.toLowerCase().trim();
-            const searchFields = fields.split(',');
-            if (searchTerm && searchFields.length > 0) {
-                const validFields = ['title', 'summary'];
-                const orConditions = searchFields
-                    .filter(field => validFields.includes(field))
-                    .map(field => ({ [field]: { [Op.like]: `%${searchTerm}%` } }));
-                if (orConditions.length > 0) {
-                    whereCondition[Op.or] = orConditions;
-                }
+            const searchFields = fields.split(',').map(f => f.trim().toLowerCase());
+            const validFields = ['title', 'summary'];
+            const activeFields = searchFields.filter(f => validFields.includes(f));
+
+            if (activeFields.length > 0) {
+                // Tách theo OR trước
+                const orGroups = search.split('|').map(g => g.trim()).filter(Boolean);
+
+                whereCondition[Op.or] = orGroups.map(group => {
+                    // Trong mỗi nhóm OR, tách theo AND
+                    const andTerms = group.split('&').map(t => t.trim().toLowerCase()).filter(Boolean);
+
+                    return {
+                        [Op.and]: andTerms.map(term => ({
+                            [Op.or]: activeFields.map(field => ({
+                                [field]: { [Op.like]: `%${term}%` }
+                            }))
+                        }))
+                    };
+                });
             }
         }
 
         const { count, rows } = await CaseStudy.findAndCountAll({
             where: whereCondition,
-            order: [['createdAt', 'DESC']],
+            order: [
+                ['status', 'DESC'],
+                ['createdAt', 'DESC']
+            ],
             limit: parseInt(limit, 10),
             offset: offset,
         });

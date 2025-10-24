@@ -1,0 +1,93 @@
+# Định nghĩa các dịch vụ (container)
+services:
+
+  # 1. Dịch vụ Database (MySQL)
+  db:
+    image: mysql:8.0                     # Dùng image MySQL 8.0 (khớp với mysqldump 8.0 của bạn)
+    container_name: crisis-alert-db      # Tên container cho dễ quản lý
+    restart: unless-stopped              # Tự khởi động lại nếu bị lỗi
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}  # <-- ⚠️ THAY MỘT PASSWORD MẠNH VÀO ĐÂY
+      MYSQL_DATABASE: crisis_alert_db            # <-- Tên DB từ file schema.sql
+    ports:
+      # Ánh xạ cổng 3307 của MÁY BẠN vào cổng 3306 của CONTAINER
+      # (Dùng 3307 để tránh xung đột với MySQL 9.0.1 có sẵn trên máy bạn)
+      - '3307:3306'
+    volumes:
+      # 1. Tự động nạp file schema.sql khi container tạo lần đầu
+      - ./schema.sql:/docker-entrypoint-initdb.d/init.sql
+      # 2. Giữ data lại kể cả khi container bị xóa (để không mất dữ liệu)
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      # Kiểm tra xem MySQL đã sẵn sàng nhận kết nối chưa
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost", "-u", "root", "-p$${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. Dịch vụ Backend (API)
+  backend:
+    build:
+      context: ./backend    # Đường dẫn đến thư mục chứa Dockerfile của backend
+      dockerfile: Dockerfile
+    container_name: crisis-alert-api
+    command: npm run dev
+    restart: unless-stopped
+    ports:
+      # Ánh xạ cổng 5000 của MÁY BẠN vào cổng 5000 của CONTAINER
+      - '5000:5000'
+    environment:
+      # ⚠️ Đây là các biến môi trường cho Node.js của bạn
+      # Hãy chắc chắn code (db.js) của bạn đang dùng các tên biến này!
+      DB_HOST: db                    # 'db' là tên của service MySQL ở trên
+      DB_USER: root
+      DB_PASSWORD: ${DB_ROOT_PASSWORD}  # <-- ⚠️ Dùng CÙNG password với ở trên
+      DB_NAME: crisis_alert_db
+      PORT: 5000                     # Cổng mà server.js của bạn chạy
+      CHOKIDAR_USEPOLLING: 'true'     # Giúp phát hiện thay đổi file trong Docker
+    volumes:
+      # Ánh xạ code ở máy (./backend) vào /app trong container
+      - ./backend:/app
+      
+      # "Volume ẩn danh" - để node_modules CỦA CONTAINER được ưu tiên
+      # Điều này ngăn thư mục node_modules (nếu có) trên máy bạn
+      # ghi đè lên node_modules trong container.
+      - /app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy   # Chỉ khởi động backend SAU KHI 'db' đã 'healthy'
+
+  # 3. Dịch vụ Frontend (Next.js)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args: 
+        NEXT_PUBLIC_API_URL: http://localhost:5000/api
+    container_name: crisis-alert-web
+    command: npm run dev # Đảm bảo nó luôn chạy server dev
+    volumes:
+      # Ánh xạ code ở máy (./frontend) vào /app trong container
+      - ./frontend:/app
+      
+      # "Volume ẩn danh" - để node_modules CỦA CONTAINER được ưu tiên
+      # Điều này ngăn thư mục node_modules (nếu có) trên máy bạn
+      # ghi đè lên node_modules trong container.
+      - /app/node_modules
+      
+      # Giữ cache của Next.js để dev nhanh hơn
+      - /app/.next
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      # Vẫn cần cái này để Next.js nhận
+      NEXT_PUBLIC_API_URL: http://localhost:5000/api
+      CHOKIDAR_USEPOLLING: 'true'
+      WATCHPACK_POLLING: 'true'
+    depends_on:
+      - backend                    # Chỉ khởi động frontend SAU KHI backend đã sẵn sàng
+
+# Định nghĩa 1 volume tên là 'mysql_data' để lưu trữ dữ liệu MySQL
+volumes:
+  mysql_data:
