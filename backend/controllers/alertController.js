@@ -325,7 +325,7 @@ exports.getStats = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        // --- Tính toán các stats cũ (Giữ nguyên) ---
+        // --- Tính toán các stats cũ ---
         const totalAlerts = await Alert.count({ where: { userId: userId } });
         const activeAlerts = await Alert.count({ where: { userId: userId, status: 'ACTIVE' } });
         const [results] = await sequelize.query(
@@ -367,7 +367,7 @@ exports.getStats = async (req, res) => {
         });
 
 
-        // --- Định dạng chartData (Giữ nguyên) ---
+        // --- Định dạng chartData ---
         const chartData = [];
         const dateMap = new Map(postsByDay.map(item => [item.date, parseInt(item.count, 10)]));
         for (let i = 0; i < 7; i++) {

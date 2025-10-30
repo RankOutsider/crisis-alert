@@ -12,7 +12,7 @@ function StatCardSkeleton({ icon: Icon, color, title }) {
     return (
         <div className="bg-slate-800/50 p-5 rounded-lg flex items-center gap-4 animate-pulse">
             <div className={`flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center bg-slate-700`}>
-                {/* Icon thật vẫn hiển thị để giữ layout */}
+                {/* Icon hiển thị để giữ layout */}
                 <Icon size={24} className={color} />
             </div>
             <div className="flex-1 min-w-0">
@@ -46,7 +46,7 @@ export default function DashboardContent() {
         }
     });
 
-    // --- Khối xử lý Lỗi (Giữ nguyên) ---
+    // --- Khối xử lý Lỗi ---
     if (error && !data) {
         return (
             <main className="p-8 min-h-screen flex items-center justify-center">
@@ -69,7 +69,7 @@ export default function DashboardContent() {
         );
     }
 
-    // --- (THAY ĐỔI) Khối xử lý Loading (Skeleton) ---
+    // --- Khối xử lý Loading (Skeleton) ---
     if (isLoading && !data) { // Chỉ hiện skeleton khi load lần đầu
         return (
             <div className="min-h-screen text-gray-200 overflow-x-hidden"> {/* Bỏ animate-pulse ở đây */}
