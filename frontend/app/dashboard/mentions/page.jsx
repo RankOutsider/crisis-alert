@@ -106,7 +106,7 @@ export default function MentionsExplorerPage() {
                 onSentimentChange={setSelectedSentiments}
             />
 
-            {/* --- (THAY ĐỔI) JSX Hiển thị Loading (Skeleton) --- */}
+            {/* --- JSX Hiển thị Loading (Skeleton) --- */}
             {isLoading && !data && (
                 <div className="space-y-4 py-10">
                     {/* Render số lượng skeleton bằng ITEMS_PER_PAGE */}
@@ -116,7 +116,7 @@ export default function MentionsExplorerPage() {
                 </div>
             )}
 
-            {/* --- JSX Hiển thị Error (Giữ nguyên) --- */}
+            {/* --- JSX Hiển thị Error --- */}
             {error && (
                 <div className="text-center py-10 px-4 border-2 border-dashed border-red-900/50 rounded-lg bg-red-900/10">
                     <AlertCircle className="mx-auto h-12 w-12 text-red-400" />
@@ -135,7 +135,7 @@ export default function MentionsExplorerPage() {
                 </div>
             )}
 
-            {/* --- JSX Hiển thị Data / Empty (Giữ nguyên) --- */}
+            {/* --- JSX Hiển thị Data / Empty --- */}
             {!isLoading && !error && (
                 <>
                     {posts.length > 0 ? (
@@ -215,7 +215,7 @@ export default function MentionsExplorerPage() {
                         </div>
                     )}
 
-                    {/* Phân trang (Giữ nguyên) */}
+                    {/* Phân trang */}
                     {totalPages > 1 && (
                         <div className="flex justify-center items-center gap-4 mt-8">
                             <button
