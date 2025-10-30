@@ -4,48 +4,94 @@ import { useState } from "react";
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api } from '@/utils/api';
+import { useFormValidation } from '@/hooks/useFormValidation';
+import { User, Mail, Phone, KeyRound } from 'lucide-react';
+import Input from '@/app/components/Input';
+
+const registerSchema = {
+    username: {
+        required: true,
+        minLength: 3
+    },
+    email: {
+        required: true,
+        pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+        message: "Please enter a valid email address."
+    },
+    phone: {
+        required: true,
+        pattern: /^0\d{9}$/,
+        message: "Invalid phone number format (must be 10 digits starting with 0)."
+    },
+    password: {
+        required: true,
+        minLength: 6
+    }
+};
+
+const initialValues = {
+    username: "",
+    email: "",
+    phone: "",
+    password: ""
+};
 
 export default function RegisterPage() {
-    const [form, setForm] = useState({
-        username: "",
-        email: "",
-        phone: "",
-        password: ""
-    });
-    const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [loading, setLoading] = useState(false);
     const router = useRouter();
 
-    const handleChange = (e) => {
-        setForm({ ...form, [e.target.name]: e.target.value });
-    };
+    const {
+        values,
+        errors,
+        setErrors,
+        handleChange,
+        validateForm
+    } = useFormValidation(initialValues, registerSchema);
 
     const handleRegister = async (e) => {
         e.preventDefault();
-        setError('');
         setSuccess('');
-        setLoading(true);
 
-        if (form.password.length < 6) {
-            setError("Password must be at least 6 characters long.");
-            setLoading(false);
+        const isValid = validateForm();
+        if (!isValid) {
             return;
         }
+
+        setLoading(true);
 
         try {
             await api("auth/register", {
                 method: "POST",
-                body: JSON.stringify(form),
+                body: JSON.stringify(values),
             });
 
             setSuccess("Registration successful! Redirecting to login...");
             setTimeout(() => {
                 router.push('/login');
             }, 2000);
-
         } catch (err) {
-            setError(err.message || "Registration failed!");
+            const errorMessage = err.message || "Registration failed!";
+            let backendErrors = {};
+            try {
+                const parsedError = JSON.parse(errorMessage);
+                if (parsedError.errors && Array.isArray(parsedError.errors)) {
+                    parsedError.errors.forEach(error => {
+                        backendErrors[error.path] = error.msg;
+                    });
+                } else if (parsedError.message) {
+                    backendErrors = { general: parsedError.message };
+                }
+            } catch (parseError) {
+                backendErrors = { general: errorMessage };
+            }
+
+            if (Object.keys(backendErrors).length > 0) {
+                setErrors(backendErrors);
+            } else {
+                setErrors({ general: errorMessage });
+            }
+
         } finally {
             setLoading(false);
         }
@@ -58,9 +104,10 @@ export default function RegisterPage() {
                     Create Account
                 </h1>
 
-                {error && (
+                {/* Lỗi general và success */}
+                {errors.general && (
                     <div className="bg-red-900/50 border border-red-700 text-red-300 p-3 rounded-lg mb-4 text-center text-sm sm:text-base">
-                        {error}
+                        {errors.general}
                     </div>
                 )}
                 {success && (
@@ -69,54 +116,75 @@ export default function RegisterPage() {
                     </div>
                 )}
 
-                <form onSubmit={handleRegister} className="space-y-4 sm:space-y-6">
+                <form onSubmit={handleRegister} className="space-y-4 sm:space-y-6" noValidate>
+                    {/* --- Username --- */}
                     <div>
                         <label className="block text-sm sm:text-base font-medium text-gray-300 mb-1">Username</label>
-                        <input
+                        <Input
                             name="username"
+                            type="text"
                             placeholder="Create your username"
-                            value={form.username}
+                            value={values.username}
                             onChange={handleChange}
-                            required
-                            className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-gray-800/80 border border-gray-700 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-sm sm:text-base"
+                            leftIcon={<User size={20} />}
+                            className={errors.username ? 'border-red-500' : 'border-gray-700'}
                         />
+                        {errors.username && (
+                            <p className="mt-1 text-xs text-red-400">{errors.username}</p>
+                        )}
                     </div>
+
+                    {/* --- Email --- */}
                     <div>
                         <label className="block text-sm sm:text-base font-medium text-gray-300 mb-1">Email</label>
-                        <input
+                        <Input
                             name="email"
-                            type="email"
+                            type="text"
                             placeholder="Enter your email address"
-                            value={form.email}
+                            value={values.email}
                             onChange={handleChange}
-                            required
-                            className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-gray-800/80 border border-gray-700 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-sm sm:text-base"
+                            leftIcon={<Mail size={20} />}
+                            className={errors.email ? 'border-red-500' : 'border-gray-700'}
                         />
+                        {errors.email && (
+                            <p className="mt-1 text-xs text-red-400">{errors.email}</p>
+                        )}
                     </div>
+
+                    {/* --- Phone Number --- */}
                     <div>
                         <label className="block text-sm sm:text-base font-medium text-gray-300 mb-1">Phone Number</label>
-                        <input
+                        <Input
                             name="phone"
                             type="tel"
                             placeholder="Enter your phone number"
-                            value={form.phone}
+                            value={values.phone}
                             onChange={handleChange}
-                            required
-                            className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-gray-800/80 border border-gray-700 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-sm sm:text-base"
+                            leftIcon={<Phone size={20} />}
+                            className={errors.phone ? 'border-red-500' : 'border-gray-700'}
                         />
+                        {errors.phone && (
+                            <p className="mt-1 text-xs text-red-400">{errors.phone}</p>
+                        )}
                     </div>
+
+                    {/* --- Password --- */}
                     <div>
                         <label className="block text-sm sm:text-base font-medium text-gray-300 mb-1">Password</label>
-                        <input
+                        <Input
                             name="password"
-                            placeholder="Create a strong password (min. 6 characters)"
                             type="password"
-                            value={form.password}
+                            placeholder="Enter your password (min. 6 characters)"
+                            value={values.password}
                             onChange={handleChange}
-                            required
-                            className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-gray-800/80 border border-gray-700 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-sm sm:text-base"
+                            leftIcon={<KeyRound size={20} />}
+                            className={errors.password ? 'border-red-500' : 'border-gray-700'}
                         />
+                        {errors.password && (
+                            <p className="mt-1 text-xs text-red-400">{errors.password}</p>
+                        )}
                     </div>
+
 
                     <div className="pt-3 sm:pt-4 flex justify-center">
                         <button

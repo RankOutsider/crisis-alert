@@ -1,45 +1,52 @@
-const { DataTypes } = require('sequelize');
+// backend/models/CaseStudy.js
+const { DataTypes, Model } = require('sequelize');
 const { sequelize } = require('../config/db');
-const User = require('./User');
-const Alert = require('./Alert');
 
-const CaseStudy = sequelize.define('CaseStudy', {
+class CaseStudy extends Model { }
+
+CaseStudy.init({
+    // Khóa chính
+    // LƯU Ý: ID này là INTEGER, không phải String/UUID.
     id: {
         type: DataTypes.INTEGER,
         autoIncrement: true,
         primaryKey: true
     },
+    // Tiêu đề của Case Study
     title: {
         type: DataTypes.STRING,
         allowNull: false
     },
+    // Tóm tắt/Mô tả chi tiết của Case Study
     summary: {
         type: DataTypes.TEXT,
         allowNull: true
     },
+    // Bộ đếm cache: Tổng số Posts được liên kết
     postCount: {
         type: DataTypes.INTEGER,
         defaultValue: 0
     },
+    // Chuỗi hiển thị (vd: "Oct 20, 2025 - Oct 22, 2025")
     dateRange: {
         type: DataTypes.STRING,
         allowNull: true
     },
+    // Trạng thái: Đã giải quyết hay chưa
     status: {
         type: DataTypes.STRING,
-        // === THAY ĐỔI Ở ĐÂY ===
-        defaultValue: 'Unresolved' // Trạng thái mới: Unresolved, Resolved
+        defaultValue: 'Unresolved' // Có thể dùng ENUM('Unresolved', 'Resolved')
     }
+    // 'userId' và 'alertId' (foreign keys) sẽ được 'associations.js' thêm vào
 }, {
+    sequelize,
+    modelName: 'CaseStudy',
     tableName: 'case_studies',
-    timestamps: true
+    timestamps: true,
+    indexes: [
+        { fields: ['userId'] },
+        { fields: ['alertId'] }
+    ]
 });
-
-// Thiết lập mối quan hệ
-CaseStudy.belongsTo(User, { foreignKey: 'userId', onDelete: 'CASCADE' });
-User.hasMany(CaseStudy, { foreignKey: 'userId' });
-
-CaseStudy.belongsTo(Alert, { foreignKey: 'alertId', onDelete: 'SET NULL' });
-Alert.hasOne(CaseStudy, { foreignKey: 'alertId' });
 
 module.exports = CaseStudy;

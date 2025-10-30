@@ -25,21 +25,20 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 export default function MainChart() {
-    // --- 1. Thay thế useState/useEffect fetch thủ công bằng useSWR ---
     const {
         data,
         error,
         isLoading,
         mutate
     } = useSWR(CHART_API_URL, fetcher, {
-        // Thiết lập tự động revalidate sau mỗi 5 phút (nếu cần)
+        // Thiết lập tự động revalidate sau mỗi 5 phút
         refreshInterval: 300000
     });
 
     // Lấy mảng posts từ data (nếu có)
     const posts = data?.posts || [];
 
-    // --- 2. Logic tính toán dữ liệu biểu đồ ---
+    // --- Logic tính toán dữ liệu biểu đồ ---
     const chartData = useMemo(() => {
         const dayCounts = new Map();
         // Khởi tạo các ngày trong 7 ngày qua
@@ -64,7 +63,7 @@ export default function MainChart() {
         return Array.from(dayCounts.values());
     }, [posts]); // Chạy lại khi mảng posts từ SWR thay đổi
 
-    // --- 3. Sửa JSX hiển thị Loading/Error ---
+    // --- JSX hiển thị Loading/Error ---
     if (error) {
         return (
             <div className="bg-slate-800/50 p-4 sm:p-6 rounded-lg h-64 sm:h-80 md:h-96 flex flex-col items-center justify-center">
@@ -84,7 +83,7 @@ export default function MainChart() {
         );
     }
 
-    // --- 4. JSX chính ---
+    // --- JSX chính ---
     return (
         <div className="w-full h-full">
             <h2 className="text-lg sm:text-xl md:text-2xl font-semibold text-white mb-3 sm:mb-4">Posts Mentions (Last 7 Days)</h2>

@@ -1,4 +1,3 @@
-// frontend/app/dashboard/casestudies/[id]/page.jsx
 'use client';
 
 // --- Imports ---
@@ -8,17 +7,20 @@ import Link from 'next/link';
 import useSWR from 'swr';
 import {
     ArrowLeft, Clock, MessageSquare, ExternalLink, BarChart3, PieChart,
-    Globe, ShieldCheck, Search, AlertCircle as AlertIcon, RefreshCw // Thêm RefreshCw và AlertIcon
+    Globe, ShieldCheck, Search, AlertCircle as AlertIcon, RefreshCw, // Giữ các icon cần thiết
+    ChevronLeft, ChevronRight // Icon phân trang
 } from 'lucide-react';
-import { api, fetcher } from '@/utils/api'; // Import api và fetcher
+import { api, fetcher } from '@/utils/api';
 import { ResponsiveContainer, PieChart as RechartsPieChart, Pie, Cell, Tooltip, BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
-import FilterBar from '@/app/components/FilterBar'; // <-- THÊM IMPORT NÀY
+import FilterBar from '@/app/components/FilterBar';
 
-// --- Constants ---
-const POST_SEARCH_FIELDS = ['Title', 'Content', 'Source']; // Bỏ 'Sentiment'
-const COLORS = { POSITIVE: '#22c55e', NEGATIVE: '#ef4444', NEUTRAL: '#64748b' };
-const PLATFORM_OPTIONS = ['Facebook', 'X', 'Instagram', 'News', 'Tiktok', 'Forum', 'Threads', 'Youtube', 'Blog'];
-const SENTIMENT_OPTIONS = ['POSITIVE', 'NEUTRAL', 'NEGATIVE'];
+// --- Hằng số ---
+const POST_SEARCH_FIELDS = ['Title', 'Content', 'Source']; // Các trường tìm kiếm post
+const COLORS = { POSITIVE: '#22c55e', NEGATIVE: '#ef4444', NEUTRAL: '#64748b' }; // Màu cho biểu đồ
+const PLATFORM_OPTIONS = ['Facebook', 'X', 'Instagram', 'News', 'Tiktok', 'Forum', 'Threads', 'Youtube', 'Blog']; // Lựa chọn platform
+const SENTIMENT_OPTIONS = ['POSITIVE', 'NEUTRAL', 'NEGATIVE']; // Lựa chọn sentiment
+const POSTS_SKELETON_COUNT = 5; // Số lượng skeleton cho post list
+const ITEMS_PER_PAGE = 5; // Số lượng post trên mỗi trang (phải khớp với limit backend)
 
 // --- useDebounce Hook ---
 // Hook để trì hoãn việc cập nhật giá trị
@@ -31,6 +33,59 @@ function useDebounce(value, delay) {
     return debouncedValue;
 }
 
+// --- Skeleton cho Case Study Summary ---
+function CaseStudySummarySkeleton() {
+    return (
+        <div className="bg-slate-800/50 p-6 md:p-8 rounded-lg mb-8 animate-pulse">
+            <div className="h-8 bg-slate-700 rounded w-3/4 mb-3"></div>
+            <div className="space-y-2 mb-6">
+                <div className="h-4 bg-slate-700 rounded w-full"></div>
+                <div className="h-4 bg-slate-700 rounded w-5/6"></div>
+            </div>
+            <div className="flex flex-wrap gap-x-8 gap-y-4 text-sm">
+                <div className="h-6 bg-slate-700 rounded w-28"></div>
+                <div className="h-6 bg-slate-700 rounded w-36"></div>
+                <div className="h-6 bg-slate-700 rounded w-48"></div>
+            </div>
+        </div>
+    );
+}
+
+// --- Skeleton cho Biểu đồ ---
+function ChartSkeleton() {
+    return (
+        <div className="bg-slate-800/50 p-6 rounded-lg h-80 flex flex-col animate-pulse">
+            <div className="h-6 bg-slate-700 rounded w-1/2 mb-4"></div>
+            <div className="flex-grow bg-slate-700 rounded"></div>
+        </div>
+    );
+}
+
+// --- Skeleton cho mục Post ---
+function PostItemSkeleton() {
+    return (
+        <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 animate-pulse">
+            <div className="flex justify-between items-start gap-4 mb-2">
+                <div className="h-6 bg-slate-700 rounded w-3/5"></div>
+                <div className="h-4 bg-slate-700 rounded w-1/5"></div>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm mb-2">
+                <div className="h-4 bg-slate-700 rounded w-1/4"></div>
+                <div className="h-4 bg-slate-700 rounded w-1/3"></div>
+            </div>
+            <div className="space-y-2">
+                <div className="h-4 bg-slate-700 rounded w-full"></div>
+                <div className="h-4 bg-slate-700 rounded w-full"></div>
+                <div className="h-4 bg-slate-700 rounded w-4/5"></div>
+            </div>
+            <div className="mt-3">
+                <div className="h-5 bg-slate-700 rounded-full w-20"></div>
+            </div>
+        </div>
+    );
+}
+
+// --- Component Chính ---
 export default function CaseStudyDetailPage() {
     // --- Hooks ---
     const params = useParams();
@@ -41,206 +96,138 @@ export default function CaseStudyDetailPage() {
 
     // --- State ---
     const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
-    // State cho ô tìm kiếm
     const [searchTerm, setSearchTerm] = useState(searchParams.get('q') || '');
     const debouncedSearchTerm = useDebounce(searchTerm, 500);
+    const [currentPage, setCurrentPage] = useState(1); // State trang hiện tại
 
-    // --- Derived State from URL (Tính state từ URL) ---
-    // Tính toán activeFields từ URL
+    // --- State tính toán từ URL ---
     const activeFields = useMemo(() => {
         const fieldsParam = searchParams.get('fields');
         if (fieldsParam === null) return { title: true, content: true, source: true };
         if (fieldsParam === '') return { title: false, content: false, source: false };
         const urlFields = new Set(fieldsParam.split(','));
         return {
-            title: urlFields.has('title'),
-            content: urlFields.has('content'),
-            source: urlFields.has('source'),
+            title: urlFields.has('title'), content: urlFields.has('content'), source: urlFields.has('source'),
         };
     }, [searchParams]);
+    const selectedPlatforms = useMemo(() => searchParams.get('platforms')?.split(',').filter(Boolean) || [], [searchParams]);
+    const selectedSentiments = useMemo(() => searchParams.get('sentiments')?.split(',').filter(Boolean) || [], [searchParams]);
 
-    // Lấy selectedPlatforms từ URL
-    const selectedPlatforms = useMemo(() => {
-        return searchParams.get('platforms')?.split(',').filter(Boolean) || [];
-    }, [searchParams]);
-
-    // Lấy selectedSentiments từ URL
-    const selectedSentiments = useMemo(() => {
-        return searchParams.get('sentiments')?.split(',').filter(Boolean) || [];
-    }, [searchParams]);
-
-
-    // --- API URL Construction ---
-    // URL fetch chi tiết Case Study
+    // --- Xây dựng URL API ---
     const caseStudyApiUrl = useMemo(() => caseStudyId ? `/api/casestudies/${caseStudyId}` : null, [caseStudyId]);
-    // URL fetch Posts
     const postsApiUrl = useMemo(() => {
         if (!caseStudyId) return null;
         const params = new URLSearchParams(searchParams.toString());
-        params.delete('q');
-        params.delete('search');
-        params.delete('fields');
+        params.delete('q'); params.delete('search'); params.delete('fields');
+
+        // Thêm tham số phân trang
+        params.set('page', currentPage.toString());
+        params.set('limit', ITEMS_PER_PAGE.toString());
 
         const activeFieldKeys = Object.keys(activeFields).filter(field => activeFields[field]);
-
         if (debouncedSearchTerm && activeFieldKeys.length > 0) {
             params.set('search', debouncedSearchTerm);
             params.set('fields', activeFieldKeys.join(','));
         }
-
         return `/api/posts/by-case-study/${caseStudyId}?${params.toString()}`;
-    }, [caseStudyId, debouncedSearchTerm, activeFields, searchParams]);
+    }, [caseStudyId, debouncedSearchTerm, activeFields, searchParams, currentPage]);
 
-    // --- Data Fetching ---
-    // Fetch chi tiết Case Study
-    const {
-        data: caseStudy, // Đổi tên data
-        error: caseStudyError,
-        isLoading: isCaseStudyLoading, // Đổi tên isLoading
-        mutate: mutateCaseStudy
-    } = useSWR(caseStudyApiUrl, fetcher);
-
-    // Fetch Posts
-    const {
-        data: postsData,
-        error: postsError,
-        isLoading: isPostsLoading,
-        mutate: mutatePosts
-    } = useSWR(postsApiUrl, fetcher, { keepPreviousData: true });
-    // Lấy mảng posts từ data (an toàn)
+    // --- Fetch Dữ liệu ---
+    const { data: caseStudy, error: caseStudyError, isLoading: isCaseStudyLoading, mutate: mutateCaseStudy } = useSWR(caseStudyApiUrl, fetcher);
+    const { data: postsData, error: postsError, isLoading: isPostsLoading, mutate: mutatePosts } = useSWR(postsApiUrl, fetcher, { keepPreviousData: true });
     const posts = postsData?.posts || [];
+    const totalPages = postsData?.totalPages || 1; // Lấy totalPages từ postsData
 
-    // --- useEffects (Đồng bộ State và URL) ---
-    // Đồng bộ URL -> searchTerm input
+    // --- useEffects đồng bộ State và URL ---
+    useEffect(() => { const searchTermFromUrl = searchParams.get('q') || ''; if (searchTermFromUrl !== searchTerm) { setSearchTerm(searchTermFromUrl); } /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [searchParams]);
     useEffect(() => {
-        const searchTermFromUrl = searchParams.get('q') || '';
-        if (searchTermFromUrl !== searchTerm) {
-            setSearchTerm(searchTermFromUrl);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchParams]);
-
-    // Đồng bộ debouncedSearchTerm -> URL param 'q'
-    useEffect(() => {
-        const params = new URLSearchParams(searchParams.toString());
-        const currentQ = params.get('q') || '';
+        const params = new URLSearchParams(searchParams.toString()); const currentQ = params.get('q') || '';
         if (debouncedSearchTerm !== currentQ) {
-            if (debouncedSearchTerm) {
-                params.set('q', debouncedSearchTerm);
-            } else {
-                params.delete('q');
-            }
+            if (debouncedSearchTerm) { params.set('q', debouncedSearchTerm); } else { params.delete('q'); }
+            setCurrentPage(1); // Reset trang 1 khi search thay đổi
             router.replace(`${pathname}?${params.toString()}`, { scroll: false });
         }
     }, [debouncedSearchTerm, pathname, router, searchParams]);
 
-
-    // --- HANDLERS ---
-    // Handler cho checkbox 'Search in'
+    // --- Handlers ---
     const handlePostSearchFieldChange = (field) => {
-        const fieldKey = field.toLowerCase();
-        const newFieldsState = { ...activeFields, [fieldKey]: !activeFields[fieldKey] };
-        const activeFieldKeys = Object.keys(newFieldsState).filter(f => newFieldsState[f]);
-        const params = new URLSearchParams(searchParams.toString());
-        if (activeFieldKeys.length === POST_SEARCH_FIELDS.length) {
-            params.delete('fields');
-        } else {
-            params.set('fields', activeFieldKeys.join(','));
-        }
-        router.push(`${pathname}?${params.toString()}`, { scroll: false });
+        setCurrentPage(1); // Reset trang 1 khi filter thay đổi
+        const fieldKey = field.toLowerCase(); const newFieldsState = { ...activeFields, [fieldKey]: !activeFields[fieldKey] }; const activeFieldKeys = Object.keys(newFieldsState).filter(f => newFieldsState[f]); const params = new URLSearchParams(searchParams.toString()); if (activeFieldKeys.length === POST_SEARCH_FIELDS.length) { params.delete('fields'); } else { params.set('fields', activeFieldKeys.join(',')); } router.push(`${pathname}?${params.toString()}`, { scroll: false });
     };
-
-    // Handler cho dropdown Platforms
     const handlePlatformChange = (newSelection) => {
-        const params = new URLSearchParams(searchParams.toString());
-        if (newSelection.length > 0) {
-            params.set('platforms', newSelection.join(','));
-        } else {
-            params.delete('platforms');
-        }
-        router.push(`${pathname}?${params.toString()}`, { scroll: false });
+        setCurrentPage(1); // Reset trang 1 khi filter thay đổi
+        const params = new URLSearchParams(searchParams.toString()); if (newSelection.length > 0) { params.set('platforms', newSelection.join(',')); } else { params.delete('platforms'); } router.push(`${pathname}?${params.toString()}`, { scroll: false });
     };
-
-    // Handler cho dropdown Sentiments
     const handleSentimentChange = (newSelection) => {
-        const params = new URLSearchParams(searchParams.toString());
-        if (newSelection.length > 0) {
-            params.set('sentiments', newSelection.join(','));
-        } else {
-            params.delete('sentiments');
-        }
-        router.push(`${pathname}?${params.toString()}`, { scroll: false });
+        setCurrentPage(1); // Reset trang 1 khi filter thay đổi
+        const params = new URLSearchParams(searchParams.toString()); if (newSelection.length > 0) { params.set('sentiments', newSelection.join(',')); } else { params.delete('sentiments'); } router.push(`${pathname}?${params.toString()}`, { scroll: false });
     };
+    const handleToggleStatus = async () => { if (!caseStudy || isUpdatingStatus) return; setIsUpdatingStatus(true); const newStatus = caseStudy.status === 'Resolved' ? 'Unresolved' : 'Resolved'; try { await api(`casestudies/${caseStudy.id}/status`, { method: 'PUT', body: JSON.stringify({ status: newStatus }) }); mutateCaseStudy(); } catch (err) { console.error("Failed to update status", err); } finally { setIsUpdatingStatus(false); } };
 
-    // Handler cập nhật status Case Study (Code đầy đủ)
-    const handleToggleStatus = async () => {
-        if (!caseStudy || isUpdatingStatus) return;
-        setIsUpdatingStatus(true);
-        const newStatus = caseStudy.status === 'Resolved' ? 'Unresolved' : 'Resolved';
-        try {
-            await api(`casestudies/${caseStudy.id}/status`, {
-                method: 'PUT',
-                body: JSON.stringify({ status: newStatus })
-            });
-            mutateCaseStudy(); // Báo SWR fetch lại chi tiết case study
-        } catch (err) {
-            console.error("Failed to update status", err);
-            // Có thể thêm thông báo lỗi cho người dùng
-        } finally {
-            setIsUpdatingStatus(false);
+    // Handler cho phân trang
+    const handlePageChange = (newPage) => {
+        if (newPage >= 1 && newPage <= totalPages) {
+            setCurrentPage(newPage);
         }
     };
 
-    // --- Phân tích dữ liệu cho biểu đồ (Code đầy đủ + Sửa lỗi) ---
-    const sentimentData = useMemo(() => {
-        // Trả về mảng rỗng nếu chưa có data
-        if (!postsData?.posts) return [];
-        const sentimentCounts = { POSITIVE: 0, NEGATIVE: 0, NEUTRAL: 0 };
-        postsData.posts.forEach(post => {
-            // Thêm kiểm tra an toàn
-            if (post && post.sentiment && sentimentCounts.hasOwnProperty(post.sentiment)) {
-                sentimentCounts[post.sentiment]++;
-            }
-        });
-        return Object.entries(sentimentCounts).map(([name, value]) => ({ name, value })).filter(entry => entry.value > 0);
-    }, [postsData]); // Phụ thuộc vào postsData
-
-    const timelineData = useMemo(() => {
-        // Trả về mảng rỗng nếu chưa có data
-        if (!postsData?.posts) return [];
-        const postsByDate = {};
-        postsData.posts.forEach(post => {
-            // Thêm kiểm tra an toàn
-            if (post && post.publishedAt) {
-                const date = new Date(post.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                if (!postsByDate[date]) { postsByDate[date] = 0; }
-                postsByDate[date]++;
-            }
-        });
-        return Object.entries(postsByDate).map(([name, posts]) => ({ name, posts })).sort((a, b) => new Date(a.name) - new Date(b.name));
-    }, [postsData]); // Phụ thuộc vào postsData
+    // --- Xử lý dữ liệu biểu đồ ---
+    const sentimentData = useMemo(() => { if (!postsData?.posts) return []; const counts = { POSITIVE: 0, NEGATIVE: 0, NEUTRAL: 0 }; postsData.posts.forEach(p => { if (p?.sentiment && counts.hasOwnProperty(p.sentiment)) counts[p.sentiment]++; }); return Object.entries(counts).map(([name, value]) => ({ name, value })).filter(e => e.value > 0); }, [postsData]);
+    const timelineData = useMemo(() => { if (!postsData?.posts) return []; const byDate = {}; postsData.posts.forEach(p => { if (p?.publishedAt) { const date = new Date(p.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); if (!byDate[date]) byDate[date] = 0; byDate[date]++; } }); return Object.entries(byDate).map(([name, posts]) => ({ name, posts })).sort((a, b) => new Date(a.name) - new Date(b.name)); }, [postsData]);
 
     // --- Xử lý Loading/Error ban đầu cho Case Study ---
-    if (isCaseStudyLoading) return <div className="p-8 text-center text-gray-400">Loading analysis...</div>;
-    if (caseStudyError) return (
-        <div className="p-8 text-center text-red-400">
-            <p>Failed to fetch case study details.</p>
-            <button onClick={() => mutateCaseStudy()} className="mt-4 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded">Retry</button>
-        </div>
-    );
+    if (isCaseStudyLoading) {
+        return (
+            <div className="p-4 md:p-6 lg:p-8 text-gray-200 overflow-x-hidden">
+                <div className="h-6 bg-slate-700 rounded w-40 mb-6 animate-pulse"></div>
+                <CaseStudySummarySkeleton />
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                    <ChartSkeleton />
+                    <ChartSkeleton />
+                </div>
+                <div>
+                    <div className="h-8 bg-slate-700 rounded w-1/3 mb-4 animate-pulse"></div>
+                    <div className="h-16 bg-slate-800/50 rounded-lg mb-6 animate-pulse"></div>
+                    <div className="space-y-4">
+                        {[...Array(POSTS_SKELETON_COUNT)].map((_, index) => (
+                            <PostItemSkeleton key={index} />
+                        ))}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+    if (caseStudyError) {
+        return (
+            <div className="p-8 text-center">
+                <div className="text-center py-10 px-4 border-2 border-dashed border-red-900/50 rounded-lg bg-red-900/10 max-w-lg mx-auto">
+                    <AlertIcon className="mx-auto h-12 w-12 text-red-400" />
+                    <h3 className="mt-2 text-lg font-semibold text-white">Error Loading Case Study</h3>
+                    <p className="mt-1 text-sm text-red-300">{caseStudyError.message || 'Could not load case study details.'}</p>
+                    <div className="mt-6">
+                        <button type="button" onClick={() => mutateCaseStudy()} className="inline-flex items-center rounded-md bg-slate-700 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-600 focus-visible:outline">
+                            <RefreshCw className="w-4 h-4 mr-2" />
+                            Retry
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
     if (!caseStudy) return <div className="p-8 text-center text-gray-400">Case study not found.</div>;
 
-    // --- JSX ---
+    // --- JSX Render Chính ---
     return (
         <div className="p-4 md:p-6 lg:p-8 text-gray-200 overflow-x-hidden">
             {/* Nút Back */}
             <Link href="/dashboard/casestudies" className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 mb-6"><ArrowLeft size={20} /> Back to Case Studies</Link>
 
-            {/* Phần Tóm tắt Case Study (Giữ nguyên JSX) */}
+            {/* Phần Tóm tắt Case Study */}
             <div className="bg-slate-800/50 p-6 md:p-8 rounded-lg mb-8">
                 <h1 className="text-3xl font-bold text-white mb-2">{caseStudy.title}</h1>
-                <p className="text-gray-300 mb-6">{caseStudy.summary}</p>
+                <p className="text-gray-300 mb-6">{caseStudy.summary || <span className="italic text-slate-500">No summary provided.</span>}</p>
                 <div className="flex flex-wrap gap-x-8 gap-y-4 text-sm">
+                    {/* Status Toggle */}
                     <div className="flex items-center gap-3">
                         <ShieldCheck size={16} className="text-gray-400" />
                         <span className="text-gray-400">Status:</span>
@@ -249,96 +236,116 @@ export default function CaseStudyDetailPage() {
                             <span className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${caseStudy.status === 'Resolved' ? 'translate-x-6' : 'translate-x-1'}`} />
                         </button>
                     </div>
+                    {/* Các thông số khác */}
                     <div className="flex items-center gap-2 text-gray-400"><MessageSquare size={16} /> Total Mentions: <span className="font-semibold text-white">{caseStudy.postCount || 0}</span></div>
                     <div className="flex items-center gap-2 text-gray-400"><Clock size={16} /> Date Range: <span className="font-semibold text-white">{caseStudy.dateRange || 'N/A'}</span></div>
                 </div>
             </div>
 
-            {/* Biểu đồ (Giữ nguyên JSX) */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-                <div className="bg-slate-800/50 p-6 rounded-lg">
-                    <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2"><PieChart size={20} /> Sentiment Breakdown</h2>
-                    <div className="h-64"><ResponsiveContainer width="100%" height="100%"><RechartsPieChart><Pie data={sentimentData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="#8884d8" label>{sentimentData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[entry.name]} />))}</Pie><Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155' }} /></RechartsPieChart></ResponsiveContainer></div>
+            {/* Biểu đồ */}
+            {isPostsLoading && !postsData ? (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                    <ChartSkeleton />
+                    <ChartSkeleton />
                 </div>
-                <div className="bg-slate-800/50 p-6 rounded-lg">
-                    <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2"><BarChart3 size={20} /> Crisis Timeline</h2>
-                    <div className="h-64"><ResponsiveContainer width="100%" height="100%"><RechartsBarChart data={timelineData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="#475569" /><XAxis dataKey="name" tick={{ fill: '#94a3b8' }} /><YAxis tick={{ fill: '#94a3b8' }} /><Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155' }} /><Bar dataKey="posts" fill="#3b82f6" /></RechartsBarChart></ResponsiveContainer></div>
+            ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                    {/* Biểu đồ tròn Sentiment */}
+                    <div className="bg-slate-800/50 p-6 rounded-lg">
+                        <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2"><PieChart size={20} /> Sentiment Breakdown</h2>
+                        <div className="h-64">
+                            {sentimentData.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <RechartsPieChart>
+                                        <Pie data={sentimentData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="#8884d8" label>
+                                            {sentimentData.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[entry.name]} />))}
+                                        </Pie>
+                                        <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155' }} />
+                                    </RechartsPieChart>
+                                </ResponsiveContainer>
+                            ) : (<p className='text-center text-slate-500 mt-16'>No sentiment data available for these posts.</p>)}
+                        </div>
+                    </div>
+                    {/* Biểu đồ cột Timeline */}
+                    <div className="bg-slate-800/50 p-6 rounded-lg">
+                        <h2 className="text-xl font-semibold text-white mb-4 flex items-center gap-2"><BarChart3 size={20} /> Crisis Timeline</h2>
+                        <div className="h-64">
+                            {timelineData.length > 0 ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <RechartsBarChart data={timelineData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
+                                        <XAxis dataKey="name" tick={{ fill: '#94a3b8' }} interval="auto" />
+                                        <YAxis tick={{ fill: '#94a3b8' }} />
+                                        <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155' }} />
+                                        <Bar dataKey="posts" fill="#3b82f6" />
+                                    </RechartsBarChart>
+                                </ResponsiveContainer>
+                            ) : (<p className='text-center text-slate-500 mt-16'>No timeline data available for these posts.</p>)}
+                        </div>
+                    </div>
                 </div>
-            </div>
+            )}
+
 
             {/* Phần Danh sách Posts */}
             <div>
                 <h2 className="text-2xl font-bold text-white mb-4">All Mentioned Posts</h2>
-
-                {/* --- SỬ DỤNG FilterBar --- */}
+                {/* FilterBar */}
                 <FilterBar
                     searchTerm={searchTerm}
                     onSearchChange={(e) => setSearchTerm(e.target.value)}
                     placeholder="Search in these posts..."
-
-                    availableFields={POST_SEARCH_FIELDS} // Fields cho Posts
-                    activeFields={activeFields} // State đọc từ URL
-                    onFieldChange={handlePostSearchFieldChange} // Handler cập nhật URL
-
+                    availableFields={POST_SEARCH_FIELDS}
+                    activeFields={activeFields}
+                    onFieldChange={handlePostSearchFieldChange}
                     platformOptions={PLATFORM_OPTIONS}
-                    selectedPlatforms={selectedPlatforms} // State đọc từ URL
-                    onPlatformChange={handlePlatformChange} // Handler cập nhật URL
-
+                    selectedPlatforms={selectedPlatforms}
+                    onPlatformChange={handlePlatformChange}
                     sentimentOptions={SENTIMENT_OPTIONS}
-                    selectedSentiments={selectedSentiments} // State đọc từ URL
-                    onSentimentChange={handleSentimentChange} // Handler cập nhật URL
+                    selectedSentiments={selectedSentiments}
+                    onSentimentChange={handleSentimentChange}
                 />
 
-                {/* Hiển thị Loading / Error / Data / Empty cho Posts */}
-                {isPostsLoading && !postsData && (
-                    <p className="text-center text-gray-400 py-10">Loading posts...</p>
+                {/* Loading / Error / Data / Empty cho Posts */}
+                {isPostsLoading && !postsData && ( // Skeleton chỉ khi load lần đầu
+                    <div className="space-y-4 py-10">
+                        {[...Array(POSTS_SKELETON_COUNT)].map((_, index) => (
+                            <PostItemSkeleton key={index} />
+                        ))}
+                    </div>
                 )}
-                {postsError && (
+                {postsError && ( // Lỗi fetch posts
                     <div className="text-center py-10 px-4 border-2 border-dashed border-red-900/50 rounded-lg bg-red-900/10">
                         <AlertIcon className="mx-auto h-12 w-12 text-red-400" />
                         <h3 className="mt-2 text-lg font-semibold text-white">Error Loading Posts</h3>
                         <p className="mt-1 text-sm text-red-300">{postsError.message || 'Could not load posts.'}</p>
                         <div className="mt-6">
-                            <button
-                                type="button"
-                                onClick={() => mutatePosts()}
-                                className="inline-flex items-center rounded-md bg-slate-700 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-                            >
+                            <button type="button" onClick={() => mutatePosts()} className="inline-flex items-center rounded-md bg-slate-700 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-600 focus-visible:outline">
                                 <RefreshCw className="w-4 h-4 mr-2" />
                                 Retry
                             </button>
                         </div>
                     </div>
                 )}
+                {/* Render danh sách posts hoặc trạng thái rỗng */}
                 {!isPostsLoading && !postsError && postsData && (
                     <div className="space-y-4">
                         {posts.length > 0 ? posts.map(post => (
                             // --- Thẻ Post ---
                             <div key={post.id} className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 hover:border-slate-600 transition-colors duration-150 overflow-hidden">
                                 <div className="flex justify-between items-start gap-2 min-w-0">
-                                    <div className="min-w-0 flex-1">
-                                        <h3 className="font-semibold text-lg text-white mb-1 truncate" title={post.title}>{post.title}</h3>
-                                    </div>
-                                    <a href={post.sourceUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300">
-                                        <ExternalLink size={16} /> View Source
-                                    </a>
+                                    <div className="min-w-0 flex-1"><h3 className="font-semibold text-lg text-white mb-1 truncate" title={post.title}>{post.title}</h3></div>
+                                    <a href={post.sourceUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300"><ExternalLink size={16} /> View Source</a>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-400 mb-2">
                                     <span>From: <span className="font-medium text-gray-300 break-words">{post.source}</span></span>
-                                    {post.platform && (
-                                        <span className="flex items-center gap-1.5">
-                                            <Globe size={14} />Platform: <span className="font-medium text-blue-300 capitalize">{post.platform}</span>
-                                        </span>
-                                    )}
+                                    {post.platform && (<span className="flex items-center gap-1.5"><Globe size={14} />Platform: <span className="font-medium text-blue-300 capitalize">{post.platform}</span></span>)}
                                 </div>
                                 <p className="text-gray-300 text-base line-clamp-3">{post.content}</p>
                                 <div className="mt-3">
-                                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${post.sentiment === 'NEGATIVE' && 'bg-red-500/30 text-red-300'} ${post.sentiment === 'POSITIVE' && 'bg-green-500/30 text-green-300'} ${post.sentiment === 'NEUTRAL' && 'bg-gray-500/30 text-gray-300'}`}>
-                                        {post.sentiment || 'N/A'}
-                                    </span>
+                                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${post.sentiment === 'NEGATIVE' && 'bg-red-500/30 text-red-300'} ${post.sentiment === 'POSITIVE' && 'bg-green-500/30 text-green-300'} ${post.sentiment === 'NEUTRAL' && 'bg-gray-500/30 text-gray-300'}`}>{post.sentiment || 'N/A'}</span>
                                 </div>
                             </div>
-                            // --- Hết Thẻ Post ---
                         )) : (
                             // --- Trạng thái rỗng cho Posts ---
                             <div className="text-center py-16 px-4 border-2 border-dashed border-slate-700 rounded-lg">
@@ -351,23 +358,35 @@ export default function CaseStudyDetailPage() {
                                     }
                                 </p>
                                 {(searchTerm || selectedPlatforms.length > 0 || selectedSentiments.length > 0) && (
-                                    <button
-                                        onClick={() => {
-                                            const params = new URLSearchParams(searchParams.toString());
-                                            params.delete('q');
-                                            params.delete('fields');
-                                            params.delete('platforms');
-                                            params.delete('sentiments');
-                                            router.push(`${pathname}?${params.toString()}`, { scroll: false });
-                                            setSearchTerm('');
-                                        }}
-                                        className="mt-4 inline-flex items-center rounded-md bg-slate-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-600"
-                                    >
+                                    <button onClick={() => { const params = new URLSearchParams(searchParams.toString()); params.delete('q'); params.delete('fields'); params.delete('platforms'); params.delete('sentiments'); router.push(`${pathname}?${params.toString()}`, { scroll: false }); setSearchTerm(''); }} className="mt-4 inline-flex items-center rounded-md bg-slate-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-600">
                                         Clear Filters
                                     </button>
                                 )}
                             </div>
                         )}
+                    </div>
+                )}
+
+                {/* --- PHẦN PHÂN TRANG --- */}
+                {totalPages > 1 && (
+                    <div className="flex justify-center items-center gap-4 mt-8">
+                        <button
+                            onClick={() => handlePageChange(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-700 rounded-md hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <ChevronLeft size={16} /> Previous
+                        </button>
+                        <span className="text-sm text-gray-400">
+                            Page {currentPage} / {totalPages}
+                        </span>
+                        <button
+                            onClick={() => handlePageChange(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-700 rounded-md hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Next <ChevronRight size={16} />
+                        </button>
                     </div>
                 )}
             </div>

@@ -4,14 +4,37 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api, setToken, getToken } from '@/utils/api';
+import { useFormValidation } from '@/hooks/useFormValidation';
+import { User, KeyRound } from 'lucide-react';
+import Input from '@/app/components/Input';
+
+const loginSchema = {
+    username: {
+        required: true,
+        minLength: 3
+    },
+    password: {
+        required: true
+    }
+};
+
+const initialValues = {
+    username: '',
+    password: ''
+};
 
 export default function LoginPage() {
-    const [username, setUsername] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [isCheckingAuth, setIsCheckingAuth] = useState(true);
     const router = useRouter();
+
+    const {
+        values,
+        errors,
+        setErrors,
+        handleChange,
+        validateForm
+    } = useFormValidation(initialValues, loginSchema);
 
     useEffect(() => {
         const token = getToken();
@@ -26,23 +49,29 @@ export default function LoginPage() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setError('');
+
+        const isValid = validateForm();
+        if (!isValid) {
+            return;
+        }
+
         setLoading(true);
 
         try {
             const data = await api('auth/login', {
                 method: 'POST',
-                body: JSON.stringify({ username, password }),
+                body: JSON.stringify(values),
             });
             setToken(data.token);
             router.replace('/dashboard');
         } catch (err) {
-            setError(err.message);
+            setErrors({ general: err.message || "Login failed!" });
         } finally {
             setLoading(false);
         }
     };
 
+    // JSX kiểm tra auth 
     if (isCheckingAuth) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-900">
@@ -58,42 +87,51 @@ export default function LoginPage() {
                     Login to Crisis Alert
                 </h1>
 
-                {error && (
+                {errors.general && (
                     <div className="bg-red-900/50 border border-red-700 text-red-300 p-3 rounded-lg mb-4 text-center text-sm sm:text-base">
-                        {error}
+                        {errors.general}
                     </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+                <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6" noValidate>
+                    {/* --- Username --- */}
                     <div>
                         <label htmlFor="username" className="block text-sm sm:text-base font-medium text-gray-300 mb-1">
                             Username
                         </label>
-                        <input
-                            type="text"
+                        <Input
                             id="username"
                             name="username"
+                            type="text"
                             placeholder="Enter your username"
-                            required
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-gray-800/80 border border-gray-700 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-300 placeholder-gray-500 text-gray-200 text-sm sm:text-base"
+                            value={values.username}
+                            onChange={handleChange}
+                            leftIcon={<User size={20} />}
+                            className={errors.username ? 'border-red-500' : 'border-gray-700'}
                         />
+                        {errors.username && (
+                            <p className="mt-1 text-xs text-red-400">{errors.username}</p>
+                        )}
                     </div>
+
+                    {/* --- Password --- */}
                     <div>
                         <label htmlFor="password" className="block text-sm sm:text-base font-medium text-gray-300 mb-1">
                             Password
                         </label>
-                        <input
-                            type="password"
+                        <Input
                             id="password"
                             name="password"
+                            type="password"
                             placeholder="Enter your password"
-                            required
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-gray-800/80 border border-gray-700 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition duration-300 placeholder-gray-500 text-gray-200 text-sm sm:text-base"
+                            value={values.password}
+                            onChange={handleChange}
+                            leftIcon={<KeyRound size={20} />}
+                            className={errors.password ? 'border-red-500' : 'border-gray-700'}
                         />
+                        {errors.password && (
+                            <p className="mt-1 text-xs text-red-400">{errors.password}</p>
+                        )}
                     </div>
 
                     <div className="pt-3 sm:pt-4 flex justify-center">
@@ -115,6 +153,7 @@ export default function LoginPage() {
                         </span>
                     </Link>
                 </p>
+
                 <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-700 flex justify-center">
                     <Link href="/">
                         <span className="flex items-center justify-center h-10 sm:h-11 px-4 sm:px-6 font-semibold rounded-full text-white bg-transparent border-2 border-blue-400 hover:bg-blue-400/20 transition-all duration-300 transform hover:scale-105 text-sm sm:text-base cursor-pointer">

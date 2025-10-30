@@ -1,44 +1,52 @@
-const { DataTypes } = require('sequelize');
+// backend/models/User.js
+const { DataTypes, Model } = require('sequelize'); // Sửa: Thêm Model để dùng class
 const { sequelize } = require('../config/db');
 
-// Định nghĩa model User, nó sẽ tương ứng với bảng 'users' trong database
-const User = sequelize.define('User', {
-    // Các thuộc tính (cột) của model được định nghĩa ở đây
+class User extends Model { }
+
+User.init({
+    // Khóa chính, tự động tăng
     id: {
         type: DataTypes.INTEGER,
         autoIncrement: true,
         primaryKey: true
     },
+    // Tên đăng nhập duy nhất
     username: {
         type: DataTypes.STRING,
-        allowNull: false, // Bắt buộc phải có giá trị (NOT NULL)
-        unique: true      // Giá trị không được trùng
+        allowNull: false,
+        unique: true
     },
+    // Email duy nhất, dùng để liên lạc
     email: {
         type: DataTypes.STRING,
         allowNull: false,
         unique: true,
         validate: {
-            isEmail: true // Sequelize sẽ tự động kiểm tra định dạng email
+            isEmail: true
         }
     },
+    // Số điện thoại (tùy chọn, nhưng đang để unique)
     phone: {
         type: DataTypes.STRING,
         allowNull: false,
         unique: true
     },
+    // Mật khẩu đã được băm (hashed)
     password: {
         type: DataTypes.STRING,
         allowNull: false
     },
+    // Cài đặt bật/tắt nhận thông báo qua email
     notificationsEnabled: {
         type: DataTypes.BOOLEAN,
-        defaultValue: true // Mặc định là bật khi người dùng mới đăng ký
+        defaultValue: true
     }
 }, {
-    // Các tùy chọn khác cho model
-    tableName: 'users', // Đặt tên cho bảng trong database
-    timestamps: true    // Tự động thêm 2 cột: createdAt và updatedAt
+    sequelize,
+    modelName: 'User',
+    tableName: 'users',
+    timestamps: true
 });
 
 module.exports = User;

@@ -1,8 +1,8 @@
 // backend/controllers/alertController.js
 const { Op } = require('sequelize');
-const { Alert, Post, sequelize } = require('../models/associations');
+const { Alert, Post, User, sequelize } = require('../models/associations');
 
-// @desc    Lấy tất cả Alerts cho người dùng (CÓ PHÂN TRANG, TÌM KIẾM, LỌC)
+// @desc    Lấy tất cả Alerts của người dùng (hỗ trợ filter, search, pagination)
 exports.getAlerts = async (req, res) => {
     try {
         const userId = req.user.id;
@@ -12,12 +12,11 @@ exports.getAlerts = async (req, res) => {
 
         const { search, fields, statuses, severities, platforms } = req.query;
 
-        // --- BƯỚC 1: XÂY DỰNG BỘ LỌC CSDL CƠ BẢN ---
-        // (Chỉ lọc các trường string/enum đơn giản)
+        // --- BƯỚC 1: LỌC CSDL (các trường đơn giản) ---
         const whereCondition = { userId };
         const andConditions = [];
 
-        // 1. Lọc Status (Phần này đã đúng)
+        // Lọc theo Status (String/Enum)
         if (statuses) {
             const statusArray = statuses.split(',').filter(Boolean).map(s => s.toUpperCase());
             if (statusArray.length > 0) {
@@ -25,7 +24,7 @@ exports.getAlerts = async (req, res) => {
             }
         }
 
-        // 2. Lọc Severity (Phần này đã đúng)
+        // Lọc theo Severity (String/Enum)
         if (severities) {
             const severityArray = severities.split(',').filter(Boolean);
             if (severityArray.length > 0) {
@@ -37,30 +36,27 @@ exports.getAlerts = async (req, res) => {
             whereCondition[Op.and] = andConditions;
         }
 
-        // --- BƯỚC 2: LẤY TẤT CẢ DỮ LIỆU KHỚP BỘ LỌC CƠ BẢN ---
-        // (Không dùng limit/offset vội)
+        // --- BƯỚC 2: LẤY DỮ LIỆU TỪ CSDL ---
         const allMatchingAlerts = await Alert.findAll({
             where: whereCondition,
             order: [['createdAt', 'DESC']]
         });
 
-        // --- BƯỚC 3: LỌC NÂNG CAO (MẢNG/JSON) BẰNG JAVASCRIPT ---
+        // --- BƯỚC 3: LỌC NÂNG CAO BẰNG JAVASCRIPT (cho các trường Mảng/JSON) ---
         let filteredAlerts = allMatchingAlerts;
 
-        // 3a. Lọc Platforms (bằng Javascript)
+        // Lọc theo Platforms (Array/JSON)
         if (platforms) {
             const platformArray = platforms.split(',').filter(Boolean);
             if (platformArray.length > 0) {
                 filteredAlerts = filteredAlerts.filter(alert => {
-                    // Kiểm tra xem 'alert.platforms' (mảng trong DB)
-                    // có chứa BẤT KỲ phần tử nào trong 'platformArray' không
                     if (!alert.platforms || alert.platforms.length === 0) return false;
                     return alert.platforms.some(p => platformArray.includes(p));
                 });
             }
         }
 
-        // 3b. Lọc Search (bằng Javascript)
+        // Lọc theo Search (Hỗ trợ AND/OR)
         if (search && fields) {
             const searchFields = fields.split(',').map(f => f.trim().toLowerCase());
             const activeFields = searchFields.filter(f => ['title', 'description', 'keywords'].includes(f));
@@ -70,21 +66,17 @@ exports.getAlerts = async (req, res) => {
 
                 if (orGroups.length > 0) {
                     filteredAlerts = filteredAlerts.filter(alert => {
-                        // Phải khớp VỚI BẤT KỲ (some) nhóm OR nào
                         return orGroups.some(group => {
                             const andTerms = group.split('&').map(t => t.trim().toLowerCase()).filter(Boolean);
-                            if (andTerms.length === 0) return true; // (Trường hợp chỉ có dấu |)
+                            // SỬA LỖI: Nếu group rỗng (vd: "&"), trả về điều kiện luôn sai
+                            if (andTerms.length === 0) return false;
 
-                            // Phải khớp VỚI TẤT CẢ (every) các từ AND
                             return andTerms.every(term => {
-                                // Phải khớp VỚI BẤT KỲ (some) field nào đang active
                                 return activeFields.some(field => {
                                     if (field === 'keywords') {
-                                        // Lọc mảng 'keywords'
                                         if (!alert.keywords) return false;
                                         return alert.keywords.some(kw => kw.toLowerCase().includes(term));
                                     } else {
-                                        // Lọc string 'title' hoặc 'description'
                                         return alert[field] && alert[field].toLowerCase().includes(term);
                                     }
                                 });
@@ -95,7 +87,7 @@ exports.getAlerts = async (req, res) => {
             }
         }
 
-        // --- BƯỚC 4: PHÂN TRANG THỦ CÔNG ---
+        // --- BƯỚC 4: PHÂN TRANG KẾT QUẢ ĐÃ LỌC ---
         const count = filteredAlerts.length;
         const paginatedAlerts = filteredAlerts.slice(offset, offset + limit);
 
@@ -106,22 +98,19 @@ exports.getAlerts = async (req, res) => {
         });
 
     } catch (error) {
-        // Log lỗi này ra terminal để xem
-        console.error("LỖI KHI FETCH ALERTS:", error);
+        console.error("Error fetching alerts:", error);
         res.status(500).json({ message: 'Server error while fetching alerts' });
     }
 };
 
-// @desc    Lấy chi tiết một Alert và các posts liên quan (có filter nâng cao)
+// @desc    Lấy chi tiết một Alert (và các Posts liên quan đã lọc)
 exports.getAlertById = async (req, res) => {
     try {
         const { id: alertId } = req.params;
         const { platforms, sentiments, search, fields } = req.query;
 
-        // Điều kiện lọc post
         const postWhere = {};
 
-        // 1. Lọc Platform
         if (platforms) {
             const platformArray = platforms.split(',').filter(Boolean);
             if (platformArray.length > 0) {
@@ -129,7 +118,6 @@ exports.getAlertById = async (req, res) => {
             }
         }
 
-        // 2. Lọc Sentiment
         if (sentiments) {
             const sentimentArray = sentiments.split(',').filter(Boolean);
             if (sentimentArray.length > 0) {
@@ -137,7 +125,6 @@ exports.getAlertById = async (req, res) => {
             }
         }
 
-        // 3. Lọc Search nâng cao (AND/OR)
         if (search && fields) {
             const searchFields = fields.split(',').map(f => f.trim().toLowerCase());
             const validFields = ['title', 'content', 'source'];
@@ -148,7 +135,7 @@ exports.getAlertById = async (req, res) => {
 
                 postWhere[Op.or] = orGroups.map(group => {
                     const andTerms = group.split('&').map(t => t.trim().toLowerCase()).filter(Boolean);
-
+                    if (andTerms.length === 0) return { id: null }; // Sửa lỗi logic
                     return {
                         [Op.and]: andTerms.map(term => ({
                             [Op.or]: activeFields.map(field => ({
@@ -156,7 +143,7 @@ exports.getAlertById = async (req, res) => {
                             }))
                         }))
                     };
-                });
+                }).filter(c => c.id !== null); // Lọc bỏ các {id: null}
             }
         }
 
@@ -182,16 +169,21 @@ exports.getAlertById = async (req, res) => {
     }
 };
 
+// @desc    Tạo một Alert mới
 exports.createAlert = async (req, res) => {
     const { title, description, severity, keywords, platforms } = req.body;
     const userId = req.user.id;
-    if (!title || !keywords || keywords.length === 0 || !platforms || platforms.length === 0) {
-        return res.status(400).json({ message: 'Please provide title, keywords, and platforms' });
-    }
+
     try {
         const newAlert = await Alert.create({
-            title, description, severity, keywords, platforms, userId,
-            postCount: 0, status: 'ACTIVE'
+            title,
+            description,
+            severity,
+            keywords,
+            platforms,
+            userId,
+            postCount: 0,
+            status: 'ACTIVE'
         });
         res.status(201).json({ message: 'Alert created successfully', alert: newAlert });
     } catch (error) {
@@ -200,30 +192,48 @@ exports.createAlert = async (req, res) => {
     }
 };
 
+// @desc    Cập nhật thông tin một Alert
 exports.updateAlert = async (req, res) => {
     const { title, description, severity, status, keywords, platforms } = req.body;
     const alertId = req.params.id;
+
     try {
         const alert = await Alert.findByPk(alertId);
-        if (!alert) { return res.status(404).json({ message: 'Alert not found' }); }
-        if (alert.userId !== req.user.id) { return res.status(403).json({ message: 'Not authorized to update this alert' }); }
+
+        if (!alert) {
+            return res.status(404).json({ message: 'Alert not found' });
+        }
+        if (alert.userId !== req.user.id) {
+            return res.status(403).json({ message: 'Not authorized to update this alert' });
+        }
+
         const updateData = { title, description, severity, status, keywords, platforms };
-        await Alert.update(updateData, { where: { id: alertId } });
-        const updatedAlert = await Alert.findByPk(alertId);
-        res.status(200).json({ message: 'Alert updated successfully', alert: updatedAlert });
+        Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
+
+        await alert.update(updateData);
+
+        res.status(200).json({ message: 'Alert updated successfully', alert: alert });
     } catch (error) {
         console.error("Error updating alert:", error);
         res.status(500).json({ message: 'Server error while updating alert' });
     }
 };
 
+// @desc    Xóa một Alert
 exports.deleteAlert = async (req, res) => {
     const alertId = req.params.id;
     try {
         const alert = await Alert.findByPk(alertId);
-        if (!alert) { return res.status(404).json({ message: 'Alert not found' }); }
-        if (alert.userId !== req.user.id) { return res.status(403).json({ message: 'Not authorized to delete this alert' }); }
-        await Alert.destroy({ where: { id: alertId } });
+
+        if (!alert) {
+            return res.status(404).json({ message: 'Alert not found' });
+        }
+        if (alert.userId !== req.user.id) {
+            return res.status(403).json({ message: 'Not authorized to delete this alert' });
+        }
+
+        await alert.destroy();
+
         res.status(200).json({ message: 'Alert deleted successfully' });
     } catch (error) {
         console.error("Error deleting alert:", error);
@@ -231,17 +241,20 @@ exports.deleteAlert = async (req, res) => {
     }
 };
 
-// @desc    Quét các post để tìm và liên kết với một alert (quét theo tháng)
+// @desc    Quét Posts thủ công cho một Alert
 exports.scanForMatches = async (req, res) => {
     try {
         const { id: alertId } = req.params;
         const alert = await Alert.findByPk(alertId);
-        if (!alert) return res.status(404).json({ message: 'Alert not found' });
-        if (alert.status !== 'ACTIVE') return res.status(400).json({ message: 'Cannot scan inactive alert.' });
 
-        // Lấy ngày alert được tạo
+        if (!alert)
+            return res.status(404).json({ message: 'Alert not found' });
+        if (alert.status !== 'ACTIVE')
+            return res.status(400).json({ message: 'Cannot scan inactive alert.' });
+        if (!alert.keywords || alert.keywords.length === 0)
+            return res.status(200).json({ message: 'Scan complete. No keywords to scan for.' });
+
         const alertCreationDate = new Date(alert.createdAt);
-        // Tính toán ngày đầu tiên của tháng đó
         const startOfMonth = new Date(alertCreationDate.getFullYear(), alertCreationDate.getMonth(), 1);
 
         const keywordConditions = alert.keywords.map(keyword => ({
@@ -250,15 +263,12 @@ exports.scanForMatches = async (req, res) => {
                 { content: { [Op.like]: `%${keyword}%` } }
             ]
         }));
-        if (keywordConditions.length === 0) return res.status(200).json({ message: 'Scan complete. No keywords.' });
 
         const matchingPosts = await Post.findAll({
             where: {
                 [Op.and]: [
                     { [Op.or]: keywordConditions },
-                    { platform: { [Op.in]: alert.platforms } },
-
-                    // Dùng ngày đầu tháng làm điều kiện
+                    { platform: { [Op.in]: alert.platforms || [] } },
                     { publishedAt: { [Op.gte]: startOfMonth } }
                 ]
             }
@@ -269,41 +279,41 @@ exports.scanForMatches = async (req, res) => {
         }
 
         await alert.addPosts(matchingPosts);
-        const count = await alert.countPosts();
-        await alert.update({ postCount: count });
 
-        res.status(200).json({ message: `Scan complete. Linked ${matchingPosts.length} posts from this month.` });
+        res.status(200).json({ message: `Scan complete. Linked ${matchingPosts.length} new posts from this month.` });
     } catch (error) {
-        console.error(`Error during smart scan:`, error);
+        console.error(`Error during scan for alert ${req.params.id}:`, error);
         res.status(500).json({ message: 'Server error during scan.' });
     }
 };
 
-// @desc    Quét tất cả các posts cho tất cả alerts đang active
+// @desc    Quét TẤT CẢ Posts cho TẤT CẢ Alerts
 exports.scanAllActiveAlerts = async (req, res) => {
     try {
         const activeAlerts = await Alert.findAll({ where: { userId: req.user.id, status: 'ACTIVE' } });
-        if (activeAlerts.length === 0) return res.status(200).json({ message: 'No active alerts to scan.' });
+        if (activeAlerts.length === 0)
+            return res.status(200).json({ message: 'No active alerts to scan.' });
 
         const allPosts = await Post.findAll();
-        for (const alert of activeAlerts) {
-            // ĐIỀU CHỈNH: Lọc cả keyword và platform
+
+        await Promise.all(activeAlerts.map(async (alert) => {
+            const keywords = alert.keywords || [];
+            const platforms = alert.platforms || [];
+            if (keywords.length === 0 || platforms.length === 0) return;
+
             const matchingPosts = allPosts.filter(post => {
                 const postContent = `${post.title} ${post.content}`.toLowerCase();
-                const keywordMatch = alert.keywords.some(keyword => postContent.includes(keyword.toLowerCase()));
-                const platformMatch = alert.platforms.includes(post.platform); // Điều kiện mới
-                return keywordMatch && platformMatch; // Phải khớp cả hai
+                const keywordMatch = keywords.some(keyword => postContent.includes(keyword.toLowerCase()));
+                const platformMatch = platforms.includes(post.platform);
+                return keywordMatch && platformMatch;
             });
 
             if (matchingPosts.length > 0) {
-                // `addPosts` sẽ tự động bỏ qua các liên kết đã tồn tại
                 await alert.addPosts(matchingPosts);
             }
-            // Cập nhật lại postCount cho từng alert
-            const count = await alert.countPosts();
-            await alert.update({ postCount: count });
-        }
-        res.status(200).json({ message: `Scan complete. Scanned ${activeAlerts.length} alerts.` });
+        }));
+
+        res.status(200).json({ message: `Scan complete. Scanned ${activeAlerts.length} active alerts.` });
     } catch (error) {
         console.error('Error scanning all active alerts:', error);
         res.status(500).json({ message: 'Server error during scan.' });
@@ -314,23 +324,102 @@ exports.scanAllActiveAlerts = async (req, res) => {
 exports.getStats = async (req, res) => {
     try {
         const userId = req.user.id;
+
+        // --- Tính toán các stats cũ (Giữ nguyên) ---
         const totalAlerts = await Alert.count({ where: { userId: userId } });
         const activeAlerts = await Alert.count({ where: { userId: userId, status: 'ACTIVE' } });
+        const [results] = await sequelize.query(
+            `SELECT COUNT(DISTINCT PostId) AS totalMentionedPosts
+             FROM postalerts
+             WHERE AlertId IN (SELECT id FROM alerts WHERE userId = :userId)`,
+            {
+                replacements: { userId: userId },
+                type: sequelize.QueryTypes.SELECT
+            }
+        );
+        const totalMentionedPosts = results.totalMentionedPosts;
 
-        const userAlerts = await Alert.findAll({
-            where: { userId: userId },
-            include: [{ model: Post, attributes: ['id'], through: { attributes: [] } }]
+
+        // --- Tính toán chartData ---
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        sevenDaysAgo.setHours(0, 0, 0, 0);
+
+        const postsByDay = await Post.findAll({
+            attributes: [
+                [sequelize.fn('DATE', sequelize.col('publishedAt')), 'date'],
+                [sequelize.fn('COUNT', sequelize.col('Post.id')), 'count']
+            ],
+            include: [{
+                model: Alert,
+                where: { userId: userId },
+                attributes: [],
+                through: { attributes: [] } // Bảng trung gian không cần attributes
+            }],
+            where: {
+                publishedAt: {
+                    [Op.gte]: sevenDaysAgo
+                }
+            },
+            group: [sequelize.fn('DATE', sequelize.col('publishedAt'))], // Group theo ngày
+            order: [[sequelize.fn('DATE', sequelize.col('publishedAt')), 'ASC']], // Order theo ngày
+            raw: true // Lấy kết quả thuần
         });
 
-        const uniquePostIds = new Set();
-        userAlerts.forEach(alert => {
-            alert.Posts.forEach(post => uniquePostIds.add(post.id));
-        });
-        const totalMentionedPosts = uniquePostIds.size;
 
-        res.status(200).json({ totalAlerts, activeAlerts, totalMentionedPosts });
+        // --- Định dạng chartData (Giữ nguyên) ---
+        const chartData = [];
+        const dateMap = new Map(postsByDay.map(item => [item.date, parseInt(item.count, 10)]));
+        for (let i = 0; i < 7; i++) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            const formattedDate = date.toISOString().split('T')[0]; // 'YYYY-MM-DD'
+            const shortName = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); // 'Oct 29'
+            chartData.push({
+                name: shortName,
+                posts: dateMap.get(formattedDate) || 0
+            });
+        }
+        chartData.reverse(); // Đảo lại để ngày gần nhất ở cuối
+
+        // --- Trả về kết quả ---
+        res.status(200).json({
+            totalAlerts,
+            activeAlerts,
+            totalMentionedPosts,
+            chartData
+        });
     } catch (error) {
-        console.error("Error fetching dashboard stats:", error);
+        console.error("Error fetching dashboard stats:", error.message, error.stack);
         res.status(500).json({ message: "Server error while fetching stats" });
+    }
+};
+
+// @desc    Xóa nhiều Alerts cùng lúc
+exports.bulkDeleteAlerts = async (req, res) => {
+    const { alertIds } = req.body;
+    const userId = req.user.id;
+
+    if (!alertIds || !Array.isArray(alertIds) || alertIds.length === 0) {
+        return res.status(400).json({ message: "alertIds must be an array with at least one ID." });
+    }
+
+    try {
+        const deletedCount = await Alert.destroy({
+            where: {
+                id: { [Op.in]: alertIds },
+                userId: userId
+            }
+        });
+
+        if (deletedCount === 0) {
+            return res.status(404).json({ message: "No matching alerts found to delete." });
+        }
+
+        res.status(200).json({ message: `Successfully deleted ${deletedCount} alerts.` });
+
+    } catch (error) {
+        console.error("Error during bulk delete alerts:", error);
+        res.status(500).json({ message: "Server error while deleting alerts" });
     }
 };

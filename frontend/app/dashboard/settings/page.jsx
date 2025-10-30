@@ -53,7 +53,6 @@ export default function SettingsPage() {
         }
     };
 
-    // 🌀 Trạng thái tải / lỗi
     if (isLoading) {
         return (
             <main className="p-6 sm:p-8 min-h-screen flex items-center justify-center">

@@ -1,22 +1,22 @@
 // frontend/app/dashboard/mentions/page.jsx
 'use client';
 
-// 1. SỬA IMPORTS
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import {
     FileSearch, Search, ExternalLink, AlertCircle, Globe,
-    ChevronLeft, ChevronRight, RefreshCw // Giữ các icon cần thiết
+    ChevronLeft, ChevronRight, RefreshCw
 } from 'lucide-react';
-import { fetcher } from '@/utils/api'; // Import fetcher chung
-import MultiSelectDropdown from '@/app/components/MultiSelectDropdown'; // Vẫn cần cho FilterBar
-import FilterBar from '@/app/components/FilterBar'; // <-- THÊM IMPORT NÀY
+import { fetcher } from '@/utils/api';
+import MultiSelectDropdown from '@/app/components/MultiSelectDropdown';
+import FilterBar from '@/app/components/FilterBar';
 
 // --- Hằng số ---
-const POST_SEARCH_FIELDS = ['Title', 'Content', 'Source']; // Đổi tên hằng số cho rõ ràng
+const POST_SEARCH_FIELDS = ['Title', 'Content', 'Source'];
 const PLATFORM_OPTIONS = ['Facebook', 'X', 'Instagram', 'News', 'Tiktok', 'Forum', 'Threads', 'Youtube', 'Blog'];
 const SENTIMENT_OPTIONS = ['POSITIVE', 'NEUTRAL', 'NEGATIVE'];
+const ITEMS_PER_PAGE = 5; // <-- (MỚI) Định nghĩa số lượng item/trang
 
 // --- useDebounce Hook ---
 function useDebounce(value, delay) {
@@ -31,17 +31,17 @@ function useDebounce(value, delay) {
 export default function MentionsExplorerPage() {
     // --- STATE ---
     const [currentPage, setCurrentPage] = useState(1);
-    const [searchTerm, setSearchTerm] = useState(''); // State cho ô search
-    const [searchFields, setSearchFields] = useState({ title: true, content: true, source: true }); // State cho checkboxes
-    const [selectedSentiments, setSelectedSentiments] = useState([]); // State cho dropdown Sentiment
-    const [selectedPlatforms, setSelectedPlatforms] = useState([]); // State cho dropdown Platform
-    const debouncedSearchTerm = useDebounce(searchTerm, 500); // Giá trị search đã trì hoãn
+    const [searchTerm, setSearchTerm] = useState('');
+    const [searchFields, setSearchFields] = useState({ title: true, content: true, source: true });
+    const [selectedSentiments, setSelectedSentiments] = useState([]);
+    const [selectedPlatforms, setSelectedPlatforms] = useState([]);
+    const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
     // --- API URL Construction ---
     const apiUrl = useMemo(() => {
         const params = new URLSearchParams({
             page: currentPage.toString(),
-            limit: '5',
+            limit: ITEMS_PER_PAGE.toString(), // <-- Dùng hằng số
         });
         const activeFields = Object.keys(searchFields).filter((field) => searchFields[field]);
 
@@ -76,13 +76,10 @@ export default function MentionsExplorerPage() {
     }, [debouncedSearchTerm, searchFields, selectedSentiments, selectedPlatforms]);
 
     // --- HANDLERS ---
-    // Handler cho checkbox fields (Giữ nguyên)
     const handleSearchFieldChange = (field) => {
-        // Nhận field name từ FilterBar (vd: "Title")
         setSearchFields((prev) => ({ ...prev, [field.toLowerCase()]: !prev[field.toLowerCase()] }));
     };
 
-    // Handler cho phân trang (Giữ nguyên)
     const handlePageChange = (newPage) => {
         if (newPage >= 1 && newPage <= totalPages) {
             setCurrentPage(newPage);
@@ -90,33 +87,36 @@ export default function MentionsExplorerPage() {
     };
 
     return (
-        <div className="p-4 md:p-6 lg:p-8 overflow-x-hidden"> {/* Thêm padding cho container chính */}
+        <div className="p-4 md:p-6 lg:p-8 overflow-x-hidden">
             <h1 className="text-3xl font-bold text-white mb-2">Mentions Explorer</h1>
             <p className="text-gray-400 mb-8">A centralized view of all posts matching your alerts.</p>
 
-            {/* --- 2. THAY THẾ Filter Bar cũ BẰNG Component MỚI --- */}
             <FilterBar
                 searchTerm={searchTerm}
-                onSearchChange={(e) => setSearchTerm(e.target.value)} // Cập nhật state searchTerm
-                placeholder="Search across all posts..." // Placeholder cụ thể
-
-                availableFields={POST_SEARCH_FIELDS} // Truyền danh sách field
-                activeFields={searchFields} // Truyền state field đang active
-                onFieldChange={handleSearchFieldChange} // Truyền handler field
-
-                platformOptions={PLATFORM_OPTIONS} // Truyền options Platform
-                selectedPlatforms={selectedPlatforms} // Truyền state Platform
-                onPlatformChange={setSelectedPlatforms} // Truyền hàm set state Platform
-
-                sentimentOptions={SENTIMENT_OPTIONS} // Truyền options Sentiment
-                selectedSentiments={selectedSentiments} // Truyền state Sentiment
-                onSentimentChange={setSelectedSentiments} // Truyền hàm set state Sentiment
+                onSearchChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search across all posts..."
+                availableFields={POST_SEARCH_FIELDS}
+                activeFields={searchFields}
+                onFieldChange={handleSearchFieldChange}
+                platformOptions={PLATFORM_OPTIONS}
+                selectedPlatforms={selectedPlatforms}
+                onPlatformChange={setSelectedPlatforms}
+                sentimentOptions={SENTIMENT_OPTIONS}
+                selectedSentiments={selectedSentiments}
+                onSentimentChange={setSelectedSentiments}
             />
 
-            {/* --- JSX Hiển thị Loading / Error / Data / Empty (Giữ nguyên) --- */}
+            {/* --- (THAY ĐỔI) JSX Hiển thị Loading (Skeleton) --- */}
             {isLoading && !data && (
-                <p className="text-center text-gray-400 py-10">Loading mentions...</p>
+                <div className="space-y-4 py-10">
+                    {/* Render số lượng skeleton bằng ITEMS_PER_PAGE */}
+                    {[...Array(ITEMS_PER_PAGE)].map((_, index) => (
+                        <MentionCardSkeleton key={index} />
+                    ))}
+                </div>
             )}
+
+            {/* --- JSX Hiển thị Error (Giữ nguyên) --- */}
             {error && (
                 <div className="text-center py-10 px-4 border-2 border-dashed border-red-900/50 rounded-lg bg-red-900/10">
                     <AlertCircle className="mx-auto h-12 w-12 text-red-400" />
@@ -134,6 +134,8 @@ export default function MentionsExplorerPage() {
                     </div>
                 </div>
             )}
+
+            {/* --- JSX Hiển thị Data / Empty (Giữ nguyên) --- */}
             {!isLoading && !error && (
                 <>
                     {posts.length > 0 ? (
@@ -203,7 +205,7 @@ export default function MentionsExplorerPage() {
                                         setSearchTerm('');
                                         setSelectedSentiments([]);
                                         setSelectedPlatforms([]);
-                                        setSearchFields({ title: true, content: true, source: true }); // Reset fields too
+                                        setSearchFields({ title: true, content: true, source: true });
                                     }}
                                     className="mt-4 inline-flex items-center rounded-md bg-slate-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-600"
                                 >
@@ -237,6 +239,34 @@ export default function MentionsExplorerPage() {
                     )}
                 </>
             )}
+        </div>
+    );
+}
+
+// --- Skeleton Component cho Mention Card ---
+function MentionCardSkeleton() {
+    return (
+        <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 animate-pulse">
+            {/* Skeleton for Header (Title + Link) */}
+            <div className="flex justify-between items-start gap-4 mb-2">
+                <div className="h-6 bg-slate-700 rounded w-3/5"></div> {/* Title Skeleton */}
+                <div className="h-4 bg-slate-700 rounded w-1/5"></div> {/* Link Skeleton */}
+            </div>
+            {/* Skeleton for Meta (Source + Platform) */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm mb-2">
+                <div className="h-4 bg-slate-700 rounded w-1/4"></div> {/* Source Skeleton */}
+                <div className="h-4 bg-slate-700 rounded w-1/3"></div> {/* Platform Skeleton */}
+            </div>
+            {/* Skeleton for Content */}
+            <div className="space-y-2">
+                <div className="h-4 bg-slate-700 rounded w-full"></div>
+                <div className="h-4 bg-slate-700 rounded w-full"></div>
+                <div className="h-4 bg-slate-700 rounded w-4/5"></div>
+            </div>
+            {/* Skeleton for Sentiment Tag */}
+            <div className="mt-3">
+                <div className="h-5 bg-slate-700 rounded-full w-20"></div>
+            </div>
         </div>
     );
 }

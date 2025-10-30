@@ -1,10 +1,56 @@
 # Crisis Alert Project
 
+Một ứng dụng web full-stack (Next.js, Node.js, MySQL) được container hóa bằng Docker, dùng để theo dõi và phân tích các đề cập (mentions) về thương hiệu hoặc từ khóa.
+
+---
+
 ## Mục đích
 
 Ứng dụng cảnh báo tiêu cực, cho phép quản lý theo dõi thông tin quan trọng, bao gồm alerts, case studies, posts và quản lý người dùng.
 
 ---
+
+## ✨ Tính năng chính
+
+* **Xác thực người dùng:** Đăng ký và đăng nhập an toàn sử dụng JSON Web Tokens (JWT).
+* **Quản lý Cảnh báo (Alerts):** Người dùng có thể tạo/sửa/xóa các "Alerts" tùy chỉnh, chỉ định các từ khóa (keywords) và nền tảng (platforms) cần theo dõi.
+* **Tự động Liên kết:** Backend có một endpoint (`POST /api/posts`) để (crawler/scanner) đẩy dữ liệu "Post" mới vào. Hệ thống sẽ tự động quét và liên kết các Post này với các Alert phù hợp.
+* **Fetch dữ liệu hiệu quả:** Toàn bộ 6 trang chính (`Dashboard`, `Alerts`, `Alert [id]`, `Mentions`, `CaseStudies`, `CaseStudy [id]`) đều sử dụng `useSWR` để quản lý fetch, cache, và revalidation dữ liệu.
+* **Bộ lọc Linh hoạt:**
+    * Sử dụng component `FilterBar.jsx` tái sử dụng (reusable) trên 5 trang.
+    * Lọc theo thời gian thực (với `debounce`) theo từ khóa.
+    * Lọc đa lựa chọn (multi-select) cho Platform, Sentiment, Status, Severity.
+    * State của bộ lọc được quản lý trên URL (`searchParams`) trên các trang chi tiết.
+* **Quản lý Case Study:** Nhóm các posts liên quan đến một alert thành một "Case Study" để phân tích.
+* **Bảo mật Backend:** Tất cả các route API đều được bảo vệ và xác thực (validation) đầu vào bằng `express-validator` để chống lỗi 400/500.
+
+---
+
+## 🛠️ Ngăn xếp Công nghệ (Tech Stack)
+
+| Phần | Công nghệ |
+| :--- | :--- |
+| **Frontend** | React, Next.js, `useSWR`, Tailwind CSS |
+| **Backend** | Node.js, Express.js, Sequelize (ORM) |
+| **Database** | MySQL 8.0 |
+| **DevOps** | Docker, Docker Compose |
+| **Bảo mật** | JWT (jsonwebtoken), `express-validator` |
+
+---
+
+## 🚀 Cài đặt & Chạy chương trình (Docker)
+
+Project này được thiết kế để chạy hoàn toàn bằng Docker Compose. Bạn không cần cài đặt Node.js hay MySQL trên máy.
+
+### Yêu cầu
+* [Docker](https://www.docker.com/products/docker-desktop/) (Đã bao gồm Docker Compose)
+* Git để clone project
+
+## 1. Clone repository
+
+```bash
+git clone [https://github.com/RankOutsider/crisis-alert.git](https://github.com/RankOutsider/crisis-alert.git)
+cd crisis-alert
 
 ## Yêu cầu
 

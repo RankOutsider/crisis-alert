@@ -2,7 +2,7 @@
 const { Op } = require('sequelize');
 const { CaseStudy, Alert, Post } = require('../models/associations');
 
-// @desc    Lấy tất cả Case Studies của người dùng (có tìm kiếm nâng cao AND/OR và phân trang)
+// @desc    Lấy tất cả Case Studies của người dùng
 exports.getAllCaseStudies = async (req, res) => {
     try {
         const userId = req.user.id;
@@ -24,6 +24,9 @@ exports.getAllCaseStudies = async (req, res) => {
                 whereCondition[Op.or] = orGroups.map(group => {
                     // Trong mỗi nhóm OR, tách theo AND
                     const andTerms = group.split('&').map(t => t.trim().toLowerCase()).filter(Boolean);
+
+                    if (andTerms.length === 0) 
+                        return null;
 
                     return {
                         [Op.and]: andTerms.map(term => ({
@@ -71,7 +74,8 @@ exports.getCaseStudyById = async (req, res) => {
                 }
             ]
         });
-        if (!caseStudy) return res.status(404).json({ message: "Case study not found" });
+        if (!caseStudy)
+            return res.status(404).json({ message: "Case study not found" });
         res.status(200).json(caseStudy);
     } catch (error) {
         console.error("Error fetching case study details:", error);
@@ -83,7 +87,6 @@ exports.getCaseStudyById = async (req, res) => {
 exports.createCaseStudyFromAlert = async (req, res) => {
     const { alertId, title, description } = req.body;
     const userId = req.user.id;
-    if (!alertId) return res.status(400).json({ message: "Alert ID is required" });
 
     try {
         const alert = await Alert.findOne({
@@ -130,9 +133,6 @@ exports.updateCaseStudyStatus = async (req, res) => {
     const caseStudyId = req.params.id;
     const userId = req.user.id;
 
-    if (!status || !['Resolved', 'Unresolved'].includes(status)) {
-        return res.status(400).json({ message: "Invalid status." });
-    }
     try {
         const caseStudy = await CaseStudy.findOne({ where: { id: caseStudyId, userId: userId } });
         if (!caseStudy) {
@@ -165,10 +165,6 @@ exports.deleteCaseStudy = async (req, res) => {
 exports.createBulkCaseStudies = async (req, res) => {
     const { alertIds } = req.body;
     const userId = req.user.id;
-
-    if (!alertIds || !Array.isArray(alertIds) || alertIds.length === 0) {
-        return res.status(400).json({ message: "An array of alertIds is required." });
-    }
 
     let createdCount = 0;
     let skippedCount = 0;
@@ -203,7 +199,7 @@ exports.createBulkCaseStudies = async (req, res) => {
             }
 
             const newCaseStudy = await CaseStudy.create({
-                title: `Case Study: ${alert.title}`,
+                title: `${alert.title}`,
                 summary: alert.description,
                 postCount: posts.length,
                 dateRange: dateRange,
