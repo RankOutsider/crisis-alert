@@ -20,7 +20,7 @@ const POST_SEARCH_FIELDS = ['Title', 'Content', 'Source'];
 const PLATFORM_OPTIONS = ['Facebook', 'X', 'Instagram', 'News', 'Tiktok', 'Forum', 'Threads', 'Youtube', 'Blog'];
 const SENTIMENT_OPTIONS = ['POSITIVE', 'NEUTRAL', 'NEGATIVE'];
 const POSTS_SKELETON_COUNT = 5; // Số lượng skeleton cho post list
-const ITEMS_PER_PAGE = 5; // <-- MỚI: Số lượng post trên mỗi trang (khớp với limit backend)
+const ITEMS_PER_PAGE = 5; // <-- Số lượng post trên mỗi trang (khớp với limit backend)
 
 // --- useDebounce Hook ---
 function useDebounce(value, delay) {
@@ -32,7 +32,7 @@ function useDebounce(value, delay) {
     return debouncedValue;
 }
 
-// --- (MỚI) Skeleton cho Tóm tắt Alert ---
+// --- Skeleton cho Tóm tắt Alert ---
 function AlertSummarySkeleton() {
     return (
         <div className="bg-slate-800/50 p-6 md:p-8 rounded-lg mb-8 animate-pulse">
@@ -68,7 +68,7 @@ function AlertSummarySkeleton() {
     );
 }
 
-// --- (MỚI) Skeleton cho mục Post ---
+// --- Skeleton cho mục Post ---
 function PostItemSkeleton() {
     return (
         <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 animate-pulse">
@@ -114,7 +114,7 @@ export default function AlertDetailPage() {
     const [caseStudyStatus, setCaseStudyStatus] = useState({ type: '', text: '' });
     const [searchTerm, setSearchTerm] = useState(searchParams.get('q') || '');
     const debouncedSearchTerm = useDebounce(searchTerm, 500);
-    const [currentPage, setCurrentPage] = useState(1); // <-- MỚI: State trang cho posts
+    const [currentPage, setCurrentPage] = useState(1); // <-- State trang cho posts
 
     // --- Derived State from URL (Tính toán state từ URL cho FilterBar) ---
     const activeFields = useMemo(() => {
@@ -140,7 +140,7 @@ export default function AlertDetailPage() {
         const params = new URLSearchParams(searchParams.toString());
         params.delete('q'); params.delete('search'); params.delete('fields');
 
-        // [MỚI] Thêm tham số phân trang
+        // Thêm tham số phân trang
         params.set('page', currentPage.toString());
         params.set('limit', ITEMS_PER_PAGE.toString());
 
@@ -157,7 +157,7 @@ export default function AlertDetailPage() {
     const alert = alertData;
     const { data: postsData, error: postsError, isLoading: isPostsLoading, mutate: mutatePosts } = useSWR(postsApiUrl, fetcher, { keepPreviousData: true });
     const posts = postsData?.posts || [];
-    const totalPages = postsData?.totalPages || 1; // <-- MỚI: Lấy totalPages
+    const totalPages = postsData?.totalPages || 1; // <-- Lấy totalPages
 
     // --- useEffects ---
     useEffect(() => {
@@ -171,7 +171,7 @@ export default function AlertDetailPage() {
         const currentQ = params.get('q') || '';
         if (debouncedSearchTerm !== currentQ) {
             if (debouncedSearchTerm) { params.set('q', debouncedSearchTerm); } else { params.delete('q'); }
-            setCurrentPage(1); // <-- MỚI: Reset trang 1 khi search
+            setCurrentPage(1); // <-- Reset trang 1 khi search
             router.replace(`${pathname}?${params.toString()}`, { scroll: false });
         }
     }, [debouncedSearchTerm, pathname, router, searchParams]);
@@ -179,17 +179,17 @@ export default function AlertDetailPage() {
 
     // --- HANDLERS (Các hàm xử lý sự kiện) ---
     const handlePostSearchFieldChange = (field) => {
-        setCurrentPage(1); // <-- MỚI: Reset trang 1
+        setCurrentPage(1); // <-- Reset trang 1
         const fieldKey = field.toLowerCase(); const newFieldsState = { ...activeFields, [fieldKey]: !activeFields[fieldKey] }; const activeFieldKeys = Object.keys(newFieldsState).filter(f => newFieldsState[f]); const params = new URLSearchParams(searchParams.toString()); if (activeFieldKeys.length === POST_SEARCH_FIELDS.length) { params.delete('fields'); } else { params.set('fields', activeFieldKeys.join(',')); } router.push(`${pathname}?${params.toString()}`, { scroll: false });
     };
 
     const handlePlatformChange = (newSelection) => {
-        setCurrentPage(1); // <-- MỚI: Reset trang 1
+        setCurrentPage(1); // <-- Reset trang 1
         const params = new URLSearchParams(searchParams.toString()); if (newSelection.length > 0) { params.set('platforms', newSelection.join(',')); } else { params.delete('platforms'); } router.push(`${pathname}?${params.toString()}`, { scroll: false });
     };
 
     const handleSentimentChange = (newSelection) => {
-        setCurrentPage(1); // <-- MỚI: Reset trang 1
+        setCurrentPage(1); // <-- Reset trang 1
         const params = new URLSearchParams(searchParams.toString()); if (newSelection.length > 0) { params.set('sentiments', newSelection.join(',')); } else { params.delete('sentiments'); } router.push(`${pathname}?${params.toString()}`, { scroll: false });
     };
 

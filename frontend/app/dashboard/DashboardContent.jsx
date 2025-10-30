@@ -7,7 +7,7 @@ import MainChart from '@/app/components/MainChart';
 import { AlertCircle, Newspaper, MessageSquare, RefreshCw, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
-// --- (MỚI) Skeleton Component cho StatCard ---
+// --- Skeleton Component cho StatCard ---
 function StatCardSkeleton({ icon: Icon, color, title }) {
     return (
         <div className="bg-slate-800/50 p-5 rounded-lg flex items-center gap-4 animate-pulse">
@@ -23,7 +23,7 @@ function StatCardSkeleton({ icon: Icon, color, title }) {
     );
 }
 
-// --- (MỚI) Skeleton Component cho MainChart ---
+// --- Skeleton Component cho MainChart ---
 function MainChartSkeleton() {
     return (
         <div className="bg-slate-800/50 p-4 sm:p-6 md:p-8 rounded-lg shadow-lg h-96 flex items-center justify-center animate-pulse">

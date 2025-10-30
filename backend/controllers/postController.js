@@ -100,7 +100,7 @@ exports.getAllUserPosts = async (req, res) => {
 exports.getPostsByAlert = async (req, res) => {
     try {
         const { alertId } = req.params;
-        // [MỚI] Lấy tham số phân trang
+        // Lấy tham số phân trang
         const page = parseInt(req.query.page, 10) || 1;
         const limit = parseInt(req.query.limit, 10) || 5; // Mặc định 5 posts/trang
         const offset = (page - 1) * limit;

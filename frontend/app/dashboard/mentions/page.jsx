@@ -16,7 +16,7 @@ import FilterBar from '@/app/components/FilterBar';
 const POST_SEARCH_FIELDS = ['Title', 'Content', 'Source'];
 const PLATFORM_OPTIONS = ['Facebook', 'X', 'Instagram', 'News', 'Tiktok', 'Forum', 'Threads', 'Youtube', 'Blog'];
 const SENTIMENT_OPTIONS = ['POSITIVE', 'NEUTRAL', 'NEGATIVE'];
-const ITEMS_PER_PAGE = 5; // <-- (MỚI) Định nghĩa số lượng item/trang
+const ITEMS_PER_PAGE = 5; // <-- Định nghĩa số lượng item/trang
 
 // --- useDebounce Hook ---
 function useDebounce(value, delay) {
