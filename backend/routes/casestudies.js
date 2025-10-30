@@ -15,9 +15,6 @@ const { protect } = require('../middleware/authMiddleware');
 const { body, query, param, validationResult } = require('express-validator');
 
 // --- 2. Middleware Xử lý Lỗi Validation Chung ---
-// (Giả sử đã định nghĩa ở file khác hoặc copy vào đây)
-// const handleValidationErrors = (req, res, next) => { ... };
-// Tạm thời định nghĩa lại ở đây cho rõ ràng:
 const handleValidationErrors = (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -54,7 +51,8 @@ router.route('/')
             query('fields', 'Trường tìm kiếm phải là "title", "summary" hoặc cả hai, cách nhau bởi dấu phẩy')
                 .optional()
                 .isString()
-                .custom(value => /^(title|summary)(,(title|summary))?$/.test(value)) // Kiểm tra: title, summary, title,summary
+                .custom(value => /^(title|summary)(,(title|summary))?$/.test(value))
+                .withMessage('Chỉ chấp nhận "title", "summary", hoặc "title,summary"')
         ],
         handleValidationErrors, // Xử lý lỗi query nếu có
         getAllCaseStudies
@@ -94,7 +92,9 @@ router.route('/bulk-create')
 
 // === Middleware để kiểm tra ID cho các route bên dưới ===
 const validateCaseStudyId = [
-    param('id', 'Case Study ID phải là số nguyên dương').isInt({ min: 1 }).toInt(), // Kiểm tra 'id' trong req.params
+    param('id', 'Case Study ID phải là số nguyên dương')
+        .isString()
+        .notEmpty(),
     handleValidationErrors
 ];
 

@@ -71,8 +71,17 @@ router.post(
 
 // --- Lấy thông tin cá nhân & Xóa tài khoản ---
 router.route('/me')
-    .get(protect, getMe) // GET /me không nhận input nên không cần validation
-    .delete(protect, deleteAccount); // DELETE /me không nhận input nên không cần validation
+    .get(protect, getMe)
+    .delete(
+        protect,
+        [
+            body('password', 'Password is required to delete account')
+                .isString()
+                .notEmpty()
+        ],
+        handleValidationErrors,
+        deleteAccount
+    );
 
 // --- Cập nhật chi tiết cá nhân ---
 router.put(
@@ -120,7 +129,7 @@ router.put(
     '/settings',
     protect,
     [ // --- Validation cho Cập nhật Cài đặt ---
-        body('notificationsEnabled', 'notificationsEnabled phải là giá trị boolean (true hoặc false)')
+        body('notificationsEnabled', 'notificationsEnabled must be a boolean value')
             .isBoolean() // Kiểm tra là boolean (true/false)
             .toBoolean() // Chuyển đổi các giá trị như chuỗi "true"/"false", số 1/0 thành boolean thật sự
     ],

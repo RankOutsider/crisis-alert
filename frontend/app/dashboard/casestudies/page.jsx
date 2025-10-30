@@ -7,10 +7,12 @@ import Link from 'next/link';
 import useSWR from 'swr';
 import {
     BarChart3, Clock, MessageSquare, ExternalLink, Search,
-    ChevronLeft, ChevronRight, AlertCircle, RefreshCw
+    ChevronLeft, ChevronRight, AlertCircle, RefreshCw, Trash2,
+    CheckCircle2, ShieldAlert, X
 } from 'lucide-react';
-import { fetcher } from '@/utils/api';
+import { api, fetcher } from '@/utils/api';
 import FilterBar from '@/app/components/FilterBar';
+import Modal from '@/app/components/Modal';
 
 // HOOK useDebounce
 function useDebounce(value, delay) {
@@ -24,6 +26,7 @@ function useDebounce(value, delay) {
 
 // Hằng số
 const CASE_STUDY_SEARCH_FIELDS = ['Title', 'Summary'];
+const ITEMS_PER_PAGE = 6; // Số skeleton cards
 
 export default function CaseStudiesPage() {
     // Hooks
@@ -36,20 +39,15 @@ export default function CaseStudiesPage() {
     const currentPage = parseInt(searchParams.get('page') || '1', 10);
     const [localSearchTerm, setLocalSearchTerm] = useState(searchTermFromUrl);
     const debouncedSearchTerm = useDebounce(localSearchTerm, 500);
+    const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [notification, setNotification] = useState({ message: '', type: '' });
 
-    // --- 2. TÍNH TOÁN activeFields TỪ URL ---
-    // (Cần cho FilterBar)
+    // --- activeFields ---
     const activeFields = useMemo(() => {
         const fieldsParam = searchParams.get('fields');
-        // Mặc định là true nếu param không tồn tại
-        if (fieldsParam === null) {
-            return { title: true, summary: true };
-        }
-        // False hết nếu param là chuỗi rỗng
-        if (fieldsParam === '') {
-            return { title: false, summary: false };
-        }
-        // Parse từ chuỗi
+        if (fieldsParam === null) return { title: true, summary: true };
+        if (fieldsParam === '') return { title: false, summary: false };
         const urlFields = new Set(fieldsParam.split(','));
         return {
             title: urlFields.has('title'),
@@ -57,21 +55,19 @@ export default function CaseStudiesPage() {
         };
     }, [searchParams]);
 
-    // API URL Construction (Giữ nguyên logic SWR)
+    // API URL Construction
     const apiUrl = useMemo(() => {
         const params = new URLSearchParams(searchParams.toString());
-        // Đảm bảo page là số
         params.set('page', currentPage.toString());
+        params.set('limit', ITEMS_PER_PAGE.toString());
 
         const fieldsParam = searchParams.get('fields');
         const fields = (fieldsParam === null) ? 'title,summary' : fieldsParam;
 
-        // Xóa các param cũ liên quan đến search
         params.delete('q');
         params.delete('fields');
         params.delete('search');
 
-        // Thêm search/fields nếu có term và fields được chọn
         if (debouncedSearchTerm && fields) {
             params.set('search', debouncedSearchTerm);
             params.set('fields', fields);
@@ -80,100 +76,92 @@ export default function CaseStudiesPage() {
         return `/api/casestudies?${params.toString()}`;
     }, [debouncedSearchTerm, currentPage, searchParams]);
 
-    // Data Fetching (Thêm mutate)
+    // Data Fetching
     const { data, error, isLoading, mutate } = useSWR(apiUrl, fetcher, { keepPreviousData: true });
 
     // --- Process SWR Data ---
     const caseStudies = data?.caseStudies || [];
     const totalPages = data?.totalPages || 1;
 
-    // useEffects Đồng bộ State <-> URL
+    // useEffects
     useEffect(() => {
-        // Đồng bộ Debounce -> URL param 'q'
         const params = new URLSearchParams(searchParams.toString());
         const currentUrlQuery = params.get('q') || '';
         if (debouncedSearchTerm !== currentUrlQuery) {
-            if (debouncedSearchTerm) {
-                params.set('q', debouncedSearchTerm);
-            } else {
-                params.delete('q');
-            }
-            params.delete('page'); // Reset về trang 1
+            if (debouncedSearchTerm) { params.set('q', debouncedSearchTerm); } else { params.delete('q'); }
+            params.delete('page');
             router.push(`${pathname}?${params.toString()}`, { scroll: false });
         }
     }, [debouncedSearchTerm, pathname, router, searchParams]);
 
     useEffect(() => {
-        // Đồng bộ URL param 'q' -> State localSearchTerm
         const currentSearchTermFromUrl = searchParams.get('q') || '';
-        if (currentSearchTermFromUrl !== localSearchTerm) {
-            setLocalSearchTerm(currentSearchTermFromUrl);
-        }
-        // Đồng bộ URL param 'page' -> State currentPage (nếu cần, nhưng thường dùng trực tiếp từ searchParams)
-        const currentPageFromUrl = parseInt(searchParams.get('page') || '1', 10);
-        // setCurrentPage(currentPageFromUrl); // Bỏ dòng này nếu dùng currentPage trực tiếp từ URL
+        if (currentSearchTermFromUrl !== localSearchTerm) { setLocalSearchTerm(currentSearchTermFromUrl); }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchParams]); // Chạy khi URL thay đổi
+    }, [searchParams]);
 
 
-    // --- 3. THÊM HANDLER CHO CHECKBOX ---
-    // (Cần cho FilterBar)
-    const handleFieldChange = (field) => { // field là 'Title' hoặc 'Summary'
+    // --- Handlers ---
+    const handleFieldChange = (field) => {
         const fieldKey = field.toLowerCase();
-        // Tính toán trạng thái mới
         const newFieldsState = { ...activeFields, [fieldKey]: !activeFields[fieldKey] };
-        // Lấy các key đang active
         const activeFieldKeys = Object.keys(newFieldsState).filter(f => newFieldsState[f]);
-
         const params = new URLSearchParams(searchParams.toString());
-        // Cập nhật URL param 'fields'
-        if (activeFieldKeys.length === CASE_STUDY_SEARCH_FIELDS.length) {
-            params.delete('fields'); // Xóa nếu tất cả được chọn (mặc định)
-        } else {
-            params.set('fields', activeFieldKeys.join(',')); // Set chuỗi rỗng nếu không có gì được chọn
-        }
-        params.delete('page'); // Reset về trang 1
+        if (activeFieldKeys.length === CASE_STUDY_SEARCH_FIELDS.length) { params.delete('fields'); } else { params.set('fields', activeFieldKeys.join(',')); }
+        params.delete('page');
         router.push(`${pathname}?${params.toString()}`, { scroll: false });
     };
 
-
-    // Handler cho phân trang (Cập nhật currentPage từ URL)
     const handlePageChange = (newPage) => {
-        // Đảm bảo newPage nằm trong giới hạn
         if (newPage >= 1 && newPage <= totalPages) {
             const params = new URLSearchParams(searchParams.toString());
-            params.set('page', newPage.toString()); // Cập nhật tham số 'page' trên URL
-            router.push(`${pathname}?${params.toString()}`, { scroll: false }); // Điều hướng tới URL mới
+            params.set('page', newPage.toString());
+            router.push(`${pathname}?${params.toString()}`, { scroll: false });
+        }
+    };
+
+    const handleDeleteCaseStudy = async () => {
+        if (!confirmDeleteId || isDeleting) return;
+        setIsDeleting(true);
+        try {
+            await api(`casestudies/${confirmDeleteId}`, { method: 'DELETE' });
+            setConfirmDeleteId(null);
+            mutate();
+            setNotification({ message: 'Case study deleted successfully.', type: 'success' });
+        } catch (err) {
+            console.error('Error deleting case study:', err);
+            setNotification({ message: 'Error deleting case study. Please try again.', type: 'error' });
+            setConfirmDeleteId(null);
+        } finally {
+            setIsDeleting(false);
         }
     };
 
     return (
-        <div className="p-4 md:p-6 lg:p-8 overflow-x-hidden"> {/* Thêm overflow-x-hidden */}
+        <div className="p-4 md:p-6 lg:p-8 overflow-x-hidden">
             <h1 className="text-3xl font-bold text-white mb-2">Case Studies</h1>
             <p className="text-gray-300 mb-8">Analyze important alert cases and their impact.</p>
 
-            {/* --- Sử dụng FilterBar --- */}
+            {/* --- FilterBar --- */}
             <FilterBar
                 searchTerm={localSearchTerm}
                 onSearchChange={(e) => setLocalSearchTerm(e.target.value)}
                 placeholder="Search by Title or Summary..."
-
-                availableFields={CASE_STUDY_SEARCH_FIELDS} // ['Title', 'Summary']
-                activeFields={activeFields} // State tính từ URL
-                onFieldChange={handleFieldChange} // Handler mới
-
-            // Không có dropdown cho trang này
+                availableFields={CASE_STUDY_SEARCH_FIELDS}
+                activeFields={activeFields}
+                onFieldChange={handleFieldChange}
             />
-            {/* --- Hết FilterBar --- */}
 
-
-            {/* Hiển thị nội dung */}
-            {/* Loading State */}
+            {/* --- Loading State (Skeleton) --- */}
             {isLoading && !data && (
-                <p className="text-center text-gray-400 py-10">Loading case studies...</p>
-                // Có thể thêm Skeleton Loader ở đây
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 py-10">
+                    {[...Array(ITEMS_PER_PAGE)].map((_, index) => (
+                        <CaseStudyCardSkeleton key={index} />
+                    ))}
+                </div>
             )}
-            {/* Error State */}
+
+            {/* --- Error State --- */}
             {error && (
                 <div className="text-center py-10 px-4 border-2 border-dashed border-red-900/50 rounded-lg bg-red-900/10">
                     <AlertCircle className="mx-auto h-12 w-12 text-red-400" />
@@ -182,7 +170,7 @@ export default function CaseStudiesPage() {
                     <div className="mt-6">
                         <button
                             type="button"
-                            onClick={() => mutate()} // Trigger SWR retry
+                            onClick={() => mutate()}
                             className="inline-flex items-center rounded-md bg-slate-700 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
                         >
                             <RefreshCw className="w-4 h-4 mr-2" />
@@ -191,7 +179,8 @@ export default function CaseStudiesPage() {
                     </div>
                 </div>
             )}
-            {/* Data / Empty State */}
+
+            {/* --- Data / Empty State --- */}
             {!isLoading && !error && data && (
                 <>
                     {/* Danh sách Case Studies */}
@@ -200,10 +189,21 @@ export default function CaseStudiesPage() {
                             // --- Card Case Study ---
                             <div key={study.id} className="bg-slate-800/50 p-6 rounded-lg border border-slate-700 flex flex-col hover:border-blue-500 transition-colors overflow-hidden">
                                 <div className="flex justify-between items-start mb-3 gap-2">
-                                    <h2 className="text-xl font-bold text-white truncate flex-1 min-w-0" title={study.title}>{study.title}</h2>
-                                    <span className={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap ${study.status === 'Resolved' ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'}`}>
-                                        {study.status}
-                                    </span>
+                                    <Link href={`/dashboard/casestudies/${study.id}`} className="block flex-1 min-w-0 group">
+                                        <h2 className="text-xl font-bold text-white truncate group-hover:text-blue-400 transition-colors" title={study.title}>{study.title}</h2>
+                                    </Link>
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                        <span className={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap ${study.status === 'Resolved' ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'}`}>
+                                            {study.status}
+                                        </span>
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(study.id); }}
+                                            className="p-1 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-full transition-colors"
+                                            title="Delete Case Study"
+                                        >
+                                            <Trash2 size={18} />
+                                        </button>
+                                    </div>
                                 </div>
                                 <p className="text-gray-400 text-sm mb-4 flex-grow line-clamp-3">{study.summary}</p>
                                 <div className="border-t border-slate-700 pt-4 space-y-2 text-sm">
@@ -214,7 +214,6 @@ export default function CaseStudiesPage() {
                                     View Analysis <ExternalLink size={16} />
                                 </Link>
                             </div>
-                            // --- Hết Card ---
                         ))) : (
                             // --- Empty State ---
                             <div className="md:col-span-2 lg:col-span-3 text-center py-16 px-4 border-2 border-dashed border-slate-700 rounded-lg">
@@ -235,25 +234,24 @@ export default function CaseStudiesPage() {
                                     </button>
                                 )}
                             </div>
-                            // --- Hết Empty State ---
                         )}
                     </div>
 
-                    {/* --- PHẦN PHÂN TRANG ĐẦY ĐỦ --- */}
+                    {/* --- Phân trang --- */}
                     {totalPages > 1 && (
                         <div className="flex justify-center items-center gap-4 mt-8">
                             <button
-                                onClick={() => handlePageChange(currentPage - 1)} // Dùng currentPage từ URL
-                                disabled={currentPage === 1} // Dùng currentPage từ URL
-                                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-700 rounded-md hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed" // Thêm disabled:cursor-not-allowed
+                                onClick={() => handlePageChange(currentPage - 1)}
+                                disabled={currentPage === 1}
+                                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-700 rounded-md hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <ChevronLeft size={16} /> Previous
                             </button>
-                            <span className="text-sm text-gray-400">Page {currentPage} of {totalPages}</span> {/* Dùng currentPage từ URL */}
+                            <span className="text-sm text-gray-400">Page {currentPage} of {totalPages}</span>
                             <button
-                                onClick={() => handlePageChange(currentPage + 1)} // Dùng currentPage từ URL
-                                disabled={currentPage === totalPages} // Dùng currentPage từ URL
-                                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-700 rounded-md hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed" // Thêm disabled:cursor-not-allowed
+                                onClick={() => handlePageChange(currentPage + 1)}
+                                disabled={currentPage === totalPages}
+                                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-700 rounded-md hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 Next <ChevronRight size={16} />
                             </button>
@@ -261,6 +259,110 @@ export default function CaseStudiesPage() {
                     )}
                 </>
             )}
+
+            {/* --- Modals and Toast --- */}
+            <Modal
+                isOpen={!!confirmDeleteId}
+                onClose={() => setConfirmDeleteId(null)}
+                title="Confirm Delete Case Study"
+                footer={
+                    <div>
+                        <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="px-4 py-2 font-semibold rounded-full bg-slate-600 hover:bg-slate-700 transition-all mr-2"
+                            disabled={isDeleting}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleDeleteCaseStudy}
+                            className="px-4 py-2 font-semibold rounded-full text-white bg-red-600 hover:bg-red-700 transition-all disabled:opacity-50"
+                            disabled={isDeleting}
+                        >
+                            {isDeleting ? 'Deleting...' : 'Delete'}
+                        </button>
+                    </div>
+                }
+            >
+                <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 h-12 w-12 flex items-center justify-center rounded-full bg-red-500/20">
+                        <AlertCircle size={24} className="text-red-400" />
+                    </div>
+                    <div className="flex-grow">
+                        <p className="text-slate-300 mt-1 text-sm">
+                            Are you sure you want to delete this case study?
+                        </p>
+                        <p className="text-slate-400 mt-2 text-xs">
+                            This will only delete the analysis and its link to the posts. The original posts will not be deleted.
+                        </p>
+                    </div>
+                </div>
+            </Modal>
+
+            {notification.message && (
+                <Toast
+                    message={notification.message}
+                    type={notification.type}
+                    onClose={() => setNotification({ message: '', type: '' })}
+                />
+            )}
+        </div>
+    );
+}
+
+// --- Toast Component ---
+function Toast({ message, type, onClose }) {
+    useEffect(() => {
+        const timer = setTimeout(() => { onClose(); }, 5000);
+        return () => clearTimeout(timer);
+    }, [message, onClose]);
+
+    return (
+        <div
+            className={`fixed bottom-6 right-6 flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg z-50 text-sm sm:text-base ${type === 'success' ? 'bg-green-600/90 text-white' : 'bg-red-600/90 text-white'} animate-fadeIn`}
+        >
+            {type === 'success' ? <CheckCircle2 size={20} /> : <ShieldAlert size={20} />}
+            <span>{message}</span>
+            <button onClick={onClose} className="ml-2 hover:opacity-75">
+                <X size={16} />
+            </button>
+        </div>
+    );
+}
+
+// --- Skeleton Component ---
+function CaseStudyCardSkeleton() {
+    return (
+        <div className="bg-slate-800/50 p-6 rounded-lg border border-slate-700 flex flex-col animate-pulse overflow-hidden">
+            {/* Header Skeleton */}
+            <div className="flex justify-between items-start mb-3 gap-2">
+                <div className="h-6 bg-slate-700 rounded w-3/5"></div> {/* Title */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                    <div className="h-6 bg-slate-700 rounded-full w-16"></div> {/* Status */}
+                    <div className="h-6 w-6 bg-slate-700 rounded-full"></div> {/* Delete */}
+                </div>
+            </div>
+            {/* Summary Skeleton */}
+            <div className="space-y-2 mb-4 flex-grow">
+                <div className="h-4 bg-slate-700 rounded w-full"></div>
+                <div className="h-4 bg-slate-700 rounded w-full"></div>
+                <div className="h-4 bg-slate-700 rounded w-5/6"></div>
+            </div>
+            {/* Stats Skeleton */}
+            <div className="border-t border-slate-700 pt-4 space-y-2">
+                <div className="flex justify-between">
+                    <div className="h-4 bg-slate-700 rounded w-1/3"></div>
+                    <div className="h-4 bg-slate-700 rounded w-1/4"></div>
+                </div>
+                <div className="flex justify-between">
+                    <div className="h-4 bg-slate-700 rounded w-1/3"></div>
+                    <div className="h-4 bg-slate-700 rounded w-1/4"></div>
+                </div>
+            </div>
+            {/* Button Skeleton */}
+            <div className="mt-6 h-10 bg-slate-700 rounded-full w-full"></div>
         </div>
     );
 }
