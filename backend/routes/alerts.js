@@ -21,7 +21,7 @@ const handleValidationErrors = (req, res, next) => {
 };
 
 // --- Các lựa chọn platform hợp lệ ---
-const VALID_PLATFORMS = ['Facebook', 'Instagram', 'News', 'Forum', 'Threads', 'TikTok', 'X', 'Youtube', 'Blog'];
+const VALID_PLATFORMS = ['Facebook', 'Instagram', 'News', 'Forum', 'Threads', 'Tiktok', 'X', 'Youtube', 'Blog'];
 
 // --- Áp dụng Middleware Xác thực cho tất cả route ---
 router.use(protect);
@@ -58,12 +58,12 @@ router.route('/')
 router.route('/stats')
     .get(controller.getStats);
 
-// === Route cho /api/alerts/scan-all ===
+// == ROUTE QUÉT TẤT CẢ ALERTS ===
 router.route('/scan-all')
     .post(
-        [],
+        [], // Không cần validation gì đặc biệt
         handleValidationErrors,
-        controller.scanAllActiveAlerts
+        controller.scanAllActiveAlerts // Trỏ đến hàm quét TẤT CẢ (đã tối ưu)
     );
 
 // === ROUTE BULK DELETE ===
@@ -93,7 +93,8 @@ router.route('/:id')
     )
     .put(
         validateAlertId,
-        [ // --- Validation cho PUT /api/alerts/:id ---
+        [
+            // --- Validation cho PUT /api/alerts/:id ---
             body('title', 'Tiêu đề phải là chuỗi không rỗng').optional().isString().trim().notEmpty(),
             body('description', 'Mô tả phải là chuỗi').optional({ nullable: true, checkFalsy: true }).isString().trim(),
             body('severity', 'Mức độ không hợp lệ').optional().isIn(['Low', 'Medium', 'High', 'Critical']),
@@ -109,13 +110,13 @@ router.route('/:id')
         controller.deleteAlert
     );
 
-// === Route cho /api/alerts/:id/scan ===
+// === ROUTE QUÉT 1 ALERT ===
 router.route('/:id/scan')
     .post(
         validateAlertId,
         [],
         handleValidationErrors,
-        controller.scanForMatches
+        controller.scanForCurrentAlert // Trỏ đến hàm quét 1 ALERT (đã đổi tên và tối ưu)
     );
 
 module.exports = router;
