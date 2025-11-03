@@ -15,7 +15,7 @@ import Modal from '@/app/components/Modal';
 import FilterBar from '@/app/components/FilterBar';
 
 // --- Constants ---
-const PLATFORM_OPTIONS = ['Facebook', 'Instagram', 'News', 'Forum', 'Threads', 'TikTok', 'X', 'Youtube', 'Blog'];
+const PLATFORM_OPTIONS = ['Facebook', 'Instagram', 'News', 'Forum', 'Threads', 'Tiktok', 'X', 'Youtube', 'Blog'];
 const ALERT_SEARCH_FIELDS = ['Title', 'Description', 'Keywords'];
 const STATUS_OPTIONS = ['ACTIVE', 'INACTIVE'];
 const SEVERITY_OPTIONS = ['Low', 'Medium', 'High', 'Critical'];
