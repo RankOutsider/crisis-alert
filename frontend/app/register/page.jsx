@@ -15,7 +15,7 @@ const registerSchema = {
     },
     email: {
         required: true,
-        pattern: /^[^\\s@]+@[^\\s@]+.[^\\s@]+$/,
+        pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
         message: "Please enter a valid email address."
     },
     phone: {

@@ -5,7 +5,7 @@ const { Alert, Post, User, sequelize } = require('../models/associations');
 const { Op } = require('sequelize');
 const { sendNotificationEmail } = require('./emailService');
 
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+// const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const runScanJob = async (io) => {
     const JOB_NAME = "ALERT_POST_SCANNER";
@@ -16,7 +16,7 @@ const runScanJob = async (io) => {
     console.log(`[${new Date().toISOString()}] 🤖 [NODE-CRON] Starting periodically scanning job...`);
 
     try {
-        // --- 1. LẤY TẤT CẢ ALERTS ACTIVE ---
+        // --- LẤY TẤT CẢ ALERTS ACTIVE ---
         const activeAlerts = await Alert.findAll({
             where: { status: 'ACTIVE' },
             include: [{ model: User, attributes: ['id', 'email', 'notificationsEnabled'] }]
@@ -27,7 +27,7 @@ const runScanJob = async (io) => {
             return;
         }
 
-        // --- 2. LẤY CÁC LIÊN KẾT ĐÃ TỒN TẠI TỪ DATABASE ---
+        // --- LẤY CÁC LIÊN KẾT ĐÃ TỒN TẠI TỪ DATABASE ---
         const existingLinksRaw = await sequelize.query(
             "SELECT `AlertId`, `PostId` FROM `postalerts`",
             { type: sequelize.QueryTypes.SELECT, raw: true }
@@ -37,14 +37,14 @@ const runScanJob = async (io) => {
         );
         console.log(`🔎 [NODE-CRON] Found ${activeAlerts.length} ACTIVE Alerts. Loaded ${dbLinks.size} existing associations from DB.`);
 
-        // --- 3. TÌM NGÀY BẮT ĐẦU QUÉT CHUNG ---
+        // --- TÌM NGÀY BẮT ĐẦU QUÉT CHUNG ---
         const earliestStartDate = new Date(
             Math.min(...activeAlerts.map(a => new Date(a.createdAt)))
         );
         const startOfEarliestMonth = new Date(earliestStartDate.getFullYear(), earliestStartDate.getMonth(), 1);
         startOfEarliestMonth.setHours(0, 0, 0, 0);
 
-        // --- 4. LẤY TẤT CẢ POSTS CẦN QUÉT (CHỈ 1 LẦN) ---
+        // --- LẤY TẤT CẢ POSTS CẦN QUÉT (CHỈ 1 LẦN) ---
         const allPostsToScan = await Post.findAll({
             where: { publishedAt: { [Op.gte]: startOfEarliestMonth } },
             raw: true
@@ -56,7 +56,7 @@ const runScanJob = async (io) => {
         }
         console.log(`🔎 [NODE-CRON] Found ${allPostsToScan.length} Posts to scan.`);
 
-        // --- 5. SO KHỚP VÀ GỬI EMAIL (TRONG BỘ NHỚ) ---
+        // --- SO KHỚP VÀ GỬI EMAIL (TRONG BỘ NHỚ) ---
         let totalNewLinksCreated = 0;
 
         for (const alert of activeAlerts) {
@@ -89,7 +89,7 @@ const runScanJob = async (io) => {
                 }
             }
 
-            // 6. TẠO LIÊN KẾT MỚI (HÀNG LOẠT) VÀ GỬI EMAIL
+            // TẠO LIÊN KẾT MỚI (HÀNG LOẠT) VÀ GỬI EMAIL
             if (newPostsToLink.length > 0) {
                 try {
                     await alert.addPosts(newPostsToLink);

@@ -37,6 +37,7 @@ const sendNotificationEmail = async (userEmail, alertTitle, post) => {
                 <h3>Post Details:</h3>
                 <p><b>Title:</b> ${post.title}</p>
                 <p><b>Source:</b> ${post.source}</p>
+                <p><b>Platform:</b> ${post.platform}</p>
                 <p><b>Content Snippet:</b></p>
                 <blockquote>${post.content.substring(0, 200)}...</blockquote>
                 <br>
