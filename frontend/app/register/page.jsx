@@ -1,11 +1,11 @@
-// frontend/app/register/page.jsx
 "use client";
 import { useState } from "react";
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api } from '@/utils/api';
 import { useFormValidation } from '@/hooks/useFormValidation';
-import { User, Mail, Phone, KeyRound } from 'lucide-react';
+
+import { User, Mail, Phone, KeyRound, Loader2 } from 'lucide-react';
 import Input from '@/app/components/Input';
 
 const registerSchema = {
@@ -190,9 +190,16 @@ export default function RegisterPage() {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full sm:w-auto h-10 sm:h-12 px-4 sm:px-6 font-semibold rounded-full text-white bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
+                            className="w-full sm:w-auto h-10 sm:h-12 px-4 sm:px-6 font-semibold rounded-full text-white bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base flex items-center justify-center"
                         >
-                            {loading ? 'Signing up...' : 'Sign Up'}
+                            {loading ? (
+                                <>
+                                    <Loader2 size={20} className="animate-spin mr-2" />
+                                    Signing Up
+                                </>
+                            ) : (
+                                'Sign Up'
+                            )}
                         </button>
                     </div>
                 </form>

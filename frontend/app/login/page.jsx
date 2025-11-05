@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api, setToken, getToken } from '@/utils/api';
 import { useFormValidation } from '@/hooks/useFormValidation';
-import { User, KeyRound } from 'lucide-react';
+import { User, KeyRound, Loader2 } from 'lucide-react';
 import Input from '@/app/components/Input';
 
 const loginSchema = {
@@ -75,7 +75,10 @@ export default function LoginPage() {
     if (isCheckingAuth) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-900">
-                <div className="text-blue-400 text-lg">Checking authentication...</div>
+                <div className="flex items-center gap-3 text-blue-400 text-lg">
+                    <Loader2 size={24} className="animate-spin" />
+                    Checking Authentication
+                </div>
             </div>
         );
     }
@@ -138,9 +141,14 @@ export default function LoginPage() {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full sm:w-auto h-10 sm:h-12 px-4 sm:px-6 font-semibold rounded-full text-white bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 transition-all duration-300 transform hover:scale-105 shadow-lg text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full sm:w-auto h-10 sm:h-12 px-4 sm:px-6 font-semibold rounded-full text-white bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 transition-all duration-300 transform hover:scale-105 shadow-lg text-sm sm:text-base disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                         >
-                            {loading ? 'Logging in...' : 'Login'}
+                            {loading ? (
+                                <>
+                                    <Loader2 size={20} className="animate-spin mr-2" />
+                                    Logging In
+                                </>
+                            ) : ('Login')}
                         </button>
                     </div>
                 </form>

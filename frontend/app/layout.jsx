@@ -1,6 +1,8 @@
+// frontend/app/layout.jsx
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { HeroUIProvider } from "@heroui/react";
+import Providers from "./providers";
+import GlobalToast from "@/app/components/GlobalToast";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,10 +25,12 @@ export default function RootLayout({ children }) {
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </head>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <HeroUIProvider>{children}</HeroUIProvider>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        <Providers>
+          {children}
+          
+          <GlobalToast/>
+        </Providers>
       </body>
     </html>
   );

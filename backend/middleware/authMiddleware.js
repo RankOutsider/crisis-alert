@@ -1,44 +1,44 @@
 // backend/middleware/authMiddleware.js
 const jwt = require('jsonwebtoken');
+// (MỚI) Import User model
+const User = require('../models/User');
 
-// Lấy key từ biến môi trường
-const SECRET = process.env.JWT_SECRET;
+exports.protect = async (req, res, next) => {
 
-const protect = (req, res, next) => {
-    console.log('\n');
-    console.log('\n');
-    console.log('\n========================================');
-    console.log(`--- NEW REQUEST [${new Date().toLocaleTimeString()}] ---`); // Tiêu đề + Thời gian
-
-    console.log('Authorization Header:', req.headers.authorization);
+    // (FIX LỖI 1) Tự động bỏ qua TẤT CẢ các request OPTIONS
+    if (req.method === 'OPTIONS') {
+        return next(); // Cho phép request OPTIONS đi qua
+    }
 
     let token;
 
-    if (
-        req.headers.authorization &&
-        req.headers.authorization.startsWith('Bearer')
-    ) {
+    // Lấy token từ header
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
         try {
+            // Tách token (Bỏ chữ 'Bearer')
             token = req.headers.authorization.split(' ')[1];
-            console.log('Extracted Token:', token);
 
-            const decoded = jwt.verify(token, SECRET);
-            console.log('✅ Token Verified Successfully! Decoded:', decoded);
+            // Giải mã token
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-            req.user = decoded;
-            next();
+            // (FIX LỖI 2) Gán user thật vào req.user (tốt hơn)
+            req.user = await User.findByPk(decoded.id, {
+                attributes: { exclude: ['password'] }
+            });
 
+            if (!req.user) {
+                return res.status(401).json({ message: 'Not authorized, user not found' });
+            }
+
+            next(); // Đi tiếp
         } catch (error) {
-            console.error('❌ Token Verification FAILED!');
-            console.error('Error Name:', error.name);
-            console.error('Error Message:', error.message);
-
-            return res.status(401).json({ message: 'Token is invalid or expired' });
+            console.error('Token validation error:', error.message);
+            return res.status(401).json({ message: 'Not authorized, token failed' });
         }
-    } else {
-        console.log('🚫 No Authorization Header or does not start with "Bearer"');
-        return res.status(401).json({ message: 'Access denied, no Bearer token provided' });
+    }
+
+    // Nếu không có token
+    if (!token) {
+        return res.status(401).json({ message: 'Not authorized, no token' });
     }
 };
-
-module.exports = { protect };

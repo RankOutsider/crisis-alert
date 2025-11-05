@@ -33,11 +33,10 @@ function MainChartSkeleton() {
     );
 }
 
-
 export default function DashboardContent() {
     const router = useRouter();
 
-    const { data, error, isLoading, mutate } = useSWR('/api/alerts/stats', fetcher, {
+    const { data, error, isLoading, mutate } = useSWR('/api/alerts/stats', {
         refreshInterval: 60000,
         onError: (err) => {
             if (err.message.includes('Unauthorized') || err.message.includes('401')) {
@@ -129,7 +128,14 @@ export default function DashboardContent() {
                     <h2 className="text-xl md:text-2xl font-semibold text-white mb-4">Mentions Over Time</h2>
                     <div className="h-80 md:h-96 w-full">
                         {/* Kiểm tra data chart trước khi render */}
-                        {data?.chartData ? <MainChart chartData={data.chartData} /> : <div className="text-center text-slate-500">No chart data available.</div>}
+                        {data?.chartData ? (
+                            <MainChart
+                                chartData={data.chartData}
+                                key={data.totalMentionedPosts}
+                            />) : (<div className="text-center text-slate-500">
+                                No chart data available.
+                            </div>
+                        )}
                     </div>
                 </div>
             </main>

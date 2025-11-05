@@ -1,9 +1,14 @@
+// frontend/app/components/Sidebar.jsx
 "use client";
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { LayoutDashboard, AlertCircle, LogOut, X, Settings, FileSearch, Book, User as UserIcon } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { clearToken, getToken } from '@/utils/api';
+
+import { mutate } from 'swr';
+import { toast } from 'react-toastify';
+import { socket } from '@/utils/socket';
 
 const menuItems = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -12,24 +17,73 @@ const menuItems = [
     { name: 'Case Studies', href: '/dashboard/casestudies', icon: Book },
 ];
 
+const getUserIdFromToken = () => {
+    const token = getToken();
+    if (token) {
+        try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            return { username: payload.username, userId: payload.id };
+        } catch (error) {
+            console.error("Failed to decode token.");
+        }
+    }
+    return { username: '', userId: null };
+};
+
 export default function Sidebar({ isOpen, onClose }) {
     const pathname = usePathname();
     const router = useRouter();
-    const [username, setUsername] = useState('');
+    const { username, userId } = getUserIdFromToken();
+
 
     useEffect(() => {
-        const token = getToken();
-        if (token) {
-            try {
-                const payload = JSON.parse(atob(token.split('.')[1]));
-                setUsername(payload.username);
-            } catch (error) {
-                console.error("Sidebar: Failed to decode token.", error);
-            }
-        }
+        console.log("🧠 useEffect ran — setting up socket listeners...");
     }, []);
 
+    useEffect(() => {
+        if (!userId) return;
+        if (socket.connected) {
+            console.log("⚡ Socket đã kết nối, bỏ qua connect lại.");
+            return;
+        }
+
+        console.log("🧠 Socket test starting...");
+        socket.connect();
+
+        function onConnect() {
+            console.log("🔌 [Socket.IO] Connected to the server.");
+            socket.emit("join_user_room", userId);
+        }
+
+        function onNewMatch(data) {
+            console.log("🎉 [Socket.IO] Received signal for new post(s)", data);
+
+            toast.success(
+                `Alert "${data.alertTitle}" found ${data.newPostCount} new post(s)!`,
+                { 
+                    toastId: `new_match_${data.alertId}_${Date.now()}`, 
+                    containerId: "dashboard-toast"
+                }
+            );
+
+            // Gọi hàm 'mutate' toàn cục của SWR, trỏ vào key của API
+            mutate('/api/alerts/stats');
+        }
+
+        socket.on("connect", onConnect);
+        socket.on("new_match", onNewMatch);
+
+        return () => {
+            console.log("🧹 [Socket.IO] Cleaning up listeners...");
+            socket.off("connect", onConnect);
+            socket.off("new_match", onNewMatch);
+        };
+    }, [userId]);
+
     const handleLogout = () => {
+        if (socket.connected) {
+            socket.disconnect(); // Ngắt kết nối khi logout
+        }
         clearToken();
         router.push('/login');
     };

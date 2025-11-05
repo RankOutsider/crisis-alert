@@ -1,16 +1,20 @@
 const nodemailer = require('nodemailer');
 
-// 1. Tạo "người vận chuyển" (transporter)
-// Nó sử dụng thông tin đăng nhập từ file .env để kết nối đến dịch vụ email
-const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST, // ví dụ: "smtp.gmail.com"
-    port: 587,
-    secure: false, // true for 465, false for other ports
-    auth: {
-        user: process.env.EMAIL_USER, // email của bạn
-        pass: process.env.EMAIL_PASS, // mật khẩu ứng dụng
-    },
-});
+// 1. Cấu hình Transporter
+const transporterConfig = {
+    host: process.env.EMAIL_HOST,
+    port: process.env.EMAIL_PORT,
+    secure: false, // MailHog không dùng SSL
+};
+
+if (process.env.EMAIL_PORT !== '1025' && process.env.EMAIL_USER) {
+    transporterConfig.auth = {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+    };
+}
+
+const transporter = nodemailer.createTransport(transporterConfig);
 
 /**
  * Hàm gửi email thông báo khi có bài đăng mới khớp với alert
@@ -21,7 +25,8 @@ const transporter = nodemailer.createTransport({
 const sendNotificationEmail = async (userEmail, alertTitle, post) => {
     try {
         const mailOptions = {
-            from: `"Crisis Alert" <${process.env.EMAIL_USER}>`, // Tên người gửi
+            // Dùng mail mặc định nếu EMAIL_USER rỗng (MailHog)
+            from: `"Crisis Alert" <${process.env.EMAIL_USER || 'bot@crisis-alert.com'}>`,
             to: userEmail, // Người nhận
             subject: `🚨 New Mention for Alert: "${alertTitle}"`, // Tiêu đề email
             // Nội dung email dạng HTML
@@ -32,6 +37,7 @@ const sendNotificationEmail = async (userEmail, alertTitle, post) => {
                 <h3>Post Details:</h3>
                 <p><b>Title:</b> ${post.title}</p>
                 <p><b>Source:</b> ${post.source}</p>
+                <p><b>Platform:</b> ${post.platform}</p>
                 <p><b>Content Snippet:</b></p>
                 <blockquote>${post.content.substring(0, 200)}...</blockquote>
                 <br>
@@ -48,10 +54,8 @@ const sendNotificationEmail = async (userEmail, alertTitle, post) => {
 
     } catch (error) {
         console.error('❌ Error sending notification email:', error);
-        // Ném lỗi ra ngoài để hàm gọi nó có thể xử lý
         throw new Error('Could not send notification email.');
     }
 };
 
-// Xuất hàm này ra để các file khác có thể dùng
 module.exports = { sendNotificationEmail };
