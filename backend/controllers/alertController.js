@@ -3,19 +3,21 @@ const { Op } = require('sequelize');
 const { Alert, Post, User, sequelize } = require('../models/associations');
 const { sendNotificationEmail } = require('../utils/emailService');
 
+// hàm sleep
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 // --- HÀM QUÉT NỘI BỘ ---
 /**
  * Chạy tác vụ quét, so khớp và liên kết.
- * Tối ưu hóa bằng cách load các liên kết đã có vào bộ nhớ.
  * @param {number} userId ID của người dùng thực hiện
  * @param {number|null} specificAlertId Nếu cung cấp, chỉ quét cho 1 Alert. Nếu null, quét tất cả.
+ * @param {object|null} io Đối tượng Socket.IO
  */
-async function _runScanTask(userId, specificAlertId = null) {
+async function _runScanTask(userId, specificAlertId = null, io = null) {
     const alertWhere = {
         userId: userId,
         status: 'ACTIVE'
     };
-    // Nếu chỉ quét 1 alert, thêm ID vào điều kiện
     if (specificAlertId) {
         alertWhere.id = specificAlertId;
     }
@@ -28,18 +30,19 @@ async function _runScanTask(userId, specificAlertId = null) {
 
     if (activeAlerts.length === 0) {
         console.log("➡️ Không có alerts ACTIVE, kết thúc quét.");
-        return { totalNewLinks: 0, alertCount: 0 };
+        return { totalNewLinksCreated: 0, alertCount: 0 };
     }
 
-    // 2. LẤY CÁC LIÊN KẾT ĐÃ TỒN TẠI (Tối ưu N+1 Query)
+    // 2. LẤY CÁC LIÊN KẾT ĐÃ TỒN TẠI TỪ DATABASE
     const existingLinksRaw = await sequelize.query(
         "SELECT `AlertId`, `PostId` FROM `postalerts`",
         { type: sequelize.QueryTypes.SELECT, raw: true }
     );
-    const existingLinks = new Set(
+    // dbLinks
+    const dbLinks = new Set(
         existingLinksRaw.map(link => `${link.AlertId}-${link.PostId}`)
     );
-    console.log(`🔎 Đã tải ${existingLinks.size} liên kết đã tồn tại vào bộ nhớ.`);
+    console.log(`🔎 Đã tải ${dbLinks.size} liên kết đã tồn tại vào bộ nhớ.`);
 
     // 3. TÌM NGÀY BẮT ĐẦU QUÉT CHUNG
     const earliestStartDate = new Date(
@@ -56,11 +59,11 @@ async function _runScanTask(userId, specificAlertId = null) {
 
     if (allPostsToScan.length === 0) {
         console.log("➡️ Không có posts mới, kết thúc quét.");
-        return { totalNewLinks: 0, alertCount: activeAlerts.length };
+        return { totalNewLinksCreated: 0, alertCount: activeAlerts.length };
     }
 
     // 5. SO KHỚP VÀ GỬI EMAIL (TRONG BỘ NHỚ)
-    let totalNewLinks = 0;
+    let totalNewLinksCreated = 0;
 
     for (const alert of activeAlerts) {
         const keywords = alert.keywords || [];
@@ -79,41 +82,68 @@ async function _runScanTask(userId, specificAlertId = null) {
             if (new Date(post.publishedAt) < startOfMonth) continue;
 
             const linkKey = `${alert.id}-${post.id}`;
-            if (existingLinks.has(linkKey)) continue; // Bỏ qua nếu đã liên kết
+            // Chỉ kiểm tra dbLinks
+            if (dbLinks.has(linkKey)) continue;
 
             const postContent = `${post.title} ${post.content}`.toLowerCase();
             const keywordMatch = keywords.some(keyword => postContent.includes(keyword.toLowerCase()));
+            // Sửa lỗi case-sensitive
             const platformMatch = platforms.some(p => p.toLowerCase() === post.platform.toLowerCase());
 
             if (keywordMatch && platformMatch) {
                 newPostsToLink.push(post.id);
                 newPostObjectsForEmail.push(post);
-                existingLinks.add(linkKey); // Cập nhật Set
+                // Thêm vào dbLinks (in-memory)
+                dbLinks.add(linkKey);
             }
         }
 
         // 6. TẠO LIÊN KẾT MỚI (HÀNG LOẠT) VÀ GỬI EMAIL
         if (newPostsToLink.length > 0) {
-            await alert.addPosts(newPostsToLink);
-            totalNewLinks += newPostsToLink.length;
-            console.log(`✅ [Alert ID ${alert.id}] Đã tạo ${newPostsToLink.length} liên kết MỚI.`);
+            try {
+                await alert.addPosts(newPostsToLink);
+                totalNewLinksCreated += newPostsToLink.length;
+                console.log(`✅ [Alert ID ${alert.id}] Associated ${newPostsToLink.length} NEW Posts.`);
 
-            if (user && user.email && user.notificationsEnabled) {
-                console.log(`... Chuẩn bị gửi ${newPostsToLink.length} email tới ${user.email}`);
-                for (const post of newPostObjectsForEmail) {
-                    sendNotificationEmail(user.email, alert.title, post).catch(err => {
-                        console.error(`❌ Lỗi gửi email (Post ID: ${post.id}):`, err);
+                // PHÁT TÍN HIỆU WEBSOCKET
+                if (io && user) {
+                    io.to(`user_${user.id}`).emit('new_match', {
+                        alertId: alert.id,
+                        alertTitle: alert.title,
+                        newPostCount: newPostsToLink.length
                     });
+                }
+            } catch (dbError) {
+                console.error(`❌ LỖI LƯU DB cho Alert ID ${alert.id}:`, dbError.message);
+                continue; // Bỏ qua nếu lỗi DB
+            }
+
+            // Gửi email
+            if (user && user.email && user.notificationsEnabled) {
+                console.log(`... Preparing to send ${newPostsToLink.length} email to ${user.email}`);
+                for (const post of newPostObjectsForEmail) {
+                    // Thêm Try/Catch và Sleep
+                    try {
+                        await sendNotificationEmail(user.email, alert.title, post);
+                        console.log(`... Sent email for Post ID ${post.id} to ${user.email}`);
+                        // await sleep(1000);
+                    } catch (emailError) {
+                        console.error(`❌ Error sending email (Post ID: ${post.id}):`, emailError.message);
+                        // await sleep(2000);
+                    }
                 }
             }
         }
     }
 
-    return { totalNewLinks, alertCount: activeAlerts.length };
+    return { totalNewLinksCreated, alertCount: activeAlerts.length };
 }
+// --- KẾT THÚC HÀM QUÉT NỘI BỘ ---
 
-// @desc    Lấy tất cả Alerts
+
+// @desc    Lấy tất cả Alerts
 exports.getAlerts = async (req, res) => {
+    // ... (Giữ nguyên code getAlerts của bạn) ...
     try {
         const userId = req.user.id;
         const page = parseInt(req.query.page, 10) || 1;
@@ -176,8 +206,9 @@ exports.getAlerts = async (req, res) => {
     }
 };
 
-// @desc    Lấy chi tiết một Alert (KHÔNG KÈM POSTS)
+// @desc    Lấy chi tiết một Alert (KHÔNG KÈM POSTS)
 exports.getAlertById = async (req, res) => {
+    // ... (Giữ nguyên code getAlertById của bạn) ...
     try {
         const { id: alertId } = req.params;
         const alert = await Alert.findOne({ where: { id: alertId, userId: req.user.id } });
@@ -189,8 +220,9 @@ exports.getAlertById = async (req, res) => {
     }
 };
 
-// @desc    Tạo một Alert mới
+// @desc    Tạo một Alert mới
 exports.createAlert = async (req, res) => {
+    // ... (Giữ nguyên code createAlert của bạn) ...
     const { title, description, severity, keywords, platforms } = req.body;
     const userId = req.user.id;
     try {
@@ -205,8 +237,9 @@ exports.createAlert = async (req, res) => {
     }
 };
 
-// @desc    Cập nhật thông tin một Alert
+// @desc    Cập nhật thông tin một Alert
 exports.updateAlert = async (req, res) => {
+    // ... (Giữ nguyên code updateAlert của bạn) ...
     const { title, description, severity, status, keywords, platforms } = req.body;
     const alertId = req.params.id;
     try {
@@ -223,8 +256,9 @@ exports.updateAlert = async (req, res) => {
     }
 };
 
-// @desc    Xóa một Alert
+// @desc    Xóa một Alert
 exports.deleteAlert = async (req, res) => {
+    // ... (Giữ nguyên code deleteAlert của bạn) ...
     const alertId = req.params.id;
     try {
         const alert = await Alert.findByPk(alertId);
@@ -238,33 +272,34 @@ exports.deleteAlert = async (req, res) => {
     }
 };
 
-// @desc    (ĐÃ ĐỔI TÊN) Quét Posts thủ công cho Alert HIỆN TẠI
+// @desc    (ĐÃ ĐỔI TÊN) Quét Posts thủ công cho Alert HIỆN TẠI
 exports.scanForCurrentAlert = async (req, res) => {
     try {
         const { id: alertId } = req.params;
-        // Gọi hàm quét tối ưu cho 1 alert
-        const stats = await _runScanTask(req.user.id, alertId);
-        res.status(200).json({ message: `Scan complete. Linked ${stats.totalNewLinks} new posts.` });
+        // (THAY ĐỔI) Truyền req.io vào
+        const stats = await _runScanTask(req.user.id, alertId, req.io);
+        res.status(200).json({ message: `Scan complete. Linked ${stats.totalNewLinksCreated} new posts.` });
     } catch (error) {
         console.error(`Error during scan for alert ${req.params.id}:`, error);
         res.status(500).json({ message: 'Server error during scan.' });
     }
 };
 
-// @desc    (ĐÃ CẬP NHẬT) Quét TẤT CẢ Posts cho TẤT CẢ Alerts (của user)
+// @desc    (ĐÃ CẬP NHẬT) Quét TẤT CẢ Posts cho TẤT CẢ Alerts (của user)
 exports.scanAllActiveAlerts = async (req, res) => {
     try {
-        // Gọi hàm quét tối ưu cho TẤT CẢ alerts (ID = null)
-        const stats = await _runScanTask(req.user.id, null);
-        res.status(200).json({ message: `Scan complete. Found ${stats.totalNewLinks} new posts across ${stats.alertCount} alerts.` });
+        // (THAY ĐỔI) Truyền req.io vào
+        const stats = await _runScanTask(req.user.id, null, req.io);
+        res.status(200).json({ message: `Scan complete. Found ${stats.totalNewLinksCreated} new posts across ${stats.alertCount} alerts.` });
     } catch (error) {
         console.error('Error scanning all active alerts:', error);
         res.status(500).json({ message: 'Server error during scan.' });
     }
 };
 
-// @desc    Lấy các số liệu thống kê cho dashboard
+// @desc    Lấy các số liệu thống kê cho dashboard
 exports.getStats = async (req, res) => {
+    // ... (Giữ nguyên code getStats của bạn) ...
     try {
         const userId = req.user.id;
         const totalAlerts = await Alert.count({ where: { userId: userId } });
@@ -328,8 +363,9 @@ exports.getStats = async (req, res) => {
     }
 };
 
-// @desc    Xóa nhiều Alerts cùng lúc
+// @desc    Xóa nhiều Alerts cùng lúc
 exports.bulkDeleteAlerts = async (req, res) => {
+    // ... (Giữ nguyên code bulkDeleteAlerts của bạn) ...
     const { alertIds } = req.body;
     const userId = req.user.id;
 

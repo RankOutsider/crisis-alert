@@ -247,8 +247,15 @@ export default function ProfilePage() {
     const handleDeleteAccount = async (password) => {
         await api('auth/me', { method: 'DELETE', body: JSON.stringify({ password }) });
         clearToken();
-        alert('Account deleted successfully.');
-        router.push('/login');
+        setToast({ type: 'success', message: 'Account deleted successfully. Redirecting...' });
+
+        setIsDeleteModalOpen(false);
+
+        setTimeout(() => {
+
+            router.push('/login');
+
+        }, 1000);
     };
 
     if (loading) return <div className="p-8 text-center text-gray-400">Loading profile...</div>;
