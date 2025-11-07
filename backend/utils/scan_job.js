@@ -1,5 +1,4 @@
 // backend/utils/scan_job.js
-// KHÔNG CẦN dotenv VÀ KHÔNG GỌI runScanJob() ở cuối
 
 const { Alert, Post, User, sequelize } = require('../models/associations');
 const { Op } = require('sequelize');
