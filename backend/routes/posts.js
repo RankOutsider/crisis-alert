@@ -5,7 +5,9 @@ const {
     createPost,
     getPostsByAlert,
     getAllUserPosts,
-    getPostsByCaseStudy
+    getPostsByCaseStudy,
+    getPostStatsOverTime,
+    exportUserPosts
 } = require('../controllers/postController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -27,7 +29,7 @@ const handleValidationErrors = (req, res, next) => {
 
 // --- Các giá trị hợp lệ (dùng trong validation) ---
 const VALID_SENTIMENTS = ['POSITIVE', 'NEUTRAL', 'NEGATIVE'];
-const VALID_PLATFORMS = ['Facebook', 'X', 'Instagram', 'News', 'Tiktok', 'Forum', 'Threads', 'Youtube', 'Blog']; // Danh sách nhất quán
+const VALID_PLATFORMS = ['Facebook', 'X', 'Instagram', 'News', 'Tiktok', 'Forum', 'Threads', 'Youtube', 'Blog'];
 const VALID_POST_SEARCH_FIELDS = ['title', 'content', 'source'];
 
 // --- HẰNG SỐ CHUNG CHO QUERY PARAMS ---
@@ -60,10 +62,34 @@ const validateCaseStudyIdParam = [
     handleValidationErrors
 ];
 
+// === GET /api/posts/over-time ===
+router.route('/over-time')
+    .get(
+        protect,
+        [ // Validation cho route này
+            query('range', 'Range là bắt buộc').isIn(['7days', '6months'])
+        ],
+        handleValidationErrors,
+        getPostStatsOverTime // <-- CONTROLLER MỚI
+    );
+
+// === GET /api/posts/export ===
+// (API cho nút export Excel)
+router.route('/export')
+    .get(
+        protect,
+        [ // Validation cho route này
+            query('startDate', 'Ngày bắt đầu là bắt buộc').isISO8601().toDate(),
+            query('endDate', 'Ngày kết thúc là bắt buộc').isISO8601().toDate()
+        ],
+        handleValidationErrors,
+        exportUserPosts // <-- CONTROLLER MỚI
+    );
+
 // === GET /api/posts/all ===
 router.route('/all')
     .get(
-        protect, // Xác thực trước
+        protect,
         postQueryValidation,
         handleValidationErrors,
         getAllUserPosts
@@ -72,7 +98,7 @@ router.route('/all')
 // === POST /api/posts (Tạo post) ===
 router.route('/')
     .post(
-        [ // --- Validation cho POST / ---
+        [
             body('title', 'Tiêu đề là bắt buộc').isString().trim().notEmpty(),
             body('content', 'Nội dung là bắt buộc').isString().trim().notEmpty(),
             body('source', 'Nguồn là bắt buộc').isString().trim().notEmpty(),
@@ -91,7 +117,7 @@ router.route('/')
 router.route('/by-alert/:alertId')
     .get(
         protect,
-        validateAlertIdParam, // Kiểm tra tham số URL
+        validateAlertIdParam,
         postQueryValidation,
         handleValidationErrors,
         getPostsByAlert
@@ -101,7 +127,7 @@ router.route('/by-alert/:alertId')
 router.route('/by-case-study/:caseStudyId')
     .get(
         protect,
-        validateCaseStudyIdParam, // Kiểm tra tham số URL
+        validateCaseStudyIdParam,
         postQueryValidation,
         handleValidationErrors,
         getPostsByCaseStudy

@@ -1,7 +1,6 @@
 // backend/controllers/postController.js
 const { Op } = require('sequelize');
-const { Post, Alert, User, CaseStudy, sequelize } = require('../models/associations');
-const { sendNotificationEmail } = require('../utils/emailService');
+const { Post, Alert, CaseStudy, sequelize } = require('../models/associations');
 
 // @desc    Lấy tất cả posts của user (cho trang Mentions)
 exports.getAllUserPosts = async (req, res) => {
@@ -295,5 +294,174 @@ exports.createPost = async (req, res) => {
             return res.status(400).json({ message: 'A post with this Source URL already exists' });
         }
         res.status(500).json({ message: 'Server error while creating post' });
+    }
+};
+
+// @desc    Hàm phụ để tạo dữ liệu đầy đủ cho biểu đồ (7 ngày hoặc 6 tháng)
+const generatePaddedData = (dbResults, range) => {
+    const resultsMap = new Map(dbResults.map(item => [item.name, item]));
+    const finalData = [];
+    const now = new Date();
+
+    if (range === '7days') {
+        // Lấy 7 ngày qua, bắt đầu từ hôm nay
+        for (let i = 0; i <= 6; i++) {
+            const d = new Date(now);
+            d.setDate(d.getDate() - (6 - i)); // 6 ngày trước -> hôm nay
+
+            // Định dạng 'Month Day' (e.g., 'Oct 30')
+            const name = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+            const dbEntry = resultsMap.get(name);
+            if (dbEntry) {
+                finalData.push({
+                    name: dbEntry.name,
+                    positive: parseInt(dbEntry.positive, 10),
+                    negative: parseInt(dbEntry.negative, 10)
+                });
+            } else {
+                finalData.push({ name, positive: 0, negative: 0 });
+            }
+        }
+    } else if (range === '6months') {
+        // Lấy 6 tháng qua, bắt đầu từ tháng này
+        for (let i = 0; i <= 5; i++) {
+            const d = new Date(now);
+            d.setMonth(d.getMonth() - (5 - i)); // 5 tháng trước -> tháng này
+
+            // Định dạng 'Month Year' (e.g., 'Oct 2025')
+            const name = d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+
+            const dbEntry = resultsMap.get(name);
+            if (dbEntry) {
+                finalData.push({
+                    name: dbEntry.name,
+                    positive: parseInt(dbEntry.positive, 10),
+                    negative: parseInt(dbEntry.negative, 10)
+                });
+            } else {
+                finalData.push({ name, positive: 0, negative: 0 });
+            }
+        }
+    }
+    return finalData;
+};
+
+// @desc    Lấy dữ liệu thống kê (Positive/Negative) cho biểu đồ
+exports.getPostStatsOverTime = async (req, res) => {
+    const { range } = req.query;
+    const userId = req.user.id;
+
+    let startDate;
+    let dateGroupFormat; // Định dạng cho MySQL/PostgreSQL
+
+    const now = new Date();
+    if (range === '7days') {
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 6); // 6 ngày trước + hôm nay = 7 ngày
+        startDate.setHours(0, 0, 0, 0);
+
+        // Cú pháp MySQL: 'Tháng Ngày' (e.g., 'Oct 30')
+        dateGroupFormat = `DATE_FORMAT(Post.publishedAt, '%b %e')`;
+
+    } else if (range === '6months') {
+        startDate = new Date(now);
+        startDate.setMonth(now.getMonth() - 5); // 5 tháng trước + tháng này = 6 tháng
+        startDate.setDate(1); // Bắt đầu từ ngày 1 của tháng đó
+        startDate.setHours(0, 0, 0, 0);
+
+        // Cú pháp MySQL: 'Tháng Năm' (e.g., 'Oct 2025')
+        dateGroupFormat = `DATE_FORMAT(Post.publishedAt, '%b %Y')`;
+    }
+
+    try {
+        const results = await Post.findAll({
+            attributes: [
+                // 1. Nhóm theo định dạng ngày/tháng
+                [sequelize.literal(dateGroupFormat), 'name'],
+
+                // 2. Đếm 'POSITIVE'
+                [
+                    sequelize.fn('SUM', sequelize.literal("CASE WHEN sentiment = 'POSITIVE' THEN 1 ELSE 0 END")),
+                    'positive'
+                ],
+
+                // 3. Đếm 'NEGATIVE'
+                [
+                    sequelize.fn('SUM', sequelize.literal("CASE WHEN sentiment = 'NEGATIVE' THEN 1 ELSE 0 END")),
+                    'negative'
+                ]
+            ],
+            where: {
+                publishedAt: { [Op.gte]: startDate }, // Lọc theo ngày bắt đầu
+                sentiment: { [Op.in]: ['POSITIVE', 'NEGATIVE'] } // Chỉ lấy 2 loại
+            },
+            include: [{
+                model: Alert,
+                where: { userId: userId }, // Chỉ lấy posts thuộc alerts của user
+                attributes: [], // Không cần lấy data của Alert
+                through: { attributes: [] } // Không cần data bảng trung gian
+            }],
+            group: ['name'], // Nhóm theo chuỗi ngày/tháng đã format
+            order: [[sequelize.literal('MIN(Post.publishedAt)'), 'ASC']], // Sắp xếp
+            raw: true // Trả về JSON thô, không phải
+        });
+
+        // Điền dữ liệu vào những ngày/tháng bị thiếu (không có post)
+        const paddedData = generatePaddedData(results, range);
+
+        res.status(200).json({ data: paddedData });
+
+    } catch (error) {
+        console.error("Error fetching chart data:", error);
+        res.status(500).json({ message: 'Server error fetching chart data' });
+    }
+};
+
+// @desc    Export tất cả posts của user trong 1 khoảng thời gian
+exports.exportUserPosts = async (req, res) => {
+    const { startDate, endDate } = req.query;
+    const userId = req.user.id;
+
+    // Đảm bảo endDate bao gồm cả ngày
+    const endOfDay = new Date(endDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    try {
+        const posts = await Post.findAll({
+            // Các trường (attributes) bạn muốn thấy trong file Excel
+            attributes: [
+                'id',
+                'title',
+                'content',
+                'source',
+                'sourceUrl',
+                'platform',
+                'sentiment',
+                'publishedAt'
+            ],
+            where: {
+                publishedAt: {
+                    [Op.between]: [new Date(startDate), endOfDay] // Lọc theo ngày
+                },
+                // Theo yêu cầu trên modal (chỉ Pos/Neg)
+                sentiment: { [Op.in]: ['POSITIVE', 'NEGATIVE'] }
+            },
+            include: [{
+                model: Alert,
+                where: { userId: userId }, // Đảm bảo an toàn, chỉ lấy của user
+                attributes: [],
+                through: { attributes: [] }
+            }],
+            order: [['publishedAt', 'DESC']], // Sắp xếp
+            raw: true // Trả về JSON thô, sạch
+        });
+
+        // Trả về mảng JSON. Frontend sẽ xử lý việc tạo file Excel.
+        res.status(200).json(posts);
+
+    } catch (error) {
+        console.error("Error exporting posts:", error);
+        res.status(500).json({ message: 'Server error exporting posts' });
     }
 };

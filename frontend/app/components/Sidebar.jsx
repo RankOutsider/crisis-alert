@@ -5,8 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { LayoutDashboard, AlertCircle, LogOut, X, Settings, FileSearch, Book, User as UserIcon } from 'lucide-react';
 import { useEffect } from 'react';
 import { clearToken, getToken } from '@/utils/api';
-
-import { mutate } from 'swr';
+import { useSWRConfig } from 'swr';
 import { toast } from 'react-toastify';
 import { socket } from '@/utils/socket';
 
@@ -34,6 +33,7 @@ export default function Sidebar({ isOpen, onClose }) {
     const pathname = usePathname();
     const router = useRouter();
     const { username, userId } = getUserIdFromToken();
+    const { mutate } = useSWRConfig();
 
 
     useEffect(() => {
@@ -68,6 +68,8 @@ export default function Sidebar({ isOpen, onClose }) {
 
             // Gọi hàm 'mutate' toàn cục của SWR, trỏ vào key của API
             mutate('/api/alerts/stats');
+
+            mutate((key) => key.startsWith('/api/posts/over-time'));
         }
 
         socket.on("connect", onConnect);
@@ -78,7 +80,7 @@ export default function Sidebar({ isOpen, onClose }) {
             socket.off("connect", onConnect);
             socket.off("new_match", onNewMatch);
         };
-    }, [userId]);
+    }, [userId, mutate]);
 
     const handleLogout = () => {
         if (socket.connected) {

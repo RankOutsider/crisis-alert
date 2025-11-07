@@ -253,7 +253,7 @@ export default function AlertDetailPage() {
         try {
             const payload = {
                 alertId: alert.id,
-                title: `Case Study: ${alert.title}`,
+                title: `${alert.title}`,
                 description: alert.description || `Analysis for: ${alert.title}`,
             };
 
