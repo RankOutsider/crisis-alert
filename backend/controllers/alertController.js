@@ -3,6 +3,8 @@ const { Op } = require('sequelize');
 const { Alert, Post, User, sequelize } = require('../models/associations');
 const { sendNotificationEmail } = require('../utils/emailService');
 
+const { TIER_PLANS } = require('../config/subscriptionPlans');
+
 // hàm sleep
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -138,8 +140,6 @@ async function _runScanTask(userId, specificAlertId = null, io = null) {
 
     return { totalNewLinksCreated, alertCount: activeAlerts.length };
 }
-// --- KẾT THÚC HÀM QUÉT NỘI BỘ ---
-
 
 // @desc    Lấy tất cả Alerts
 exports.getAlerts = async (req, res) => {
@@ -222,15 +222,53 @@ exports.getAlertById = async (req, res) => {
 
 // @desc    Tạo một Alert mới
 exports.createAlert = async (req, res) => {
-    // ... (Giữ nguyên code createAlert của bạn) ...
     const { title, description, severity, keywords, platforms } = req.body;
+
+    // 1. Lấy thông tin user và gói
     const userId = req.user.id;
+    // === SỬA LỖI ===
+    const userTier = req.user.subscriptionTier; // Sửa từ req.user.tier
+
     try {
+        // 2. Lấy thông tin gói từ file config
+        const plan = TIER_PLANS[userTier];
+        if (!plan) {
+            return res.status(400).json({
+                message: 'Cannot find your subscription, please contact the support teams.'
+            });
+        }
+
+        // 3. Kiểm tra giới hạn keywords
+        // (Giữ nguyên logic kiểm tra...)
+        const keywordLimitPerAlert = plan.limits.keywords;
+        if (!Array.isArray(keywords)) {
+            return res.status(400).json({ message: 'Keywords phải là một mảng (array).' });
+        }
+        if (keywords.length > keywordLimitPerAlert) {
+            return res.status(400).json({
+                message: `Your ${userTier} subscription only allow ${keywordLimitPerAlert} keywords for each alert.`
+            });
+        }
+
+        // 4. Kiểm tra giới hạn tổng số alerts
+        // (Giữ nguyên logic kiểm tra...)
+        const alertLimit = plan.limits.alerts;
+        const existingAlertCount = await Alert.count({ where: { userId: userId } });
+
+        if (existingAlertCount >= alertLimit) {
+            return res.status(403).json({
+                message: `You have reach the limit of ${alertLimit} alerts for the ${userTier} subscription. Please upgrade expand your limits.`
+            });
+        }
+
+        // 5. Nếu qua, tạo alert
         const newAlert = await Alert.create({
             title, description, severity, keywords, platforms,
             userId, postCount: 0, status: 'ACTIVE'
         });
+
         res.status(201).json({ message: 'Alert created successfully', alert: newAlert });
+
     } catch (error) {
         console.error("Error creating alert:", error);
         res.status(500).json({ message: 'Server error while creating alert' });
@@ -239,17 +277,44 @@ exports.createAlert = async (req, res) => {
 
 // @desc    Cập nhật thông tin một Alert
 exports.updateAlert = async (req, res) => {
-    // ... (Giữ nguyên code updateAlert của bạn) ...
     const { title, description, severity, status, keywords, platforms } = req.body;
     const alertId = req.params.id;
+    const userId = req.user.id;
+
+    // === SỬA LỖI ===
+    const userTier = req.user.subscriptionTier; // Sửa từ req.user.tier
+
     try {
         const alert = await Alert.findByPk(alertId);
         if (!alert) { return res.status(404).json({ message: 'Alert not found' }); }
-        if (alert.userId !== req.user.id) { return res.status(403).json({ message: 'Not authorized' }); }
+        if (alert.userId !== userId) { return res.status(403).json({ message: 'Not authorized' }); }
+
+        // === START SUBSCRIPTION CHECK ===
+        if (keywords !== undefined) {
+            const plan = TIER_PLANS[userTier];
+            if (!plan) {
+                return res.status(400).json({ message: 'Cannot find the subscription.' });
+            }
+
+            const keywordLimitPerAlert = plan.limits.keywords;
+            if (!Array.isArray(keywords)) {
+                return res.status(400).json({ message: 'Keywords has to be an array.' });
+            }
+            if (keywords.length > keywordLimitPerAlert) {
+                return res.status(400).json({
+                    message: `Your ${userTier} subscription only allow ${keywordLimitPerAlert} keywords for each alert.`
+                });
+            }
+        }
+        // === END SUBSCRIPTION CHECK ===
+
         const updateData = { title, description, severity, status, keywords, platforms };
         Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
+
         await alert.update(updateData);
+
         res.status(200).json({ message: 'Alert updated successfully', alert: alert });
+
     } catch (error) {
         console.error("Error updating alert:", error);
         res.status(500).json({ message: 'Server error while updating alert' });

@@ -4,15 +4,17 @@
 // --- Imports ---
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import {
     PlusCircle, Trash2, Edit, X, Tag, Search, CheckCircle,
     AlertCircle as AlertIcon, ChevronLeft, ChevronRight, FilePlus, RefreshCw, Globe,
-    Save, Loader2 // Giữ các icon cần thiết cho UI và Modal
+    Save, Loader2, Lock
 } from 'lucide-react';
 import { api, fetcher } from '@/utils/api';
 import Modal from '@/app/components/Modal';
 import FilterBar from '@/app/components/FilterBar';
+import { useAuth } from '@/app/providers.jsx';
+import { TIER_PLANS } from '@/utils/subscriptionPlans';
 
 // --- Constants ---
 const PLATFORM_OPTIONS = ['Facebook', 'Instagram', 'News', 'Forum', 'Threads', 'Tiktok', 'X', 'Youtube', 'Blog'];
@@ -37,24 +39,20 @@ function AlertCardSkeleton() {
     return (
         <div className="bg-slate-700/60 p-4 rounded-lg transition-colors duration-200 animate-pulse">
             <div className="flex items-start gap-4">
-                {/* Checkbox Skeleton */}
                 <div className="mt-1.5 h-5 w-5 rounded bg-slate-600 flex-shrink-0"></div>
                 <div className="flex-grow min-w-0">
                     <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
-                        {/* Title & Description Skeleton */}
                         <div className="min-w-0 flex-1 space-y-2">
-                            <div className="h-5 bg-slate-600 rounded w-3/4"></div> {/* Title */}
-                            <div className="h-4 bg-slate-600 rounded w-full"></div> {/* Description line 1 */}
+                            <div className="h-5 bg-slate-600 rounded w-3/4"></div>
+                            <div className="h-4 bg-slate-600 rounded w-full"></div>
                         </div>
-                        {/* Buttons/Tags Skeleton */}
                         <div className="flex items-center gap-2 flex-shrink-0 mt-2 sm:mt-0">
-                            <div className="h-6 bg-slate-600 rounded-full w-16"></div> {/* Severity */}
-                            <div className="h-6 bg-slate-600 rounded-full w-16"></div> {/* Status */}
-                            <div className="h-8 w-8 bg-slate-600 rounded-full"></div> {/* Edit button */}
-                            <div className="h-8 w-8 bg-slate-600 rounded-full"></div> {/* Delete button */}
+                            <div className="h-6 bg-slate-600 rounded-full w-16"></div>
+                            <div className="h-6 bg-slate-600 rounded-full w-16"></div>
+                            <div className="h-8 w-8 bg-slate-600 rounded-full"></div>
+                            <div className="h-8 w-8 bg-slate-600 rounded-full"></div>
                         </div>
                     </div>
-                    {/* Keywords & Platforms Skeleton */}
                     <div className="mt-3 border-t border-slate-600/50 pt-3 space-y-2">
                         <div className="flex flex-wrap gap-2">
                             <div className="h-4 bg-slate-600 rounded w-20"></div>
@@ -74,13 +72,18 @@ function AlertCardSkeleton() {
 
 
 // --- EditAlertModal Component ---
-function EditAlertModal({ alert, onClose, onSave }) {
+function EditAlertModal({ alert, onClose, onSave, keywordLimit }) {
     if (!alert) return null;
 
     const [formData, setFormData] = useState({ ...alert });
     const [currentKeyword, setCurrentKeyword] = useState('');
     const [errors, setErrors] = useState({});
     const [isSaving, setIsSaving] = useState(false);
+
+    const hasReachedKeywordLimit = useMemo(() => {
+        if (!keywordLimit) return false;
+        return (formData.keywords || []).length >= keywordLimit;
+    }, [formData.keywords, keywordLimit]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -99,6 +102,10 @@ function EditAlertModal({ alert, onClose, onSave }) {
         if (errors.platforms) setErrors(prev => ({ ...prev, platforms: null }));
     };
     const handleAddKeyword = () => {
+        if (hasReachedKeywordLimit) {
+            setErrors(prev => ({ ...prev, keywords: `Your plan limit is ${keywordLimit} keywords per alert.` }));
+            return;
+        }
         const trimmed = currentKeyword.trim();
         if (trimmed && !(formData.keywords || []).includes(trimmed)) {
             setFormData((prev) => ({ ...prev, keywords: [...(prev.keywords || []), trimmed], }));
@@ -171,36 +178,57 @@ function EditAlertModal({ alert, onClose, onSave }) {
                         {errors.general}
                     </div>
                 )}
+
                 <div>
                     <label className="block text-sm font-medium text-slate-300 mb-1">Title</label>
                     <input name="title" type="text" value={formData.title || ''} onChange={handleChange}
                         className={`${inputClasses} ${errors.title ? 'border-red-500' : 'border-slate-600'}`} />
                     {errors.title && <p className="mt-1 text-xs text-red-400">{errors.title}</p>}
                 </div>
+
                 <div>
                     <label className="block text-sm font-medium text-slate-300 mb-1">Description</label>
                     <textarea name="description" value={formData.description || ''} onChange={handleChange} rows={3} className={inputClasses} />
                 </div>
+
                 <div>
                     <label className="block text-sm font-medium text-slate-300 mb-1">Keywords</label>
+                    {keywordLimit && <p className="text-xs text-slate-400 mb-1">Limit: {(formData.keywords || []).length} / {keywordLimit}</p>}
                     <div className="flex items-center gap-2">
-                        <input type="text" value={currentKeyword} onChange={(e) => setCurrentKeyword(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddKeyword(); } }}
+                        <input type="text" value={currentKeyword}
+                            onChange={(e) => setCurrentKeyword(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault(); handleAddKeyword();
+                                }
+                            }}
                             placeholder="Add a keyword..."
                             className={`${inputClasses} ${errors.keywords ? 'border-red-500' : 'border-slate-600'}`} />
-                        <button type="button" onClick={handleAddKeyword} className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg flex-shrink-0"><PlusCircle size={20} /></button>
+                        <button type="button" onClick={handleAddKeyword}
+                            disabled={hasReachedKeywordLimit}
+                            className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg flex-shrink-0 disabled:opacity-50">
+                            <PlusCircle size={20} />
+                        </button>
                     </div>
                     {errors.keywords && <p className="mt-1 text-xs text-red-400">{errors.keywords}</p>}
                     <div className="flex flex-wrap gap-2 mt-2 max-h-32 overflow-y-auto">
                         {(formData.keywords || []).map((kw) => (<span key={kw} className="flex items-center gap-1 bg-slate-600 text-sm px-2 py-1 rounded-md">{kw}<button type="button" onClick={() => handleRemoveKeyword(kw)} className="text-gray-400 hover:text-white"><X size={14} /></button></span>))}
                     </div>
                 </div>
+
                 <div>
                     <label className="block text-sm font-medium text-slate-300 mb-1">Platforms</label>
-                    <div className={`grid grid-cols-2 sm:grid-cols-3 gap-3 mt-2 p-3 rounded-lg border ${errors.platforms ? 'border-red-500' : 'border-transparent'}`}>
-                        {PLATFORM_OPTIONS.map((p) => (<label key={p} className="flex items-center gap-2 text-slate-300 cursor-pointer"><input type="checkbox" checked={(formData.platforms || []).includes(p)} onChange={() => handlePlatformChange(p)} className="h-4 w-4 rounded bg-slate-700 border-slate-500 text-blue-500 focus:ring-blue-600" />{p}</label>))}
+                    <div className={`grid grid-cols-2 sm:grid-cols-3 gap-y-2 mt-2 rounded-lg border ${errors.platforms ? 'border-red-500' : 'border-transparent'}`}>
+                        {PLATFORM_OPTIONS.map((p) => (
+                            <label key={p} className="flex items-center gap-2 text-slate-300 cursor-pointer p-2 rounded-md hover:bg-slate-700/50">
+                                <input type="checkbox" checked={(formData.platforms || []).includes(p)} onChange={() => handlePlatformChange(p)} className="h-4 w-4 rounded bg-slate-700 border-slate-500 text-blue-500 focus:ring-blue-600" />
+                                {p}
+                            </label>
+                        ))}
                     </div>
                     {errors.platforms && <p className="mt-1 text-xs text-red-400">{errors.platforms}</p>}
                 </div>
+
                 <div>
                     <label className="block text-sm font-medium text-slate-300 mb-1">Severity</label>
                     <select name="severity" value={formData.severity || 'Medium'} onChange={handleChange} className={inputClasses}>
@@ -213,7 +241,7 @@ function EditAlertModal({ alert, onClose, onSave }) {
 }
 
 // --- CreateAlertModal Component ---
-function CreateAlertModal({ isOpen, onClose, handleCreateAlert }) {
+function CreateAlertModal({ isOpen, onClose, handleCreateAlert, keywordLimit }) {
     const [formData, setFormData] = useState({
         title: '',
         description: '',
@@ -341,8 +369,13 @@ function CreateAlertModal({ isOpen, onClose, handleCreateAlert }) {
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-slate-300 mb-1">Platforms</label>
-                    <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-2 p-3 rounded-lg border ${errors.platforms ? 'border-red-500' : 'border-transparent'}`}>
-                        {PLATFORM_OPTIONS.map((p) => (<label key={p} className="flex items-center gap-2 text-slate-300 cursor-pointer"><input type="checkbox" checked={formData.platforms.includes(p)} onChange={() => handlePlatformChange(p)} className="h-4 w-4 rounded bg-slate-700 border-slate-600 text-blue-500 focus:ring-blue-600" />{p}</label>))}
+                    <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-y-2 mt-2 rounded-lg border ${errors.platforms ? 'border-red-500' : 'border-transparent'}`}>
+                        {PLATFORM_OPTIONS.map((p) => (
+                            <label key={p} className="flex items-center gap-2 text-slate-300 cursor-pointer p-2 rounded-md hover:bg-slate-700/50">
+                                <input type="checkbox" checked={formData.platforms.includes(p)} onChange={() => handlePlatformChange(p)} className="h-4 w-4 rounded bg-slate-700 border-slate-600 text-blue-500 focus:ring-blue-600" />
+                                {p}
+                            </label>
+                        ))}
                     </div>
                     {errors.platforms && <p className="mt-1 text-xs text-red-400">{errors.platforms}</p>}
                 </div>
@@ -357,8 +390,31 @@ function CreateAlertModal({ isOpen, onClose, handleCreateAlert }) {
     );
 }
 
+
 // --- Main Page Component ---
 export default function AlertsPage() {
+    const { user, isLoading: isAuthLoading } = useAuth();
+    const isFreeTier = user && user.subscriptionTier === 'Free';
+    const { mutate: globalMutate } = useSWRConfig();
+    const { data: statsData, isLoading: isStatsLoading } = useSWR(
+        user ? '/api/alerts/stats' : null,
+        fetcher
+    );
+    const { alertLimit, keywordLimit, currentAlertCount, hasReachedAlertLimit } = useMemo(() => {
+        if (!user) return { hasReachedAlertLimit: true };
+        const plan = TIER_PLANS[user.subscriptionTier];
+        if (!plan) return { hasReachedAlertLimit: true };
+        const alertLimit = plan.limits.alerts;
+        const keywordLimit = plan.limits.keywords;
+        const currentAlertCount = statsData?.totalAlerts ?? 0;
+        return {
+            alertLimit,
+            keywordLimit,
+            currentAlertCount,
+            hasReachedAlertLimit: currentAlertCount >= alertLimit
+        };
+    }, [user, statsData]);
+
     const [currentPage, setCurrentPage] = useState(1);
     const [isScanning, setIsScanning] = useState(false);
     const [scanMessage, setScanMessage] = useState({ type: '', text: '' });
@@ -392,9 +448,10 @@ export default function AlertsPage() {
         return `/api/alerts?${params.toString()}`;
     }, [currentPage, debouncedSearchTerm, alertSearchFields, selectedStatus, selectedSeverity, selectedPlatforms]);
 
-    const { data, error, isLoading, mutate } = useSWR(apiUrl, fetcher, { keepPreviousData: true });
+    const { data, error, isLoading: isSWRLoading, mutate } = useSWR(apiUrl, fetcher, { keepPreviousData: true });
     const alerts = data?.alerts || [];
     const totalPages = data?.totalPages || 1;
+    const isLoading = (isSWRLoading && !data) || isAuthLoading || (user && isStatsLoading);
 
     useEffect(() => {
         if (currentPage !== 1) setCurrentPage(1);
@@ -404,31 +461,29 @@ export default function AlertsPage() {
         setCurrentPage(1);
         setAlertSearchFields((prev) => ({ ...prev, [field.toLowerCase()]: !prev[field.toLowerCase()] }));
     };
-
     const handleDeleteAlert = (id) => { setConfirmDeleteId(id); };
-
     const executeDelete = async () => {
         if (!confirmDeleteId || isDeleting) return;
         setIsDeleting(true);
         try {
             await api(`alerts/${confirmDeleteId}`, { method: 'DELETE' });
             mutate();
+            globalMutate('/api/alerts/stats');
             if (alerts.length === 1 && currentPage > 1) { setCurrentPage(currentPage - 1); }
         } catch (err) { console.error('Error deleting alert:', err); }
         finally { setIsDeleting(false); setConfirmDeleteId(null); }
     };
-
     const handleUpdateAlert = async (id, updatedData) => {
         await api(`alerts/${id}`, { method: 'PUT', body: JSON.stringify(updatedData) });
         mutate();
         handleCloseEditModal();
     };
-
     const handleCreateAlert = async (formData, setErrors) => {
         try {
             await api('alerts', { method: 'POST', body: JSON.stringify(formData) });
             if (currentPage !== 1) setCurrentPage(1);
             mutate();
+            globalMutate('/api/alerts/stats');
         } catch (err) {
             console.error("Error creating alert:", err);
             const errorMessage = err.message || "Failed to create alert.";
@@ -443,7 +498,6 @@ export default function AlertsPage() {
             throw err;
         }
     };
-
     const handleScanAll = async () => {
         setIsScanning(true);
         setScanMessage({ type: '', text: '' });
@@ -488,7 +542,6 @@ export default function AlertsPage() {
             setTimeout(() => setBulkMessage({ type: '', text: '' }), 7000);
         }
     };
-
     const handleBulkDelete = async () => {
         if (selectedAlerts.length === 0 || isBulkDeleting) return;
         setIsBulkDeleting(true);
@@ -501,6 +554,7 @@ export default function AlertsPage() {
             setBulkMessage({ type: 'success', text: response.message || 'Selected alerts deleted.' });
             setSelectedAlerts([]);
             mutate();
+            globalMutate('/api/alerts/stats');
         } catch (err) {
             const errorMessage = err.message || 'Failed to delete selected alerts.';
             setBulkMessage({ type: 'error', text: errorMessage });
@@ -510,20 +564,34 @@ export default function AlertsPage() {
             setTimeout(() => setBulkMessage({ type: '', text: '' }), 7000);
         }
     };
-
     const handleClearSelection = () => setSelectedAlerts([]);
 
     return (
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 overflow-x-hidden">
+        <div className="container mx-auto p-3 sm:p-6 lg:p-8 py-6 overflow-x-hidden min-h-screen">
             {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-white">Manage Alerts</h1>
-                <div className="flex items-center gap-4 w-full sm:w-auto">
-                    <button onClick={() => setIsCreateModalOpen(true)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 font-semibold rounded-full text-white bg-blue-600 hover:bg-blue-700 transition-all">
-                        <PlusCircle size={20} /> Create New Alert
+
+                {/* 1. Đổi container thành flex-col sm:flex-row */}
+                {/* 2. Đổi nút bấm thành w-full sm:w-auto và h-12 cho đồng đều */}
+                <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                    <button
+                        onClick={() => setIsCreateModalOpen(true)}
+                        disabled={hasReachedAlertLimit || isLoading}
+                        title={hasReachedAlertLimit ? `Your plan limit (${currentAlertCount}/${alertLimit} alerts) has been reached. Upgrade to create more.` : "Create a new alert"}
+                        className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 h-12 text-sm sm:text-base font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {hasReachedAlertLimit ? <Lock size={18} /> : <PlusCircle size={20} />}
+                        Create New Alert
                     </button>
-                    <button onClick={handleScanAll} disabled={isScanning} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 font-semibold rounded-full text-white bg-indigo-600 hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-                        <Search size={20} />{isScanning ? 'Scanning...' : 'Scan All Posts'}
+                    <button
+                        onClick={handleScanAll}
+                        disabled={isScanning}
+                        className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 h-12 text-sm sm:text-base font-semibold rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {/* 3. Thêm Loader2 và animate-spin */}
+                        {isScanning ? <Loader2 size={20} className="animate-spin" /> : <Search size={20} />}
+                        {isScanning ? 'Scanning...' : 'Scan All Posts'}
                     </button>
                 </div>
             </div>
@@ -538,14 +606,25 @@ export default function AlertsPage() {
                         </button>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                        <button
-                            onClick={handleBulkCreateCaseStudies}
-                            disabled={isCreatingBulk || isBulkDeleting}
-                            className="flex items-center justify-center gap-2 px-4 py-2 font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
-                        >
-                            <FilePlus size={20} />
-                            {isCreatingBulk ? 'Creating...' : 'Create Case Studies'}
-                        </button>
+                        {!isFreeTier ? (
+                            <button
+                                onClick={handleBulkCreateCaseStudies}
+                                disabled={isCreatingBulk || isBulkDeleting}
+                                className="flex items-center justify-center gap-2 px-4 py-2 font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
+                            >
+                                <FilePlus size={20} />
+                                {isCreatingBulk ? 'Creating...' : 'Create Case Studies'}
+                            </button>
+                        ) : (
+                            <button
+                                disabled
+                                className="flex items-center justify-center gap-2 px-4 py-2 font-semibold rounded-lg text-slate-400 bg-slate-700 transition-all opacity-50 cursor-not-allowed w-full sm:w-auto"
+                                title="Upgrade to VIP/Pro to create case studies"
+                            >
+                                <Lock size={18} />
+                                Create Case Studies
+                            </button>
+                        )}
                         <button
                             onClick={() => setConfirmBulkDelete(true)}
                             disabled={isCreatingBulk || isBulkDeleting}
@@ -561,10 +640,9 @@ export default function AlertsPage() {
             {scanMessage.text && (<div className={`p-4 rounded-lg mb-6 flex items-center gap-3 ${scanMessage.type === 'success' ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'}`}><CheckCircle size={20} /><span>{scanMessage.text}</span></div>)}
 
             {/* Khung nội dung chính */}
-            <div className="bg-slate-800/50 p-6 rounded-lg">
+            <div className="bg-slate-800/50 p-3 sm:p-6 rounded-lg">
                 <h2 className="text-xl font-semibold text-white mb-4">Existing Alerts</h2>
 
-                {/* FilterBar */}
                 <FilterBar
                     searchTerm={searchTerm}
                     onSearchChange={(e) => setSearchTerm(e.target.value)}
@@ -584,100 +662,99 @@ export default function AlertsPage() {
                 />
 
                 {/* --- Loading State (Skeleton) --- */}
-                {isLoading && !data && (
+                {isLoading ? (
                     <div className="space-y-4 py-10">
                         {[...Array(ITEMS_PER_PAGE)].map((_, index) => (
                             <AlertCardSkeleton key={index} />
                         ))}
                     </div>
-                )}
-
-                {/* --- Error State --- */}
-                {error && (
-                    <div className="text-center py-10 px-4 border-2 border-dashed border-red-900/50 rounded-lg bg-red-900/10">
-                        <AlertIcon className="mx-auto h-12 w-12 text-red-400" />
-                        <h3 className="mt-2 text-lg font-semibold text-white">Error Loading Data</h3>
-                        <p className="mt-1 text-sm text-red-300">{error.message || 'Could not load alerts list.'}</p>
-                        <div className="mt-6">
-                            <button type="button" onClick={() => mutate()} className="inline-flex items-center rounded-md bg-slate-700 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
-                                <RefreshCw className="w-4 h-4 mr-2" />
-                                Retry
-                            </button>
+                ) :
+                    /* --- Error State --- */
+                    error ? (
+                        <div className="text-center py-10 px-4 border-2 border-dashed border-red-900/50 rounded-lg bg-red-900/10">
+                            <AlertIcon className="mx-auto h-12 w-12 text-red-400" />
+                            <h3 className="mt-2 text-lg font-semibold text-white">Error Loading Data</h3>
+                            <p className="mt-1 text-sm text-red-300">{error.message || 'Could not load alerts list.'}</p>
+                            <div className="mt-6">
+                                <button type="button" onClick={() => mutate()} className="inline-flex items-center rounded-md bg-slate-700 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+                                    <RefreshCw className="w-4 h-4 mr-2" />
+                                    Retry
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                )}
-
-                {/* --- Data / Empty State --- */}
-                {!isLoading && !error && (
-                    <>
-                        <div className="space-y-4">
-                            {alerts.length > 0 ? (alerts.map((a) => (
-                                <div key={a.id} className={`p-4 rounded-lg transition-colors duration-200 ${selectedAlerts.includes(a.id) ? 'bg-blue-900/50 ring-2 ring-blue-500' : 'bg-slate-700/60 hover:bg-slate-700'}`}>
-                                    <div className="flex items-start gap-4">
-                                        <input type="checkbox" checked={selectedAlerts.includes(a.id)} onChange={() => handleSelectAlert(a.id)} className="mt-1.5 h-5 w-5 flex-shrink-0 rounded bg-slate-600 border-slate-500 text-blue-500 focus:ring-blue-600 focus:ring-offset-slate-800 cursor-pointer" aria-label={`Select alert ${a.title}`} />
-                                        <div className="flex-grow min-w-0">
-                                            <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
-                                                <div className="min-w-0 flex-1">
-                                                    <Link href={`/dashboard/alerts/${a.id}`} className="block group">
-                                                        <h3 className="font-bold text-lg text-white group-hover:text-blue-400 transition-colors cursor-pointer break-words line-clamp-1" title={a.title}>{a.title}</h3>
-                                                    </Link>
-                                                    <p className="text-sm text-gray-400 break-words mt-1 line-clamp-2" title={a.description}>{a.description || <span className="italic text-slate-500">No description</span>}</p>
+                    ) : (
+                        /* --- Data / Empty State --- */
+                        <>
+                            <div className="space-y-4">
+                                {alerts.length > 0 ? (alerts.map((a) => (
+                                    <div key={a.id} className={`p-4 rounded-lg transition-colors duration-200 ${selectedAlerts.includes(a.id) ? 'bg-blue-900/50 ring-2 ring-blue-500' : 'bg-slate-700/60 hover:bg-slate-700'}`}>
+                                        <div className="flex items-start gap-3 sm:gap-4">
+                                            <input type="checkbox" checked={selectedAlerts.includes(a.id)} onChange={() => handleSelectAlert(a.id)} className="mt-1.5 h-5 w-5 flex-shrink-0 rounded bg-slate-600 border-slate-500 text-blue-500 focus:ring-blue-600 focus:ring-offset-slate-800 cursor-pointer" aria-label={`Select alert ${a.title}`} />
+                                            <div className="flex-grow min-w-0">
+                                                <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
+                                                    <div className="min-w-0 flex-1">
+                                                        <Link href={`/dashboard/alerts/${a.id}`} className="block group">
+                                                            <h3 className="font-bold text-base sm:text-lg text-white group-hover:text-blue-400 transition-colors cursor-pointer break-words line-clamp-1" title={a.title}>{a.title}</h3>
+                                                        </Link>
+                                                        <p className="text-sm text-gray-400 break-words mt-1 line-clamp-2" title={a.description}>{a.description || <span className="italic text-slate-500">No description</span>}</p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 flex-shrink-0 flex-wrap mt-2 sm:mt-0">
+                                                        <span className={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap ${a.severity === 'Critical' ? 'bg-red-500/20 text-red-300' : a.severity === 'High' ? 'bg-orange-500/20 text-orange-300' : a.severity === 'Medium' ? 'bg-yellow-500/20 text-yellow-300' : 'bg-green-500/20 text-green-300'}`}>{a.severity}</span>
+                                                        <span className={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap ${a.status === 'ACTIVE' ? 'bg-green-500/20 text-green-300' : 'bg-slate-600/50 text-slate-400'}`}>{a.status}</span>
+                                                        <button onClick={() => handleOpenEditModal(a)} className="p-2 text-slate-400 hover:text-white hover:bg-slate-600 rounded-full transition-colors" aria-label="Edit Alert"><Edit size={18} /></button>
+                                                        <button onClick={() => handleDeleteAlert(a.id)} className="p-2 text-red-500 hover:text-red-400 hover:bg-slate-600 rounded-full transition-colors" aria-label="Delete Alert"><Trash2 size={18} /></button>
+                                                    </div>
                                                 </div>
-                                                <div className="flex items-center gap-2 flex-shrink-0 flex-wrap mt-2 sm:mt-0">
-                                                    <span className={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap ${a.severity === 'Critical' ? 'bg-red-500/20 text-red-300' : a.severity === 'High' ? 'bg-orange-500/20 text-orange-300' : a.severity === 'Medium' ? 'bg-yellow-500/20 text-yellow-300' : 'bg-green-500/20 text-green-300'}`}>{a.severity}</span>
-                                                    <span className={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap ${a.status === 'ACTIVE' ? 'bg-green-500/20 text-green-300' : 'bg-slate-600/50 text-slate-400'}`}>{a.status}</span>
-                                                    <button onClick={() => handleOpenEditModal(a)} className="p-2 text-slate-400 hover:text-white hover:bg-slate-600 rounded-full transition-colors" aria-label="Edit Alert"><Edit size={18} /></button>
-                                                    <button onClick={() => handleDeleteAlert(a.id)} className="p-2 text-red-500 hover:text-red-400 hover:bg-slate-600 rounded-full transition-colors" aria-label="Delete Alert"><Trash2 size={18} /></button>
-                                                </div>
-                                            </div>
-                                            <div className="mt-3 border-t border-slate-600/50 pt-3">
-                                                <div className="flex flex-wrap items-center gap-2 break-words whitespace-normal max-w-full mb-2">
-                                                    <Tag size={16} className="text-gray-400 flex-shrink-0 mr-1" />
-                                                    {a.keywords?.length > 0 ? a.keywords.slice(0, 7).map((kw) => (<span key={kw} className="bg-slate-600 text-xs px-2 py-0.5 rounded">{kw}</span>)) : <span className="text-xs text-slate-500 italic">No keywords</span>}
-                                                    {a.keywords?.length > 7 && <span className="text-xs text-slate-500">...</span>}
-                                                </div>
-                                                <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
-                                                    <Globe size={16} className="text-gray-400 flex-shrink-0 mr-1" />
-                                                    {a.platforms?.length > 0 ? a.platforms.slice(0, 5).map((p) => (<span key={p} className="bg-blue-500/30 text-blue-300 px-2 py-0.5 rounded text-white">{p}</span>)) : <span className="text-xs text-slate-500 italic">No platforms specified</span>}
-                                                    {a.platforms?.length > 5 && <span className="text-xs text-slate-500">...</span>}
+                                                <div className="mt-3 border-t border-slate-600/50 pt-3">
+                                                    <div className="flex flex-wrap items-center gap-2 break-words whitespace-normal max-w-full mb-2">
+                                                        <Tag size={16} className="text-gray-400 flex-shrink-0 mr-1" />
+                                                        {a.keywords?.length > 0 ? a.keywords.slice(0, 7).map((kw) => (<span key={kw} className="bg-slate-600 text-xs px-2 py-0.5 rounded">{kw}</span>)) : <span className="text-xs text-slate-500 italic">No keywords</span>}
+                                                        {a.keywords?.length > 7 && <span className="text-xs text-slate-500">...</span>}
+                                                    </div>
+                                                    <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
+                                                        <Globe size={16} className="text-gray-400 flex-shrink-0 mr-1" />
+                                                        {a.platforms?.length > 0 ? a.platforms.slice(0, 5).map((p) => (<span key={p} className="bg-blue-500/30 text-blue-300 px-2 py-0.5 rounded text-white">{p}</span>)) : <span className="text-xs text-slate-500 italic">No platforms specified</span>}
+                                                        {a.platforms?.length > 5 && <span className="text-xs text-slate-500">...</span>}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                            ))) : (
-                                <div className="text-center py-16 px-4 border-2 border-dashed border-slate-700 rounded-lg">
-                                    <AlertIcon className="mx-auto h-12 w-12 text-slate-500" />
-                                    <h3 className="mt-2 text-lg font-semibold text-white">No Alerts Found</h3>
-                                    <p className="mt-1 text-sm text-slate-400">
-                                        {searchTerm || selectedStatus.length > 0 || selectedSeverity.length > 0 || selectedPlatforms.length > 0
-                                            ? "No alerts match your current filters."
-                                            : "Get started by creating your first alert."
-                                        }
-                                    </p>
-                                    <div className="mt-6">
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsCreateModalOpen(true)}
-                                            className="inline-flex items-center rounded-md bg-blue-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
-                                        >
-                                            <PlusCircle className="-ml-0.5 mr-1.5 h-5 w-5" />
-                                            Create New Alert
-                                        </button>
+                                ))) : (
+                                    <div className="text-center py-16 px-4 border-2 border-dashed border-slate-700 rounded-lg">
+                                        <AlertIcon className="mx-auto h-12 w-12 text-slate-500" />
+                                        <h3 className="mt-2 text-lg font-semibold text-white">No Alerts Found</h3>
+                                        <p className="mt-1 text-sm text-slate-400">
+                                            {searchTerm || selectedStatus.length > 0 || selectedSeverity.length > 0 || selectedPlatforms.length > 0
+                                                ? "No alerts match your current filters."
+                                                : "Get started by creating your first alert."
+                                            }
+                                        </p>
+                                        <div className="mt-6">
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsCreateModalOpen(true)}
+                                                disabled={hasReachedAlertLimit || isLoading}
+                                                title={hasReachedAlertLimit ? `Your plan limit (${currentAlertCount}/${alertLimit} alerts) has been reached. Upgrade to create more.` : "Create a new alert"}
+                                                className="inline-flex items-center rounded-md bg-blue-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                {hasReachedAlertLimit ? <Lock size={18} className="-ml-0.5 mr-1.5 h-5 w-5" /> : <PlusCircle className="-ml-0.5 mr-1.5 h-5 w-5" />}
+                                                Create New Alert
+                                            </button>
+                                        </div>
                                     </div>
+                                )}
+                            </div>
+                            {/* Phân trang */}
+                            {totalPages > 1 && (
+                                <div className="flex flex-wrap justify-center items-center gap-4 mt-8">
+                                    <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-700 rounded-md hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"><ChevronLeft size={16} /> Previous</button>
+                                    <span className="text-sm text-gray-400">Page {currentPage} / {totalPages}</span>
+                                    <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-700 rounded-md hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed">Next <ChevronRight size={16} /></button>
                                 </div>
                             )}
-                        </div>
-                        {/* Phân trang */}
-                        {totalPages > 1 && (
-                            <div className="flex justify-center items-center gap-4 mt-8 flex-wrap">
-                                <button onClick={() => handlePageChange(currentPage - 1)} disabled={currentPage === 1} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-700 rounded-md hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"><ChevronLeft size={16} /> Previous</button>
-                                <span className="text-sm text-gray-400">Page {currentPage} / {totalPages}</span>
-                                <button onClick={() => handlePageChange(currentPage + 1)} disabled={currentPage === totalPages} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-700 rounded-md hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed">Next <ChevronRight size={16} /></button>
-                            </div>
-                        )}
-                    </>
-                )}
+                        </>
+                    )}
             </div>
 
             {/* Modals */}
@@ -685,12 +762,14 @@ export default function AlertsPage() {
                 isOpen={isCreateModalOpen}
                 onClose={() => setIsCreateModalOpen(false)}
                 handleCreateAlert={handleCreateAlert}
+                keywordLimit={keywordLimit}
             />
             {isEditModalOpen && editingAlert && (
                 <EditAlertModal
                     alert={editingAlert}
                     onClose={handleCloseEditModal}
                     onSave={handleUpdateAlert}
+                    keywordLimit={keywordLimit}
                 />
             )}
             {confirmDeleteId && (
@@ -714,8 +793,6 @@ export default function AlertsPage() {
                     </div>
                 </Modal>
             )}
-
-            {/* --- BULK DELETE MODAL --- */}
             {confirmBulkDelete && (
                 <Modal
                     isOpen={true}

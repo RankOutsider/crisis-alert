@@ -6,7 +6,7 @@ const dotenv = require('dotenv');
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
-const cookieParser = require('cookie-parser'); // Import đã cài
+const cookieParser = require('cookie-parser');
 
 const { connectDB, sequelize } = require('./config/db');
 const { runScanJob } = require('./utils/scan_job');
@@ -37,7 +37,7 @@ const io = new Server(httpServer, {
 // === MIDDLEWARES ===
 // Cấu hình CORS
 app.use(cors({
-    origin: CLIENT_URL, // Dùng biến đã định nghĩa
+    origin: CLIENT_URL,
     credentials: true
 }));
 app.use(express.json());
@@ -45,7 +45,6 @@ app.use(morgan('dev'));
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 
-// Middleware để nhúng 'io' vào mọi request
 app.use((req, res, next) => {
     req.io = io;
     next();

@@ -1,4 +1,3 @@
-// frontend/app/login/page.jsx
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -28,6 +27,9 @@ export default function LoginPage() {
     const [isCheckingAuth, setIsCheckingAuth] = useState(true);
     const router = useRouter();
 
+    const [unverifiedEmail, setUnverifiedEmail] = useState(null);
+    const [resendLoading, setResendLoading] = useState(false);
+
     const {
         values,
         errors,
@@ -56,6 +58,8 @@ export default function LoginPage() {
         }
 
         setLoading(true);
+        setUnverifiedEmail(null); // Reset trạng thái "chưa xác thực"
+        setErrors({}); // Reset lỗi cũ
 
         try {
             const data = await api('auth/login', {
@@ -64,14 +68,62 @@ export default function LoginPage() {
             });
             setToken(data.token);
             router.replace('/dashboard');
+
         } catch (err) {
-            setErrors({ general: err.message || "Login failed!" });
+            let errorMessage = "Login failed!";
+            let errorEmail = null;
+
+            try {
+                // Thử parse lỗi JSON
+                const parsedError = JSON.parse(err.message);
+                errorMessage = parsedError.message || errorMessage;
+                errorEmail = parsedError.email || null; // Lấy email nếu backend trả về
+            } catch (parseError) {
+                // Nếu không phải JSON, giữ nguyên message
+                errorMessage = err.message || errorMessage;
+            }
+
+            // Nếu phát hiện có email, lưu nó vào state
+            if (errorEmail) {
+                setUnverifiedEmail(errorEmail);
+            }
+
+            setErrors({ general: errorMessage });
+
         } finally {
             setLoading(false);
         }
     };
 
-    // JSX kiểm tra auth 
+    const handleVerifyClick = async (emailToVerify) => {
+        setResendLoading(true);
+        setErrors({}); // Xóa lỗi "Account not verified..."
+        try {
+            // 1. Gọi API "resend-otp" TRƯỚC
+            await api("auth/resend-otp", {
+                method: "POST",
+                body: JSON.stringify({ email: emailToVerify }),
+            });
+
+            // 2. SAU KHI GỌI XONG, điều hướng đến trang verify
+            router.push(`/verify-otp?email=${encodeURIComponent(emailToVerify)}`);
+        } catch (err) {
+            // Xử lý nếu GỬI LẠI OTP bị lỗi
+            let errorMessage = "Failed to send OTP. Please try again.";
+
+            try {
+                const parsedError = JSON.parse(err.message);
+                errorMessage = parsedError.message || errorMessage;
+            } catch (parseError) {
+                errorMessage = err.message || errorMessage;
+            }
+            setErrors({ general: errorMessage }); // Hiển thị lỗi này ở ô màu đỏ
+        } finally {
+            setResendLoading(false);
+        }
+    };
+
+    // JSX kiểm tra auth
     if (isCheckingAuth) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-gray-900">
@@ -90,9 +142,31 @@ export default function LoginPage() {
                     Login to Crisis Alert
                 </h1>
 
+                {/* Lỗi chung */}
                 {errors.general && (
                     <div className="bg-red-900/50 border border-red-700 text-red-300 p-3 rounded-lg mb-4 text-center text-sm sm:text-base">
                         {errors.general}
+                    </div>
+                )}
+
+                {unverifiedEmail && (
+                    <div className="bg-blue-900/50 border border-blue-700 text-blue-300 p-3 rounded-lg mb-4 text-center text-sm sm:text-base">
+                        Account not verified. <br />
+                        <button
+                            type="button"
+                            disabled={resendLoading} // Vô hiệu hóa khi đang gửi
+                            onClick={() => handleVerifyClick(unverifiedEmail)}
+                            className="font-bold text-white underline hover:text-blue-200 cursor-pointer bg-transparent border-none p-0 disabled:opacity-50 inline-flex items-center"
+                        >
+                            {resendLoading ? (
+                                <>
+                                    <Loader2 size={16} className="animate-spin mr-2" />
+                                    Sending verification email...
+                                </>
+                            ) : (
+                                "Click here to verify your account."
+                            )}
+                        </button>
                     </div>
                 )}
 
@@ -135,6 +209,13 @@ export default function LoginPage() {
                         {errors.password && (
                             <p className="mt-1 text-xs text-red-400">{errors.password}</p>
                         )}
+                        <div className="text-right mt-2">
+                            <Link href="/forgot-password">
+                                <span className="text-xs sm:text-sm text-blue-400 hover:text-blue-300 font-medium transition duration-300 cursor-pointer">
+                                    Forgot Password?
+                                </span>
+                            </Link>
+                        </div>
                     </div>
 
                     <div className="pt-3 sm:pt-4 flex justify-center">

@@ -2,12 +2,16 @@
 "use client";
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, AlertCircle, LogOut, X, Settings, FileSearch, Book, User as UserIcon } from 'lucide-react';
+import {
+    LayoutDashboard, AlertCircle, LogOut, X, Settings,
+    FileSearch, Book, User as UserIcon, Zap
+} from 'lucide-react';
 import { useEffect } from 'react';
-import { clearToken, getToken } from '@/utils/api';
+import { clearToken } from '@/utils/api';
 import { useSWRConfig } from 'swr';
 import { toast } from 'react-toastify';
 import { socket } from '@/utils/socket';
+import { useAuth } from '@/app/providers';
 
 const menuItems = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -32,9 +36,11 @@ const getUserIdFromToken = () => {
 export default function Sidebar({ isOpen, onClose }) {
     const pathname = usePathname();
     const router = useRouter();
-    const { username, userId } = getUserIdFromToken();
     const { mutate } = useSWRConfig();
 
+    const { user } = useAuth();
+    const userId = user?.id;
+    const username = user?.username;
 
     useEffect(() => {
         console.log("🧠 useEffect ran — setting up socket listeners...");
@@ -60,8 +66,8 @@ export default function Sidebar({ isOpen, onClose }) {
 
             toast.success(
                 `Alert "${data.alertTitle}" found ${data.newPostCount} new post(s)!`,
-                { 
-                    toastId: `new_match_${data.alertId}_${Date.now()}`, 
+                {
+                    toastId: `new_match_${data.alertId}_${Date.now()}`,
                     containerId: "dashboard-toast"
                 }
             );
@@ -117,6 +123,7 @@ export default function Sidebar({ isOpen, onClose }) {
                     </button>
                 </div>
 
+                {/* Welcome */}
                 {username && (
                     <div className="mt-4 p-2">
                         <p className="text-sm text-gray-400">Welcome,</p>
@@ -129,6 +136,23 @@ export default function Sidebar({ isOpen, onClose }) {
                         const isActive = (item.href === '/dashboard')
                             ? pathname === item.href
                             : pathname.startsWith(item.href);
+
+                        const isFreeTier = user?.subscriptionTier === 'Free';
+                        const isCaseStudyLink = item.name === 'Case Studies';
+                        if (isCaseStudyLink && isFreeTier) {
+                            return (
+                                <div
+                                    key={item.name}
+                                    // Dùng 'title' để giải thích vì sao bị vô hiệu hóa
+                                    title="Nâng cấp lên VIP hoặc Pro để sử dụng Case Studies"
+                                    className="flex items-center gap-3 px-4 py-2 rounded-md transition-colors cursor-not-allowed text-gray-600"
+                                >
+                                    <item.icon size={20} />
+                                    {/* Thêm gạch ngang để rõ hơn */}
+                                    <span className="text-sm sm:text-base line-through">{item.name}</span>
+                                </div>
+                            );
+                        }
 
                         return (
                             <Link
@@ -148,6 +172,15 @@ export default function Sidebar({ isOpen, onClose }) {
                 </nav>
 
                 <div className="mt-auto pt-4 border-t border-slate-700/50">
+                    <Link
+                        href="/buy"
+                        onClick={onClose}
+                        className={`flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg transition-colors mb-4 bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-semibold text-sm sm:text-base`}
+                    >
+                        <Zap size={18} />
+                        <span>Upgrade Plan</span>
+                    </Link>
+
                     <Link
                         href="/dashboard/profile"
                         onClick={onClose}

@@ -1,4 +1,3 @@
-// frontend/app/dashboard/casestudies/page.jsx
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
@@ -8,11 +7,13 @@ import useSWR from 'swr';
 import {
     BarChart3, Clock, MessageSquare, ExternalLink, Search,
     ChevronLeft, ChevronRight, AlertCircle, RefreshCw, Trash2,
-    CheckCircle2, ShieldAlert, X
+    CheckCircle2, ShieldAlert, X,
+    Lock
 } from 'lucide-react';
 import { api, fetcher } from '@/utils/api';
 import FilterBar from '@/app/components/FilterBar';
 import Modal from '@/app/components/Modal';
+import { useAuth } from '@/app/providers.jsx';
 
 // HOOK useDebounce
 function useDebounce(value, delay) {
@@ -33,6 +34,10 @@ export default function CaseStudiesPage() {
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
+
+    // --- Lấy thông tin User ---
+    const { user, isLoading: isAuthLoading } = useAuth();
+    const isFreeTier = user && user.subscriptionTier === 'Free';
 
     // State
     const searchTermFromUrl = searchParams.get('q') || '';
@@ -57,6 +62,10 @@ export default function CaseStudiesPage() {
 
     // API URL Construction
     const apiUrl = useMemo(() => {
+        // --- CẬP NHẬT: Không gọi API nếu là Free hoặc đang chờ Auth ---
+        if (isAuthLoading) return null; // Chờ biết user là ai
+        if (isFreeTier) return null; // Không fetch nếu là free
+
         const params = new URLSearchParams(searchParams.toString());
         params.set('page', currentPage.toString());
         params.set('limit', ITEMS_PER_PAGE.toString());
@@ -74,10 +83,13 @@ export default function CaseStudiesPage() {
         }
 
         return `/api/casestudies?${params.toString()}`;
-    }, [debouncedSearchTerm, currentPage, searchParams]);
+    }, [debouncedSearchTerm, currentPage, searchParams, isAuthLoading, isFreeTier]); // <-- Thêm dependencies
 
     // Data Fetching
-    const { data, error, isLoading, mutate } = useSWR(apiUrl, fetcher, { keepPreviousData: true });
+    const { data, error, isLoading: isLoadingSWR, mutate } = useSWR(apiUrl, fetcher, { keepPreviousData: true });
+
+    // --- CẬP NHẬT: Logic loading tổng ---
+    const isLoading = (isLoadingSWR && !data) || (isAuthLoading && !data);
 
     // --- Process SWR Data ---
     const caseStudies = data?.caseStudies || [];
@@ -150,115 +162,142 @@ export default function CaseStudiesPage() {
                 availableFields={CASE_STUDY_SEARCH_FIELDS}
                 activeFields={activeFields}
                 onFieldChange={handleFieldChange}
+                // CẬP NHẬT: Vô hiệu hoá thanh search nếu bị khoá
+                disabled={isFreeTier}
             />
 
-            {/* --- Loading State (Skeleton) --- */}
-            {isLoading && !data && (
+            {/* --- 
+            CẬP NHẬT LOGIC RENDER CHÍNH 
+            Hiển thị 1 trong 4 trạng thái: Loading, Locked, Error, Data
+            --- 
+            */}
+
+            {/* --- 1. Loading State (Skeleton) --- */}
+            {isLoading ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 py-10">
                     {[...Array(ITEMS_PER_PAGE)].map((_, index) => (
                         <CaseStudyCardSkeleton key={index} />
                     ))}
                 </div>
-            )}
+            ) :
 
-            {/* --- Error State --- */}
-            {error && (
-                <div className="text-center py-10 px-4 border-2 border-dashed border-red-900/50 rounded-lg bg-red-900/10">
-                    <AlertCircle className="mx-auto h-12 w-12 text-red-400" />
-                    <h3 className="mt-2 text-lg font-semibold text-white">Error Loading Data</h3>
-                    <p className="mt-1 text-sm text-red-300">{error.message || 'Could not load case studies.'}</p>
-                    <div className="mt-6">
-                        <button
-                            type="button"
-                            onClick={() => mutate()}
-                            className="inline-flex items-center rounded-md bg-slate-700 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-                        >
-                            <RefreshCw className="w-4 h-4 mr-2" />
-                            Retry
-                        </button>
+                /* --- 2. Trạng thái Bị Khóa (Free Tier) --- */
+                isFreeTier ? (
+                    <div className="text-center py-16 px-4 border-2 border-dashed border-yellow-900/50 rounded-lg bg-yellow-900/10 mt-6">
+                        <Lock className="mx-auto h-12 w-12 text-yellow-400" />
+                        <h3 className="mt-2 text-lg font-semibold text-white">Feature Locked</h3>
+                        <p className="mt-1 text-sm text-yellow-300">
+                            Case Study generation and analysis are available for VIP and Pro users.
+                        </p>
+                        <div className="mt-6">
+                            <Link
+                                href="/buy"
+                                className="inline-flex items-center rounded-md bg-gradient-to-r from-blue-500 to-cyan-500 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:from-blue-600 hover:to-cyan-600"
+                            >
+                                Upgrade Your Plan
+                            </Link>
+                        </div>
                     </div>
-                </div>
-            )}
+                ) :
 
-            {/* --- Data / Empty State --- */}
-            {!isLoading && !error && data && (
-                <>
-                    {/* Danh sách Case Studies */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {caseStudies.length > 0 ? (caseStudies.map((study) => (
-                            // --- Card Case Study ---
-                            <div key={study.id} className="bg-slate-800/50 p-6 rounded-lg border border-slate-700 flex flex-col hover:border-blue-500 transition-colors overflow-hidden">
-                                <div className="flex justify-between items-start mb-3 gap-2">
-                                    <Link href={`/dashboard/casestudies/${study.id}`} className="block flex-1 min-w-0 group">
-                                        <h2 className="text-xl font-bold text-white truncate group-hover:text-blue-400 transition-colors" title={study.title}>{study.title}</h2>
-                                    </Link>
-                                    <div className="flex items-center gap-2 flex-shrink-0">
-                                        <span className={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap ${study.status === 'Resolved' ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'}`}>
-                                            {study.status}
-                                        </span>
+                    /* --- 3. Error State (Chỉ cho user trả phí nếu API lỗi) --- */
+                    error ? (
+                        <div className="text-center py-10 px-4 border-2 border-dashed border-red-900/50 rounded-lg bg-red-900/10 mt-6">
+                            <AlertCircle className="mx-auto h-12 w-12 text-red-400" />
+                            <h3 className="mt-2 text-lg font-semibold text-white">Error Loading Data</h3>
+                            <p className="mt-1 text-sm text-red-300">{error.message || 'Could not load case studies.'}</p>
+                            <div className="mt-6">
+                                <button
+                                    type="button"
+                                    onClick={() => mutate()}
+                                    className="inline-flex items-center rounded-md bg-slate-700 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                                >
+                                    <RefreshCw className="w-4 h-4 mr-2" />
+                                    Retry
+                                </button>
+                            </div>
+                        </div>
+                    ) :
+
+                        /* --- 4. Data / Empty State (Chỉ cho user trả phí) --- */
+                        (data) && (
+                            <>
+                                {/* Danh sách Case Studies */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+                                    {caseStudies.length > 0 ? (caseStudies.map((study) => (
+                                        // --- Card Case Study ---
+                                        <div key={study.id} className="bg-slate-800/50 p-6 rounded-lg border border-slate-700 flex flex-col hover:border-blue-500 transition-colors overflow-hidden">
+                                            <div className="flex justify-between items-start mb-3 gap-2">
+                                                <Link href={`/dashboard/casestudies/${study.id}`} className="block flex-1 min-w-0 group">
+                                                    <h2 className="text-xl font-bold text-white truncate group-hover:text-blue-400 transition-colors" title={study.title}>{study.title}</h2>
+                                                </Link>
+                                                <div className="flex items-center gap-2 flex-shrink-0">
+                                                    <span className={`text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap ${study.status === 'Resolved' ? 'bg-green-500/20 text-green-300' : 'bg-yellow-500/20 text-yellow-300'}`}>
+                                                        {study.status}
+                                                    </span>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(study.id); }}
+                                                        className="p-1 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-full transition-colors"
+                                                        title="Delete Case Study"
+                                                    >
+                                                        <Trash2 size={18} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <p className="text-gray-400 text-sm mb-4 flex-grow line-clamp-3">{study.summary}</p>
+                                            <div className="border-t border-slate-700 pt-4 space-y-2 text-sm">
+                                                <div className="flex justify-between text-gray-400"><span className="flex items-center gap-2"><MessageSquare size={16} /> Total Mentions:</span><span className="font-semibold text-white">{study.postCount || 0}</span></div>
+                                                <div className="flex justify-between text-gray-400"><span className="flex items-center gap-2"><Clock size={16} /> Date Range:</span><span className="font-semibold text-white">{study.dateRange || 'N/A'}</span></div>
+                                            </div>
+                                            <Link href={`/dashboard/casestudies/${study.id}`} className="mt-6 w-full text-center px-4 py-2 font-semibold rounded-full text-white bg-blue-600 hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
+                                                View Analysis <ExternalLink size={16} />
+                                            </Link>
+                                        </div>
+                                    ))) : (
+                                        // --- Empty State ---
+                                        <div className="md:col-span-2 lg:col-span-3 text-center py-16 px-4 border-2 border-dashed border-slate-700 rounded-lg">
+                                            <BarChart3 className="mx-auto h-12 w-12 text-slate-500" />
+                                            <h3 className="mt-2 text-lg font-semibold text-white">No Case Studies Found</h3>
+                                            <p className="mt-1 text-sm text-slate-400">
+                                                {localSearchTerm
+                                                    ? "No case studies match your search term."
+                                                    : "You haven't created any case studies yet."
+                                                }
+                                            </p>
+                                            {localSearchTerm && (
+                                                <button
+                                                    onClick={() => setLocalSearchTerm('')}
+                                                    className="mt-4 inline-flex items-center rounded-md bg-slate-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-600"
+                                                >
+                                                    Clear Search
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* --- Phân trang --- */}
+                                {totalPages > 1 && (
+                                    <div className="flex justify-center items-center gap-4 mt-8">
                                         <button
-                                            onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(study.id); }}
-                                            className="p-1 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-full transition-colors"
-                                            title="Delete Case Study"
+                                            onClick={() => handlePageChange(currentPage - 1)}
+                                            disabled={currentPage === 1}
+                                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-700 rounded-md hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
-                                            <Trash2 size={18} />
+                                            <ChevronLeft size={16} /> Previous
+                                        </button>
+                                        <span className="text-sm text-gray-400">Page {currentPage} of {totalPages}</span>
+                                        <button
+                                            onClick={() => handlePageChange(currentPage + 1)}
+                                            disabled={currentPage === totalPages}
+                                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-700 rounded-md hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            Next <ChevronRight size={16} />
                                         </button>
                                     </div>
-                                </div>
-                                <p className="text-gray-400 text-sm mb-4 flex-grow line-clamp-3">{study.summary}</p>
-                                <div className="border-t border-slate-700 pt-4 space-y-2 text-sm">
-                                    <div className="flex justify-between text-gray-400"><span className="flex items-center gap-2"><MessageSquare size={16} /> Total Mentions:</span><span className="font-semibold text-white">{study.postCount || 0}</span></div>
-                                    <div className="flex justify-between text-gray-400"><span className="flex items-center gap-2"><Clock size={16} /> Date Range:</span><span className="font-semibold text-white">{study.dateRange || 'N/A'}</span></div>
-                                </div>
-                                <Link href={`/dashboard/casestudies/${study.id}`} className="mt-6 w-full text-center px-4 py-2 font-semibold rounded-full text-white bg-blue-600 hover:bg-blue-700 transition-all flex items-center justify-center gap-2">
-                                    View Analysis <ExternalLink size={16} />
-                                </Link>
-                            </div>
-                        ))) : (
-                            // --- Empty State ---
-                            <div className="md:col-span-2 lg:col-span-3 text-center py-16 px-4 border-2 border-dashed border-slate-700 rounded-lg">
-                                <BarChart3 className="mx-auto h-12 w-12 text-slate-500" />
-                                <h3 className="mt-2 text-lg font-semibold text-white">No Case Studies Found</h3>
-                                <p className="mt-1 text-sm text-slate-400">
-                                    {localSearchTerm
-                                        ? "No case studies match your search term."
-                                        : "You haven't created any case studies yet."
-                                    }
-                                </p>
-                                {localSearchTerm && (
-                                    <button
-                                        onClick={() => setLocalSearchTerm('')}
-                                        className="mt-4 inline-flex items-center rounded-md bg-slate-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-600"
-                                    >
-                                        Clear Search
-                                    </button>
                                 )}
-                            </div>
+                            </>
                         )}
-                    </div>
-
-                    {/* --- Phân trang --- */}
-                    {totalPages > 1 && (
-                        <div className="flex justify-center items-center gap-4 mt-8">
-                            <button
-                                onClick={() => handlePageChange(currentPage - 1)}
-                                disabled={currentPage === 1}
-                                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-700 rounded-md hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                <ChevronLeft size={16} /> Previous
-                            </button>
-                            <span className="text-sm text-gray-400">Page {currentPage} of {totalPages}</span>
-                            <button
-                                onClick={() => handlePageChange(currentPage + 1)}
-                                disabled={currentPage === totalPages}
-                                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-slate-700 rounded-md hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Next <ChevronRight size={16} />
-                            </button>
-                        </div>
-                    )}
-                </>
-            )}
 
             {/* --- Modals and Toast --- */}
             <Modal

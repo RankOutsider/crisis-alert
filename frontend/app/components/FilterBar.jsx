@@ -2,7 +2,7 @@
 'use client';
 
 import { Search } from 'lucide-react';
-import MultiSelectDropdown from './MultiSelectDropdown'; // Đảm bảo import đúng
+import MultiSelectDropdown from './MultiSelectDropdown';
 
 /**
  * Props chung cho Filter Bar linh hoạt
@@ -19,7 +19,7 @@ export default function FilterBar({
     onFieldChange,       // Function(fieldName: string)
 
     // Props TÙY CHỌN cho các Dropdowns
-    platformOptions,      // Mảng options cho Platform
+    platformOptions,     // Mảng options cho Platform
     selectedPlatforms,    // Mảng giá trị Platform đã chọn
     onPlatformChange,     // Function(newSelection: string[])
 
@@ -34,8 +34,6 @@ export default function FilterBar({
     severityOptions,      // Mảng options cho Severity
     selectedSeverity,     // Mảng giá trị Severity đã chọn
     onSeverityChange,     // Function(newSelection: string[])
-
-    // ... Thêm props cho các loại dropdown khác nếu cần trong tương lai
 }) {
     // --- Logic kiểm tra xem nên hiển thị phần nào ---
     const showSearchInput = searchTerm !== undefined && onSearchChange;
@@ -46,16 +44,13 @@ export default function FilterBar({
     const showStatusDropdown = statusOptions && selectedStatus && onStatusChange;
     const showSeverityDropdown = severityOptions && selectedSeverity && onSeverityChange;
 
-    // Có ít nhất 1 dropdown được hiển thị không?
     const hasAnyDropdown = showPlatformDropdown || showSentimentDropdown || showStatusDropdown || showSeverityDropdown;
-    // Có cần hiển thị vạch ngăn cách không? (Khi có cả Fields và Dropdowns)
     const showDivider = showFieldsSection && hasAnyDropdown;
-    // Có cần hiển thị hàng filter thứ 2 không? (Khi có Fields hoặc Dropdowns)
     const showSecondRow = showFieldsSection || hasAnyDropdown;
 
     return (
-        <div className="bg-slate-700/50 p-4 rounded-lg mb-6 space-y-4">
-            {/* 1. Ô tìm kiếm (Luôn hiển thị nếu có props) */}
+        <div className="bg-slate-700/50 p-3 sm:p-4 rounded-lg mb-6 space-y-4">
+            {/* 1. Ô tìm kiếm */}
             {showSearchInput && (
                 <div className="relative w-full">
                     <input
@@ -71,21 +66,25 @@ export default function FilterBar({
 
             {/* 2. Hàng Filter thứ 2 (Fields và Dropdowns) */}
             {showSecondRow && (
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-3 text-sm text-slate-300">
+                <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-x-4 gap-y-3 text-sm text-slate-300">
+
                     {/* Phần Checkbox Fields */}
                     {showFieldsSection && (
                         <>
-                            <span>Search in:</span>
+                            <span className="col-span-2 text-xs text-slate-400">Search in:</span>
                             {availableFields.map((field) => (
-                                <label key={field} className="flex items-center gap-2 cursor-pointer">
+                                // Để đồng bộ style với checkbox trong MultiSelectDropdown
+                                <label
+                                    key={field}
+                                    className="flex items-center gap-2 cursor-pointer p-2 rounded-md hover:bg-slate-700"
+                                >
                                     <input
                                         type="checkbox"
-                                        // Dùng !! để đảm bảo giá trị là boolean (true/false)
                                         checked={!!activeFields[field.toLowerCase()]}
-                                        onChange={() => onFieldChange(field)} // Truyền tên field hoa/thường như trong availableFields
+                                        onChange={() => onFieldChange(field)}
                                         className="h-4 w-4 rounded bg-slate-600 border-slate-500 text-blue-500 focus:ring-blue-600 focus:ring-offset-slate-800"
                                     />
-                                    {field} {/* Hiển thị tên field */}
+                                    {field}
                                 </label>
                             ))}
                         </>
@@ -129,7 +128,6 @@ export default function FilterBar({
                             onChange={onSeverityChange}
                         />
                     )}
-                    {/* ... Thêm render có điều kiện cho các dropdown khác ... */}
                 </div>
             )}
         </div>
