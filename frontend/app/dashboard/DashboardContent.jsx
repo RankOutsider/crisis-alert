@@ -1,15 +1,22 @@
-// frontend/app/dashboard/DashboardContent.jsx
 'use client';
 
-// --- Imports ---
-import { useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
+import Link from 'next/link';
 import useSWR from 'swr';
 import StatCard from '@/app/components/StatCard';
 import MainChart from '@/app/components/MainChart';
 import Modal from '@/app/components/Modal';
-import { fetcher, api } from '@/utils/api'; // <-- 1. IMPORT THÊM HÀM 'api'
+import { fetcher, api, getToken } from '@/utils/api';
 import * as XLSX from 'xlsx';
-import { AlertCircle, Newspaper, MessageSquare, RefreshCw, Loader2, Download } from 'lucide-react';
+
+import MultiSelectDropdown from '../components/MultiSelectDropdown';
+
+import { useAuth } from '@/app/providers.jsx';
+import {
+    AlertCircle, Newspaper, MessageSquare, RefreshCw, Loader2, Download, Lock,
+    Zap
+} from 'lucide-react';
+
 import { useRouter } from 'next/navigation';
 
 // --- Skeleton Component cho StatCard ---
@@ -36,9 +43,14 @@ function MainChartSkeleton() {
     );
 }
 
+const EXPORT_COLUMN_OPTIONS = ['title', 'content', 'sourceUrl', 'platform', 'sentiment', 'scannedAt'];
+
 // --- Component Chính ---
 export default function DashboardContent() {
     const router = useRouter();
+
+    // --- Lấy thông tin User từ Context ---
+    const { user, isLoading: isAuthLoading } = useAuth();
 
     // --- STATE ---
     const [timeRange, setTimeRange] = useState('7days');
@@ -46,6 +58,11 @@ export default function DashboardContent() {
     const [exportStartDate, setExportStartDate] = useState('');
     const [exportEndDate, setExportEndDate] = useState('');
     const [isExporting, setIsExporting] = useState(false);
+    const [exportType, setExportType] = useState('excel');
+
+    // --- State cho các tùy chọn export mới ---
+    const [sortOrder, setSortOrder] = useState('desc');
+    const [selectedColumns, setSelectedColumns] = useState(EXPORT_COLUMN_OPTIONS);
 
     // --- SWR Hook cho STAT CARDS ---
     const {
@@ -53,7 +70,7 @@ export default function DashboardContent() {
         error: statsError,
         isLoading: isStatsLoading,
         mutate: mutateStats
-    } = useSWR('/api/alerts/stats', fetcher, { // Đã thêm 'fetcher'
+    } = useSWR('/api/alerts/stats', fetcher, {
         refreshInterval: 60000,
         onError: (err) => {
             if (err.message.includes('Unauthorized') || err.message.includes('401')) {
@@ -63,7 +80,9 @@ export default function DashboardContent() {
     });
 
     // --- SWR Hook cho BIỂU ĐỒ ---
-    const chartApiUrl = `/api/posts/over-time?range=${timeRange}`;
+    const chartApiUrl = (user && user.subscriptionTier !== 'Free')
+        ? `/api/posts/over-time?range=${timeRange}`
+        : null;
 
     const {
         data: chartResponse,
@@ -76,8 +95,8 @@ export default function DashboardContent() {
 
     const chartData = chartResponse?.data || [];
 
-    // --- 2. HÀM EXPORT ĐÃ ĐƯỢC VIẾT LẠI HOÀN TOÀN ---
-    const handleExport = async () => {
+    // --- HÀM EXPORT EXCEL ---
+    const handleExportExcel = async () => {
         if (!exportStartDate || !exportEndDate) {
             alert("Please select both start and end dates.");
             return;
@@ -86,15 +105,16 @@ export default function DashboardContent() {
         setIsExporting(true);
 
         try {
-            // Xây dựng endpoint (giống hệt SWR, bỏ /api/ đi)
-            const endpoint = `posts/export?startDate=${exportStartDate}&endDate=${exportEndDate}`;
-
-            // Dùng hàm 'api'
-            // Nó sẽ tự động thêm Base URL và Header Authorization
-            // Nó trả về JSON data (nếu thành công) hoặc ném lỗi (nếu thất bại)
-            const data = await api(endpoint, {
-                method: 'GET'
+            const params = new URLSearchParams({
+                startDate: exportStartDate,
+                endDate: exportEndDate,
+                sortOrder: sortOrder,
+                columns: selectedColumns.join(','),
+                format: 'json'
             });
+            const endpoint = `posts/export?${params.toString()}`;
+
+            const data = await api(endpoint, { method: 'GET' });
 
             if (!data || data.length === 0) {
                 alert("No data available for the selected date range.");
@@ -102,30 +122,19 @@ export default function DashboardContent() {
                 return;
             }
 
-            // 2. Tạo các hàng Tiêu đề và Hàng trống
             const titleRow = ["Crisis Alert Mentions Export"];
             const dateRangeRow = [`Date Range: ${exportStartDate} to ${exportEndDate}`];
-            const blankRow = []; // Hàng trống
-
-            // Gom các hàng tiêu đề lại thành một mảng của các mảng (AOA)
+            const blankRow = [];
             const headerAOA = [titleRow, dateRangeRow, blankRow];
-
-            // 3. Tạo một worksheet MỚI từ mảng tiêu đề (AOA)
-            // Thao tác này sẽ đặt "Crisis Alert..." vào ô A1
-            // và "Date Range..." vào ô A2
             const worksheet = XLSX.utils.aoa_to_sheet(headerAOA);
 
-            // 4. Thêm dữ liệu JSON vào worksheet đã có
-            // Chúng ta bảo nó bắt đầu thêm từ ô "A4" (vì A1, A2, A3 đã được dùng)
             XLSX.utils.sheet_add_json(worksheet, data, {
-                origin: "A4",       // Bắt đầu từ ô A4
-                skipHeader: false   // Giữ nguyên hàng header (id, title, content...)
+                origin: "A4",
+                skipHeader: false
             });
 
-            // 5. Tạo workbook và tải file (giữ nguyên)
             const workbook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workbook, worksheet, "Mentions");
-
             XLSX.writeFile(workbook, `CrisisAlert_Mentions_${exportStartDate}_to_${exportEndDate}.xlsx`);
 
             setIsModalOpen(false);
@@ -133,14 +142,12 @@ export default function DashboardContent() {
             setExportEndDate('');
 
         } catch (error) {
-            // Hàm 'api' của bạn sẽ ném lỗi (đã bao gồm 'message')
-            console.error("Error when expoerting:", error);
+            console.error("Error when exporting EXCEL:", error);
             let errorMsg = error.message || 'Unknown error occurred during export.';
-
-            // Hàm 'api' của bạn đã tự xử lý redirect nếu lỗi 401
-            // Chúng ta chỉ cần hiển thị thông báo
             if (errorMsg.includes('Unauthorized') || errorMsg.includes('401')) {
                 alert('Your session has expired. You will be returned to the login page.');
+            } else if (errorMsg.includes('403') || errorMsg.includes('Access denied')) {
+                alert('Access Denied: Excel export is a Pro feature. Please upgrade your plan.');
             } else {
                 alert(`Error occured: ${errorMsg}`);
             }
@@ -149,6 +156,78 @@ export default function DashboardContent() {
         }
     };
 
+    // --- HÀM EXPORT PDF ---
+    const handleExportPdf = async () => {
+        setIsExporting(true);
+        try {
+            const params = new URLSearchParams({
+                startDate: exportStartDate,
+                endDate: exportEndDate,
+                sortOrder: sortOrder,
+                columns: selectedColumns.join(',')
+            });
+            const apiUrl = `/api/posts/export-pdf?${params.toString()}`;
+            console.log("Calling API:", apiUrl);
+
+            const token = getToken();
+            const headers = {
+                'Content-Type': 'application/json',
+            };
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            } else {
+                console.warn("Warning: No token found in 'crisisAlertToken'. Request may fail.");
+            }
+
+            const response = await fetch(apiUrl, {
+                method: 'GET',
+                headers: headers,
+                credentials: 'include',
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error("Token used:", token ? "Yes" : "None");
+                if (response.status === 403) {
+                    throw new Error('Access Denied: PDF export is a VIP/Pro feature. Please upgrade your plan.');
+                }
+                throw new Error(`Lỗi máy chủ (${response.status}): ${errorText.substring(0, 100)}`);
+            }
+
+            const blob = await response.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            const disposition = response.headers.get('Content-Disposition');
+            const filenameMatch = disposition && disposition.match(/filename="(.+)"/);
+            const filename = filenameMatch ? filenameMatch[1] : `CrisisAlert_Mentions_${exportStartDate}_to_${exportEndDate}.pdf`;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(blobUrl);
+            setIsModalOpen(false);
+            setExportStartDate("");
+            setExportEndDate("");
+        } catch (err) {
+            console.error("PDF Export Error:", err);
+            alert(`Lỗi Export PDF: ${err.message}`);
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    const handleFinalExport = () => {
+        if (!exportStartDate || !exportEndDate) {
+            alert("Please select both start and end dates.");
+            return;
+        }
+        if (exportType === 'excel') {
+            handleExportExcel();
+        } else if (exportType === 'pdf') {
+            handleExportPdf();
+        }
+    }
 
     // --- Khối xử lý Lỗi (cho Stats) ---
     if (statsError && !statsData) {
@@ -174,14 +253,14 @@ export default function DashboardContent() {
     }
 
     // --- Khối xử lý Loading (Skeleton) ---
-    if ((isStatsLoading && !statsData) || (isChartLoading && !chartResponse && timeRange === '7days')) {
+    if (isAuthLoading || (isStatsLoading && !statsData) || (isChartLoading && !chartResponse && chartApiUrl != null)) {
         return (
             <div className="min-h-screen text-gray-200 overflow-x-hidden">
                 <main className="p-4 sm:p-6 md:p-8">
                     {/* Skeleton cho Header */}
                     <div className="mb-8 animate-pulse">
                         <div className="h-10 bg-slate-700 rounded w-1/2 mb-2"></div>
-                        <div className="h-4 bg-slate-700 rounded w-1/K"></div>
+                        <div className="h-4 bg-slate-700 rounded w-1/DASHBOARD CONTENT (WITH EXPORT OPTIONS):/3"></div>
                     </div>
 
                     {/* Skeleton cho STAT CARDS */}
@@ -229,121 +308,232 @@ export default function DashboardContent() {
                     />
                 </div>
 
-                {/* --- CHART SECTION (ĐÃ CẬP NHẬT) --- */}
+                {/* --- CHART SECTION --- */}
                 <div className="bg-slate-800/50 p-4 sm:p-6 md:p-8 rounded-lg shadow-lg">
 
                     {/* --- TIÊU ĐỀ, TOGGLE, VÀ NÚT EXPORT --- */}
                     <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
                         <h2 className="text-xl md:text-2xl font-semibold text-white">
-                            Mentions Over Time (Last {timeRange === '7days' ? '7 Days' : '6 Months'})
+                            {user && user.subscriptionTier === 'Free'
+                                ? 'Sentiment Analysis (Upgrade to Unlock)'
+                                : `Mentions Over Time (Last ${timeRange === '7days' ? '7 Days' : '6 Months'})`
+                            }
                         </h2>
 
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                            {/* Nút Toggle */}
-                            <div className="flex bg-slate-700 rounded-lg p-1">
-                                <button
-                                    onClick={() => setTimeRange('7days')}
-                                    className={`px-3 py-1 rounded-md text-sm font-medium ${timeRange === '7days'
+                        {/* --- CẢ KHỐI NÚT BẤM --- */}
+                        {user && user.subscriptionTier !== 'Free' && (
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                                {/* Nút Toggle */}
+                                <div className="flex bg-slate-700 rounded-lg p-1">
+                                    <button
+                                        onClick={() => setTimeRange('7days')}
+                                        className={`px-3 py-1 rounded-md text-sm font-medium ${timeRange === '7days'
                                             ? 'bg-blue-500 text-white'
                                             : 'text-gray-300 hover:bg-slate-600'
-                                        }`}
-                                >
-                                    7 Days
-                                </button>
-                                <button
-                                    onClick={() => setTimeRange('6months')}
-                                    className={`px-3 py-1 rounded-md text-sm font-medium ${timeRange === '6months'
+                                            }`}
+                                    >
+                                        7 Days
+                                    </button>
+                                    <button
+                                        onClick={() => setTimeRange('6months')}
+                                        className={`px-3 py-1 rounded-md text-sm font-medium ${timeRange === '6months'
                                             ? 'bg-blue-500 text-white'
                                             : 'text-gray-300 hover:bg-slate-600'
-                                        }`}
+                                            }`}
+                                    >
+                                        6 Months
+                                    </button>
+                                </div>
+
+                                {/* Nút Export */}
+                                <button
+                                    onClick={() => {
+                                        if (user && user.subscriptionTier === 'Pro') {
+                                            setExportType('excel');
+                                        } else {
+                                            setExportType('pdf');
+                                        }
+                                        setIsModalOpen(true);
+                                    }}
+                                    className="p-2 bg-slate-700 text-green-400 rounded-lg hover:bg-slate-600"
+                                    title="Export Data"
                                 >
-                                    6 Months
+                                    <Download size={20} />
                                 </button>
                             </div>
-
-                            {/* Nút Export */}
-                            <button
-                                onClick={() => setIsModalOpen(true)}
-                                className="p-2 bg-slate-700 text-green-400 rounded-lg hover:bg-slate-600"
-                                title="Export Data"
-                            >
-                                <Download size={20} />
-                            </button>
-                        </div>
+                        )}
                     </div>
 
                     {/* --- MAIN CHART --- */}
-                    <div className="h-80 md:h-96 w-full">
-                        <MainChart
-                            chartData={chartData}
-                            isLoading={isChartLoading}
-                            error={chartError}
-                            onRetry={() => mutateChart()}
-                        />
-                    </div>
+                    {/* Nếu là Free, hiện component "Khóa" */}
+                    {user && user.subscriptionTier === 'Free' ? (
+                        <div className="h-80 md:h-96 w-full flex flex-col items-center justify-center text-center p-4">
+                            <Lock className="mx-auto h-12 w-12 text-yellow-500 opacity-50" />
+                            <h3 className="mt-4 text-xl font-semibold text-white">Sentiment Analysis is Locked</h3>
+                            <p className="mt-2 text-slate-400">Upgrade to VIP or Pro to unlock this feature.</p>
+
+                            <Link
+                                href="/buy"
+                                className="mt-6 flex items-center justify-center gap-2 px-6 py-2.5 font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-all text-sm"
+                            >
+                                <Zap size={16} />
+                                Unlock Feature
+                            </Link>
+
+                        </div>
+                    ) : (
+                        // Nếu là VIP/Pro, hiện Chart
+                        <div className="h-80 md:h-96 w-full">
+                            <MainChart
+                                chartData={chartData}
+                                isLoading={isChartLoading}
+                                error={chartError}
+                                onRetry={() => mutateChart()}
+                            />
+                        </div>
+                    )}
                 </div>
             </main>
 
             {/* --- EXPORT MODAL --- */}
-            <Modal
-                isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
-                title="Export Mentions Data"
-                size="max-w-md"
-                footer={
-                    <>
-                        <button
-                            onClick={() => setIsModalOpen(false)}
-                            className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={handleExport}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-wait flex items-center gap-2"
-                            disabled={!exportStartDate || !exportEndDate || isExporting}
-                        >
-                            {isExporting ? (
-                                <Loader2 size={16} className="animate-spin" />
-                            ) : (
-                                <Download size={16} />
-                            )}
-                            {isExporting ? 'Exporting...' : 'Export'}
-                        </button>
-                    </>
-                }
-            >
-                {/* Children của Modal */}
-                <div className="space-y-4">
-                    <p className="text-sm text-slate-300">
-                        Select a date range to export all mention posts (Positive and Negative).
-                    </p>
-                    <div>
-                        <label htmlFor="startDate" className="block text-sm font-medium text-slate-300 mb-1">
-                            Start Date
-                        </label>
-                        <input
-                            type="date"
-                            id="startDate"
-                            value={exportStartDate}
-                            onChange={(e) => setExportStartDate(e.target.value)}
-                            className="mt-1 block w-full bg-slate-700 border-slate-600 rounded-md p-2 text-white"
-                        />
+            {isModalOpen && (
+                <Modal
+                    isOpen={isModalOpen}
+                    onClose={() => setIsModalOpen(false)}
+                    title="Export Mentions Data"
+                    size="max-w-md"
+                    footer={
+                        <>
+                            <button
+                                onClick={() => setIsModalOpen(false)}
+                                className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleFinalExport}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-wait flex items-center gap-2"
+                                disabled={!exportStartDate || !exportEndDate || isExporting}
+                            >
+                                {isExporting ? (
+                                    <Loader2 size={16} className="animate-spin" />
+                                ) : (
+                                    <Download size={16} />
+                                )}
+                                {isExporting ? 'Exporting...' : `Export ${exportType.toUpperCase()}`}
+                            </button>
+                        </>
+                    }
+                >
+                    {/* Children của Modal */}
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-1">
+                                Export Format
+                            </label>
+                            <div className="flex bg-slate-700 rounded-lg p-1">
+
+                                {/* --- NÚT EXCEL --- */}
+                                {user && user.subscriptionTier === 'Pro' && (
+                                    <button
+                                        onClick={() => setExportType('excel')}
+                                        className={`flex-1 px-3 py-1 rounded-md text-sm font-medium ${exportType === 'excel'
+                                            ? 'bg-green-500 text-white'
+                                            : 'text-gray-300 hover:bg-slate-600'
+                                            }`}
+                                    >
+                                        Excel (.xlsx)
+                                    </button>
+                                )}
+
+                                {/* --- NÚT PDF --- */}
+                                {user && (user.subscriptionTier === 'VIP' || user.subscriptionTier === 'Pro') && (
+                                    <button
+                                        onClick={() => setExportType('pdf')}
+                                        className={`flex-1 px-3 py-1 rounded-md text-sm font-medium ${exportType === 'pdf'
+                                            ? 'bg-red-500 text-white'
+                                            : 'text-gray-300 hover:bg-slate-600'
+                                            }`}
+                                    >
+                                        PDF (.pdf)
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Tùy chọn 2: Chọn cột */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-1">
+                                Export Columns
+                            </label>
+                            {/* Dùng component MultiSelectDropdown có sẵn */}
+                            <MultiSelectDropdown
+                                title={selectedColumns.length === EXPORT_COLUMN_OPTIONS.length
+                                    ? "All Columns"
+                                    : `${selectedColumns.length} Columns Selected`
+                                }
+                                options={EXPORT_COLUMN_OPTIONS}
+                                selectedOptions={selectedColumns}
+                                onChange={setSelectedColumns}
+                            />
+                        </div>
+
+                        {/* Tùy chọn 3: Sắp xếp */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-1">
+                                Sort Order (by Date)
+                            </label>
+
+                            <div className="flex bg-slate-700 rounded-lg p-1">
+                                <button
+                                    onClick={() => setSortOrder('desc')}
+                                    className={`flex-1 px-3 py-1 rounded-md text-sm font-medium ${sortOrder === 'desc'
+                                            ? 'bg-blue-500 text-white'
+                                            : 'text-gray-300 hover:bg-slate-600'
+                                        }`}
+                                >
+                                    Newest First
+                                </button>
+
+                                <button
+                                    onClick={() => setSortOrder('asc')}
+                                    className={`flex-1 px-3 py-1 rounded-md text-sm font-medium ${sortOrder === 'asc'
+                                            ? 'bg-blue-500 text-white'
+                                            : 'text-gray-300 hover:bg-slate-600'
+                                        }`}
+                                >
+                                    Oldest First
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label htmlFor="startDate" className="block text-sm font-medium text-slate-300 mb-1">
+                                Start Date
+                            </label>
+                            <input
+                                type="date"
+                                id="startDate"
+                                value={exportStartDate}
+                                onChange={(e) => setExportStartDate(e.target.value)}
+                                className="mt-1 block w-full bg-slate-700 border-slate-600 rounded-md p-2 text-white"
+                            />
+                        </div>
+                        <div>
+                            <label htmlFor="endDate" className="block text-sm font-medium text-slate-300 mb-1">
+                                End Date
+                            </label>
+                            <input
+                                type="date"
+                                id="endDate"
+                                value={exportEndDate}
+                                onChange={(e) => setExportEndDate(e.target.value)}
+                                className="mt-1 block w-full bg-slate-700 border-slate-600 rounded-md p-2 text-white"
+                            />
+                        </div>
                     </div>
-                    <div>
-                        <label htmlFor="endDate" className="block text-sm font-medium text-slate-300 mb-1">
-                            End Date
-                        </label>
-                        <input
-                            type="date"
-                            id="endDate"
-                            value={exportEndDate}
-                            onChange={(e) => setExportEndDate(e.target.value)}
-                            className="mt-1 block w-full bg-slate-700 border-slate-600 rounded-md p-2 text-white"
-                        />
-                    </div>
-                </div>
-            </Modal>
+                </Modal>
+            )}
         </div>
     );
 }

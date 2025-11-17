@@ -1,8 +1,9 @@
 // backend/controllers/postController.js
 const { Op } = require('sequelize');
 const { Post, Alert, CaseStudy, sequelize } = require('../models/associations');
+const puppeteer = require('puppeteer');
 
-// @desc    Lấy tất cả posts của user (cho trang Mentions)
+// @desc Lấy tất cả posts của user (cho trang Mentions)
 exports.getAllUserPosts = async (req, res) => {
     try {
         const userId = req.user.id;
@@ -15,8 +16,9 @@ exports.getAllUserPosts = async (req, res) => {
         // --- BƯỚC 1: Xây dựng bộ lọc cho POST (postWhereCondition) ---
         const postWhereCondition = {};
 
-        // Lọc theo Sentiment (String/Enum)
-        if (sentiments) {
+        // --- KIỂM TRA GÓI (TIER) ---
+        // Gói 'Free' không được lọc theo sentiment
+        if (sentiments && req.user.subscriptionTier !== 'Free') {
             const sentimentArray = sentiments.split(',').filter(Boolean);
             if (sentimentArray.length > 0) {
                 postWhereCondition.sentiment = { [Op.in]: sentimentArray };
@@ -84,6 +86,20 @@ exports.getAllUserPosts = async (req, res) => {
 
         const { count, rows } = await Post.findAndCountAll(findOptions);
 
+        // === BƯỚC 4 - Xử lý kết quả trả về theo Gói ===
+        const isFreeTier = req.user.subscriptionTier === 'Free';
+        let processedPosts = rows;
+
+        if (isFreeTier) {
+            // Gói Free không thấy sentiment (trả về null)
+            // convert sang plain object để chỉnh sửa
+            processedPosts = rows.map(post => {
+                const postData = post.get({ plain: true });
+                postData.sentiment = null;
+                return postData;
+            });
+        }
+
         res.status(200).json({
             posts: rows,
             totalPages: Math.ceil(count / limit),
@@ -95,7 +111,7 @@ exports.getAllUserPosts = async (req, res) => {
     }
 };
 
-// @desc    Lấy posts cho một Alert ID cụ thể (cho trang /alerts/[id])
+// @desc Lấy posts cho một Alert ID cụ thể (cho trang /alerts/[id])
 exports.getPostsByAlert = async (req, res) => {
     try {
         const { alertId } = req.params;
@@ -141,13 +157,16 @@ exports.getPostsByAlert = async (req, res) => {
                 andConditions.push({ platform: { [Op.in]: platformArray } });
             }
         }
-        // Lọc Sentiment
-        if (sentiments) {
+
+        // --- KIỂM TRA GÓI (TIER) ---
+        // Gói 'Free' không được lọc theo sentiment
+        if (sentiments && req.user.subscriptionTier !== 'Free') {
             const sentimentArray = sentiments.split(',').filter(Boolean);
             if (sentimentArray.length > 0) {
                 andConditions.push({ sentiment: { [Op.in]: sentimentArray } });
             }
         }
+
         if (andConditions.length > 0) {
             postWhere[Op.and] = andConditions;
         }
@@ -170,6 +189,19 @@ exports.getPostsByAlert = async (req, res) => {
             distinct: true
         });
 
+        // === Xử lý kết quả trả về theo Gói ===
+        const isFreeTier = req.user.subscriptionTier === 'Free';
+        let processedPosts = rows;
+
+        if (isFreeTier) {
+            // Gói Free không thấy sentiment (trả về null)
+            processedPosts = rows.map(post => {
+                const postData = post.get({ plain: true });
+                postData.sentiment = null; // Ẩn sentiment
+                return postData;
+            });
+        }
+
         // Trả về dữ liệu đã phân trang
         res.status(200).json({
             posts: rows,
@@ -185,9 +217,16 @@ exports.getPostsByAlert = async (req, res) => {
     }
 };
 
-// @desc    Lấy posts cho một CaseStudy ID cụ thể (cho trang /casestudies/[id])
+// @desc Lấy posts cho một CaseStudy ID cụ thể (cho trang /casestudies/[id])
 exports.getPostsByCaseStudy = async (req, res) => {
     try {
+        // --- KIỂM TRA GÓI (TIER) ---
+        // Gói 'Free' không được xem Case Study
+        if (req.user.subscriptionTier === 'Free') {
+            return res.status(403).json({ message: 'Access denied. Case Studies are available for VIP and Pro users.' });
+        }
+        // --- KẾT THÚC KIỂM TRA ---
+
         const { caseStudyId } = req.params;
         const page = parseInt(req.query.page, 10) || 1;
         const limit = parseInt(req.query.limit, 10) || 5;
@@ -243,7 +282,8 @@ exports.getPostsByCaseStudy = async (req, res) => {
             }
         }
         // Lọc Sentiment
-        if (sentiments) {
+        // (Đã bị khóa ở trên, nhưng vẫn kiểm tra ở đây cho chắc)
+        if (sentiments && req.user.subscriptionTier !== 'Free') {
             const sentimentArray = sentiments.split(',').filter(Boolean);
             if (sentimentArray.length > 0) {
                 andConditions.push({ sentiment: { [Op.in]: sentimentArray } });
@@ -273,7 +313,7 @@ exports.getPostsByCaseStudy = async (req, res) => {
     }
 };
 
-// @desc    Tạo post mới
+// @desc Tạo post mới
 exports.createPost = async (req, res) => {
     const { title, content, source, sourceUrl, sentiment, publishedAt, platform } = req.body;
     try {
@@ -297,7 +337,7 @@ exports.createPost = async (req, res) => {
     }
 };
 
-// @desc    Hàm phụ để tạo dữ liệu đầy đủ cho biểu đồ (7 ngày hoặc 6 tháng)
+// @desc Hàm phụ để tạo dữ liệu đầy đủ cho biểu đồ (7 ngày hoặc 6 tháng)
 const generatePaddedData = (dbResults, range) => {
     const resultsMap = new Map(dbResults.map(item => [item.name, item]));
     const finalData = [];
@@ -347,8 +387,16 @@ const generatePaddedData = (dbResults, range) => {
     return finalData;
 };
 
-// @desc    Lấy dữ liệu thống kê (Positive/Negative) cho biểu đồ
+// @desc Lấy dữ liệu thống kê (Positive/Negative) cho biểu đồ
 exports.getPostStatsOverTime = async (req, res) => {
+
+    // --- KIỂM TRA GÓI (TIER) ---
+    // Gói 'Free' không thể xem biểu đồ sentiment
+    if (req.user.subscriptionTier === 'Free') {
+        return res.status(403).json({ message: 'Access denied. Sentiment chart is available for VIP and Pro users.' });
+    }
+    // --- KẾT THÚC KIỂM TRA ---
+
     const { range } = req.query;
     const userId = req.user.id;
 
@@ -418,8 +466,16 @@ exports.getPostStatsOverTime = async (req, res) => {
     }
 };
 
-// @desc    Export tất cả posts của user trong 1 khoảng thời gian
+// @desc Export tất cả posts của user trong 1 khoảng thời gian
 exports.exportUserPosts = async (req, res) => {
+
+    // --- KIỂM TRA GÓI (TIER) ---
+    // Chỉ gói 'Pro' mới được export Excel
+    if (req.user.subscriptionTier !== 'Pro') {
+        return res.status(403).json({ message: 'Access denied. Excel export is available for Pro users only.' });
+    }
+    // --- KẾT THÚC KIỂM TRA ---
+
     const { startDate, endDate } = req.query;
     const userId = req.user.id;
 
@@ -463,5 +519,128 @@ exports.exportUserPosts = async (req, res) => {
     } catch (error) {
         console.error("Error exporting posts:", error);
         res.status(500).json({ message: 'Server error exporting posts' });
+    }
+};
+
+// @desc Export tất cả posts của user trong 1 khoảng thời gian sang PDF
+exports.exportPdf = async (req, res) => {
+
+    // --- KIỂM TRA GÓI (TIER) ---
+    // Gói 'Free' không được export PDF
+    if (req.user.subscriptionTier === 'Free') {
+        return res.status(403).json({ message: 'Access denied. PDF export is available for VIP and Pro users.' });
+    }
+    // --- KẾT THÚC KIỂM TRA ---
+
+    const { startDate, endDate } = req.query;
+    const userId = req.user.id;
+    let browser;
+
+    // Đảm bảo endDate bao gồm cả ngày
+    const endOfDay = new Date(endDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    try {
+        // 1. LẤY DỮ LIỆU TỪ DB (Tái sử dụng logic của hàm exports.exportUserPosts)
+        const data = await Post.findAll({
+            attributes: [
+                'id',
+                'title',
+                'content',
+                'source',
+                'sourceUrl',
+                'platform',
+                'sentiment',
+                'publishedAt'
+            ],
+            where: {
+                publishedAt: {
+                    [Op.between]: [new Date(startDate), endOfDay]
+                },
+                sentiment: { [Op.in]: ['POSITIVE', 'NEGATIVE'] }
+            },
+            include: [{
+                model: Alert,
+                where: { userId: userId },
+                attributes: [],
+                through: { attributes: [] }
+            }],
+            order: [['publishedAt', 'DESC']],
+            raw: true
+        });
+
+        if (!data || data.length === 0) {
+            return res.status(404).json({ message: 'Không tìm thấy dữ liệu trong khoảng thời gian này.' });
+        }
+
+        // 2. CHUẨN BỊ HTML CHO PUPPETEER
+        const keys = Object.keys(data[0]);
+        const headerRow = keys.map(key => `<th>${key.toUpperCase().replace(/_/g, ' ')}</th>`).join('');
+        const bodyRows = data.map(row =>
+            `<tr>${keys.map(key => `<td>${row[key] ?? ''}</td>`).join('')}</tr>`
+        ).join('');
+
+        const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+            <head>
+            <meta charset="UTF-8">
+            <style>
+                body { font-family: 'Noto Sans', Arial, sans-serif; font-size: 10px; margin: 0; padding: 0;}
+                h1 { color: #364057; font-size: 18px; margin-bottom: 5px; }
+                p { font-size: 12px; margin-bottom: 20px; }
+                table { width: 100%; border-collapse: collapse; table-layout: fixed;}
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; word-wrap: break-word; }
+                th { background-color: #343a40; color: white; font-weight: bold; }
+            </style>
+            </head>
+            <body>
+                <h1>Báo Cáo Xuất Dữ Liệu Crisis Alert Mentions</h1>
+                <p>Từ: ${startDate} đến: ${endDate}</p>
+            <table>
+                <thead>
+                    <tr>${headerRow}</tr>
+                </thead>
+            <tbody>
+                ${bodyRows}
+            </tbody>
+            </table>
+            </body>
+        </html>
+        `;
+
+        // 3. KHỞI CHẠY PUPPETEER VÀ TẠO PDF
+        browser = await puppeteer.launch({
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu'
+            ],
+            headless: 'new',
+        });
+        const page = await browser.newPage();
+
+        await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+
+        const pdfBuffer = await page.pdf({
+            format: 'A4',
+            landscape: true,
+            printBackground: true,
+            margin: { top: '1in', right: '0.5in', bottom: '0.5in', left: '0.5in' },
+        });
+
+        // 4. GỬI FILE PDF VỀ CHO FRONTEND
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="CrisisAlert_Mentions_${startDate}_to_${endDate}.pdf"`);
+        res.send(pdfBuffer);
+
+    } catch (error) {
+        console.error('Puppeteer/PDF Generation Error:', error);
+        res.status(500).send('Lỗi máy chủ khi tạo PDF. Vui lòng kiểm tra logs server.');
+    } finally {
+        if (browser) {
+            await browser.close();
+        }
     }
 };

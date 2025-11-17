@@ -47,13 +47,15 @@ export default function MultiSelectDropdown({ title, options, selectedOptions, o
     };
 
     return (
-        <div className={`relative ${isOpen ? 'z-[9999]' : 'z-10'}`} ref={ref}>
+        // z-index ở div gốc sẽ tạo ra Stacking Context MỚI,
+        // khiến menu con (dù có z-index cao) vẫn bị kẹt bên dưới
+        <div className="relative" ref={ref}>
             {/* Nút bấm để mở/đóng */}
             <button
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
                 aria-expanded={isOpen}
-                className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm bg-slate-800 border border-slate-600 rounded-md hover:bg-slate-700 min-w-[120px]"
+                className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm bg-slate-800 border border-slate-600 rounded-md hover:bg-slate-700 w-full sm:w-auto min-w-[120px]"
             >
                 <span className="truncate">{getButtonText()}</span>
 
@@ -66,8 +68,10 @@ export default function MultiSelectDropdown({ title, options, selectedOptions, o
 
             {/* Danh sách checkbox */}
             {isOpen && (
+                // Menu này đã có `absolute` và `z-[9999]` (cao nhất)
+                // Nó sẽ "nổi" lên trên mọi thứ khác
                 <div className="absolute z-[9999] top-full left-0 mt-2 
-                                w-full sm:w-56 max-h-60 overflow-y-auto 
+                                w-full min-w-[220px] sm:w-56 max-h-60 overflow-y-auto 
                                 bg-slate-800 border border-slate-600 
                                 rounded-lg shadow-lg">
                     <div className="p-2 space-y-1">

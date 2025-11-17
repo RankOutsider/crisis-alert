@@ -66,10 +66,17 @@ export default function RegisterPage() {
                 body: JSON.stringify(values),
             });
 
-            setSuccess("Registration successful! Redirecting to login...");
+            // Lấy email từ form
+            const { email } = values;
+
+            // 1. Đặt thông báo thành công mới
+            setSuccess("Registration successful! Check your email for an OTP. Redirecting...");
+
+            // 2. Chuyển hướng đến trang verify-otp VÀ đính kèm email
             setTimeout(() => {
-                router.push('/login');
-            }, 2000);
+                router.push(`/verify-otp?email=${encodeURIComponent(email)}`);
+            }, 2000); // 2s delay cho UX
+
         } catch (err) {
             const errorMessage = err.message || "Registration failed!";
             let backendErrors = {};

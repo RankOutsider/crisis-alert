@@ -8,7 +8,11 @@ const {
     updateDetails,
     updatePassword,
     updateSettings,
-    deleteAccount
+    deleteAccount,
+    verifyOtp,
+    resendOtp,
+    forgotPassword,
+    resetPassword
 } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -34,22 +38,22 @@ router.post(
     [ // --- Validation cho Đăng ký ---
         body('username', 'Username is required and must be at least 3 characters long')
             .isString()
-            .trim() // Xóa khoảng trắng thừa
-            .isLength({ min: 3 }), // Độ dài tối thiểu 3 ký tự
+            .trim()
+            .isLength({ min: 3 }),
         body('email', 'Invalid email address')
-            .isEmail() // Kiểm tra định dạng email
-            .normalizeEmail(), // Chuẩn hóa email (vd: gmail bỏ dấu chấm, viết thường)
+            .isEmail()
+            .normalizeEmail(),
         body('phone', 'Invalid phone number (e.g., 09xxxxxxxx)')
-            .optional({ nullable: true, checkFalsy: true }) // Cho phép không bắt buộc (null, "", undefined)
+            .notEmpty()
             .isString()
             .trim()
-            .matches(/^0\d{9}$/), // Regex kiểm tra SĐT Việt Nam 10 số bắt đầu bằng 0
+            .matches(/^0\d{9}$/),
         body('password', 'Password must be at least 6 characters long')
             .isString()
-            .isLength({ min: 6 }) // Độ dài tối thiểu 6 ký tự
+            .isLength({ min: 6 })
     ],
-    handleValidationErrors, // Chạy middleware xử lý lỗi sau validation
-    register // Chạy controller nếu không có lỗi
+    handleValidationErrors,
+    register
 );
 
 // === Route Đăng nhập ===
@@ -58,13 +62,74 @@ router.post(
     [ // --- Validation cho Đăng nhập ---
         body('username', 'Username is required')
             .isString()
-            .notEmpty(), // Không được rỗng
+            .notEmpty(),
         body('password', 'Password is required')
             .isString()
             .notEmpty()
     ],
     handleValidationErrors,
     login
+);
+
+// === Route Xác thực OTP ===
+router.post(
+    '/verify-otp',
+    [ // --- Validation cho Xác thực OTP ---
+        body('email', 'Invalid email address')
+            .isEmail()
+            .normalizeEmail(),
+        body('otp', 'OTP must be a 6-digit code')
+            .isString()
+            .trim()
+            .isLength({ min: 6, max: 6 })
+            .isNumeric()
+    ],
+    handleValidationErrors,
+    verifyOtp
+);
+
+// === Route Gửi lại OTP ===
+router.post(
+    '/resend-otp',
+    [ // --- Validation cho Gửi lại OTP ---
+        body('email', 'Invalid email address')
+            .isEmail()
+            .normalizeEmail()
+    ],
+    handleValidationErrors,
+    resendOtp
+);
+
+// === Route Quên Mật Khẩu (Gửi OTP) ===
+router.post(
+    '/forgot-password',
+    [ // --- Validation cho Quên Mật Khẩu ---
+        body('email', 'Invalid email address')
+            .isEmail()
+            .normalizeEmail()
+    ],
+    handleValidationErrors,
+    forgotPassword
+);
+
+// === Route Đặt Lại Mật Khẩu (Dùng OTP) ===
+router.post(
+    '/reset-password',
+    [ // --- Validation cho Đặt Lại Mật Khẩu ---
+        body('email', 'Invalid email address')
+            .isEmail()
+            .normalizeEmail(),
+        body('otp', 'OTP must be a 6-digit code')
+            .isString()
+            .trim()
+            .isLength({ min: 6, max: 6 })
+            .isNumeric(),
+        body('newPassword', 'New password must be at least 6 characters long')
+            .isString()
+            .isLength({ min: 6 })
+    ],
+    handleValidationErrors,
+    resetPassword // Controller chúng ta đã tạo ở Bước 17
 );
 
 // === Các route cần xác thực (chạy qua middleware 'protect') ===
@@ -86,11 +151,10 @@ router.route('/me')
 // --- Cập nhật chi tiết cá nhân ---
 router.put(
     '/updatedetails',
-    protect, // Xác thực người dùng trước
+    protect,
     [ // --- Validation cho Cập nhật Chi tiết ---
-        // Cho phép cập nhật từng trường riêng lẻ, nên dùng optional()
         body('username', 'Username must be at least 3 characters long')
-            .optional() // Cho phép không gửi trường này trong request body
+            .optional()
             .isString()
             .trim()
             .isLength({ min: 3 }),
@@ -99,10 +163,34 @@ router.put(
             .isEmail()
             .normalizeEmail(),
         body('phone', 'Invalid phone number (e.g., 09xxxxxxxx)')
-            .optional({ nullable: true, checkFalsy: true }) // Cho phép null, "", undefined
+            .optional()
             .isString()
             .trim()
-            .matches(/^0\d{9}$/)
+            .matches(/^0\d{9}$/),
+        body('full_name', 'Full name must be a string')
+            .optional({ checkFalsy: true })
+            .isString()
+            .trim(),
+        body('company', 'Company must be a string')
+            .optional({ checkFalsy: true })
+            .isString()
+            .trim(),
+        body('avatar_url', 'Avatar URL must be a string')
+            .optional({ checkFalsy: true })
+            .isString()
+            .trim(),
+        body('gender', 'Gender must be a string')
+            .optional({ checkFalsy: true })
+            .isString()
+            .trim(),
+        body('date_of_birth', 'Invalid date format (YYYY-MM-DD)')
+            .optional({ checkFalsy: true })
+            .isISO8601()
+            .toDate(),
+        body('address', 'Address must be a string')
+            .optional({ checkFalsy: true })
+            .isString()
+            .trim()
     ],
     handleValidationErrors,
     updateDetails
@@ -124,18 +212,21 @@ router.put(
     updatePassword
 );
 
-// --- Cập nhật Cài đặt (ví dụ: bật/tắt thông báo) ---
+// --- Cập nhật Cài đặt ---
 router.put(
     '/settings',
     protect,
     [ // --- Validation cho Cập nhật Cài đặt ---
         body('notificationsEnabled', 'notificationsEnabled must be a boolean value')
-            .isBoolean() // Kiểm tra là boolean (true/false)
-            .toBoolean() // Chuyển đổi các giá trị như chuỗi "true"/"false", số 1/0 thành boolean thật sự
+            .optional()
+            .isBoolean()
+            .toBoolean(),
+        body('cc_emails', 'CC emails must be a non-empty string')
+            .optional({ checkFalsy: true })
+            .isString()
     ],
     handleValidationErrors,
     updateSettings
 );
-
 
 module.exports = router;

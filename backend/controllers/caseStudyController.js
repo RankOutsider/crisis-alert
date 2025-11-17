@@ -2,8 +2,14 @@
 const { Op } = require('sequelize');
 const { CaseStudy, Alert, Post } = require('../models/associations');
 
-// @desc    Lấy tất cả Case Studies của người dùng
+// @desc    Lấy tất cả Case Studies của người dùng
 exports.getAllCaseStudies = async (req, res) => {
+    // --- KIỂM TRA GÓI (TIER) ---
+    // Gói 'Free' không được phép xem Case Studies
+    if (req.user.subscriptionTier === 'Free') {
+        return res.status(403).json({ message: 'Access denied. Case Studies are available for VIP and Pro users.' });
+    }
+
     try {
         const userId = req.user.id;
         const { search, fields, page = 1, limit = 6 } = req.query;
@@ -25,7 +31,7 @@ exports.getAllCaseStudies = async (req, res) => {
                     // Trong mỗi nhóm OR, tách theo AND
                     const andTerms = group.split('&').map(t => t.trim().toLowerCase()).filter(Boolean);
 
-                    if (andTerms.length === 0) 
+                    if (andTerms.length === 0)
                         return null;
 
                     return {
@@ -60,9 +66,15 @@ exports.getAllCaseStudies = async (req, res) => {
     }
 };
 
-// @desc    Lấy chi tiết một Case Study
+// @desc    Lấy chi tiết một Case Study
 exports.getCaseStudyById = async (req, res) => {
     try {
+        // --- KIỂM TRA GÓI (TIER) ---
+        // Gói 'Free' không được phép xem Case Studies
+        if (req.user.subscriptionTier === 'Free') {
+            return res.status(403).json({ message: 'Access denied. Case Studies are available for VIP and Pro users.' });
+        }
+
         const caseStudy = await CaseStudy.findOne({
             where: { id: req.params.id, userId: req.user.id },
             include: [
@@ -83,8 +95,15 @@ exports.getCaseStudyById = async (req, res) => {
     }
 };
 
-// @desc    Tạo một Case Study mới từ một Alert
+// @desc    Tạo một Case Study mới từ một Alert
 exports.createCaseStudyFromAlert = async (req, res) => {
+
+    // --- KIỂM TRA GÓI (TIER) ---
+    // Gói 'Free' không được phép tạo Case Study
+    if (req.user.subscriptionTier === 'Free') {
+        return res.status(403).json({ message: 'Access denied. Case Study creation is available for VIP and Pro users only.' });
+    }
+
     const { alertId, title, description } = req.body;
     const userId = req.user.id;
 
@@ -134,6 +153,11 @@ exports.updateCaseStudyStatus = async (req, res) => {
     const userId = req.user.id;
 
     try {
+        // --- KIỂM TRA GÓI (TIER) ---
+        if (req.user.subscriptionTier === 'Free') {
+            return res.status(403).json({ message: 'Access denied.' });
+        }
+
         const caseStudy = await CaseStudy.findOne({ where: { id: caseStudyId, userId: userId } });
         if (!caseStudy) {
             return res.status(404).json({ message: "Case study not found." });
@@ -149,6 +173,12 @@ exports.updateCaseStudyStatus = async (req, res) => {
 
 exports.deleteCaseStudy = async (req, res) => {
     try {
+        // --- KIỂM TRA GÓI (TIER) ---
+        if (req.user.subscriptionTier === 'Free') {
+            return res.status(403).json({ message: 'Access denied.' });
+        }
+    
+
         const caseStudy = await CaseStudy.findOne({ where: { id: req.params.id, userId: req.user.id } });
         if (!caseStudy) {
             return res.status(404).json({ message: "Case study not found" });
@@ -161,8 +191,15 @@ exports.deleteCaseStudy = async (req, res) => {
     }
 };
 
-// @desc    Tạo nhiều Case Study từ một danh sách Alert ID
+// @desc    Tạo nhiều Case Study từ một danh sách Alert ID
 exports.createBulkCaseStudies = async (req, res) => {
+
+    // --- KIỂM TRA GÓI (TIER) ---
+    // Gói 'Free' không được phép tạo Case Study
+    if (req.user.subscriptionTier === 'Free') {
+        return res.status(403).json({ message: 'Access denied. Case Study creation is available for VIP and Pro users only.' });
+    }
+
     const { alertIds } = req.body;
     const userId = req.user.id;
 

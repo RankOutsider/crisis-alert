@@ -7,7 +7,8 @@ const {
     getAllUserPosts,
     getPostsByCaseStudy,
     getPostStatsOverTime,
-    exportUserPosts
+    exportUserPosts,
+    exportPdf
 } = require('../controllers/postController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -61,6 +62,17 @@ const validateCaseStudyIdParam = [
     param('caseStudyId', 'Case Study ID phải là chuỗi không rỗng').isString().notEmpty(),
     handleValidationErrors
 ];
+
+router.route('/export-pdf')
+    .get(
+        protect,
+        [ // Validation ngày tháng
+            query('startDate', 'Ngày bắt đầu là bắt buộc').isISO8601().toDate(),
+            query('endDate', 'Ngày kết thúc là bắt buộc').isISO8601().toDate()
+        ],
+        handleValidationErrors,
+        exportPdf
+    );
 
 // === GET /api/posts/over-time ===
 router.route('/over-time')

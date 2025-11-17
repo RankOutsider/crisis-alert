@@ -3,8 +3,7 @@
 const { Alert, Post, User, sequelize } = require('../models/associations');
 const { Op } = require('sequelize');
 const { sendNotificationEmail } = require('./emailService');
-
-// const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const runScanJob = async (io) => {
     const JOB_NAME = "ALERT_POST_SCANNER";
@@ -18,7 +17,7 @@ const runScanJob = async (io) => {
         // --- LẤY TẤT CẢ ALERTS ACTIVE ---
         const activeAlerts = await Alert.findAll({
             where: { status: 'ACTIVE' },
-            include: [{ model: User, attributes: ['id', 'email', 'notificationsEnabled'] }]
+            include: [{ model: User, attributes: ['id', 'email', 'notificationsEnabled', 'cc_emails'] }]
         });
 
         if (activeAlerts.length === 0) {
@@ -64,6 +63,7 @@ const runScanJob = async (io) => {
             if (keywords.length === 0 || platforms.length === 0) continue;
 
             const user = alert.User;
+            const ccEmails = user.cc_emails;
             const alertCreationDate = new Date(alert.createdAt);
             const startOfMonth = new Date(alertCreationDate.getFullYear(), alertCreationDate.getMonth(), 1);
             startOfMonth.setHours(0, 0, 0, 0);
@@ -79,7 +79,7 @@ const runScanJob = async (io) => {
 
                 const postContent = `${post.title} ${post.content}`.toLowerCase();
                 const keywordMatch = keywords.some(keyword => postContent.includes(keyword.toLowerCase()));
-                const platformMatch = platforms.some(p => p.toLowerCase() === post.platform.toLowerCase()); // Fix lỗi case-sensitive
+                const platformMatch = platforms.some(p => p.toLowerCase() === post.platform.toLowerCase());
 
                 if (keywordMatch && platformMatch) {
                     newPostsToLink.push(post.id);
@@ -109,15 +109,15 @@ const runScanJob = async (io) => {
 
                 // Gửi email
                 if (user && user.email && user.notificationsEnabled) {
-                    console.log(`... Preparing to send ${newPostsToLink.length} emails to ${user.email}`);
+                    console.log(`... Preparing to send ${newPostsToLink.length} emails to ${user.email} (CC: ${ccEmails ? ccEmails.split(',').length : 0} others)`);
                     for (const post of newPostObjectsForEmail) {
                         try {
-                            await sendNotificationEmail(user.email, alert.title, post);
+                            await sendNotificationEmail(user.email, alert.title, post, ccEmails);
                             console.log(`... Sent email for Post ID ${post.id} to ${user.email}`);
-                            // await sleep(1000);
+                            await sleep(1000); // Thêm delay cho gửi GMAIL
                         } catch (emailError) {
                             console.error(`❌ Error sending email (Post ID: ${post.id}):`, emailError.message);
-                            // await sleep(2000);
+                            await sleep(2000); // Thêm delay cho gửi GMAIL nếu lỗi
                         }
                     }
                 }

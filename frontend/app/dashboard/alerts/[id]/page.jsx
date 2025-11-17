@@ -9,10 +9,10 @@ import useSWR from 'swr';
 import {
     ArrowLeft, Tag, Globe, ShieldCheck, AlertTriangle, ExternalLink, Search,
     CheckCircle, AlertCircle as AlertIcon, BookOpen, RefreshCw,
-    ChevronLeft, ChevronRight // <-- Thêm icon phân trang
+    ChevronLeft, ChevronRight, Lock, Zap
 } from 'lucide-react';
 import { api, fetcher } from '@/utils/api';
-// Bỏ import biểu đồ vì file này không dùng
+import { useAuth } from '@/app/providers.jsx';
 import FilterBar from '@/app/components/FilterBar';
 
 // --- Hằng số ---
@@ -20,7 +20,7 @@ const POST_SEARCH_FIELDS = ['Title', 'Content', 'Source'];
 const PLATFORM_OPTIONS = ['Facebook', 'X', 'Instagram', 'News', 'Tiktok', 'Forum', 'Threads', 'Youtube', 'Blog'];
 const SENTIMENT_OPTIONS = ['POSITIVE', 'NEUTRAL', 'NEGATIVE'];
 const POSTS_SKELETON_COUNT = 5; // Số lượng skeleton cho post list
-const ITEMS_PER_PAGE = 5; // <-- Số lượng post trên mỗi trang (khớp với limit backend)
+const ITEMS_PER_PAGE = 5; // Số lượng post trên mỗi trang
 
 // --- useDebounce Hook ---
 function useDebounce(value, delay) {
@@ -88,14 +88,13 @@ function PostItemSkeleton() {
                 <div className="h-4 bg-slate-700 rounded w-full"></div>
                 <div className="h-4 bg-slate-700 rounded w-4/5"></div>
             </div>
-            {/* Sentiment Skeleton */}
+            {/* Sentiment Skeleton (Sẽ bị ẩn nếu là free) */}
             <div className="mt-3">
                 <div className="h-5 bg-slate-700 rounded-full w-20"></div>
             </div>
         </div>
     );
 }
-
 
 // --- Component Chính ---
 export default function AlertDetailPage() {
@@ -105,6 +104,10 @@ export default function AlertDetailPage() {
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const alertId = params.id;
+
+    // --- Lấy thông tin User ---
+    const { user, isLoading: isAuthLoading } = useAuth();
+    const isFreeTier = user && user.subscriptionTier === 'Free';
 
     // --- State ---
     const [isUpdating, setIsUpdating] = useState(false);
@@ -134,7 +137,7 @@ export default function AlertDetailPage() {
     // --- API URL Construction (Tính toán URL API cho SWR) ---
     const alertApiUrl = useMemo(() => alertId ? `/api/alerts/${alertId}` : null, [alertId]);
 
-    // URL để fetch danh sách Posts (ĐÃ CẬP NHẬT)
+    // URL để fetch danh sách Posts
     const postsApiUrl = useMemo(() => {
         if (!alertId) return null;
         const params = new URLSearchParams(searchParams.toString());
@@ -153,11 +156,15 @@ export default function AlertDetailPage() {
     }, [alertId, debouncedSearchTerm, activeFields, searchParams, currentPage]); // <-- Thêm currentPage
 
     // --- Data Fetching (Lấy dữ liệu bằng SWR) ---
-    const { data: alertData, error: alertError, isLoading: isAlertLoading, mutate: mutateAlert } = useSWR(alertApiUrl, fetcher);
+    const { data: alertData, error: alertError, isLoading: isAlertLoadingSWR, mutate: mutateAlert } = useSWR(alertApiUrl, fetcher);
     const alert = alertData;
-    const { data: postsData, error: postsError, isLoading: isPostsLoading, mutate: mutatePosts } = useSWR(postsApiUrl, fetcher, { keepPreviousData: true });
+    const { data: postsData, error: postsError, isLoading: isPostsLoadingSWR, mutate: mutatePosts } = useSWR(postsApiUrl, fetcher, { keepPreviousData: true });
     const posts = postsData?.posts || [];
     const totalPages = postsData?.totalPages || 1; // <-- Lấy totalPages
+
+    // --- Logic loading tổng ---
+    const isAlertLoading = isAlertLoadingSWR || isAuthLoading;
+    const isPostsLoading = isPostsLoadingSWR && !postsData; // Chỉ loading skeleton khi chưa có data cũ
 
     // --- useEffects ---
     useEffect(() => {
@@ -322,6 +329,7 @@ export default function AlertDetailPage() {
             </div>
         );
     }
+
     // Không tìm thấy alert
     if (!alert) return <div className="p-8 text-center text-gray-400">Alert not found.</div>;
 
@@ -337,9 +345,17 @@ export default function AlertDetailPage() {
             {/* Header: Title và Nút Create Case Study */}
             <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-6">
                 <h1 className="text-3xl font-bold text-white mb-2">{alert.title}</h1>
-                <button onClick={handleCreateCaseStudy} disabled={isCreatingCaseStudy} className="flex-shrink-0 flex items-center gap-2 px-6 py-2 text-base font-semibold rounded-full text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                    {isCreatingCaseStudy ? 'Creating...' : <><BookOpen size={20} /> Create Case Study</>}
-                </button>
+
+                {/* --- Khóa nút "Create Case Study" --- */}
+                {!isFreeTier ? (
+                    <button onClick={handleCreateCaseStudy} disabled={isCreatingCaseStudy} className="flex-shrink-0 flex items-center gap-2 px-6 py-2 text-base font-semibold rounded-full text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                        {isCreatingCaseStudy ? 'Creating...' : <><BookOpen size={20} /> Create Case Study</>}
+                    </button>
+                ) : (
+                    <button disabled className="flex-shrink-0 flex items-center gap-2 px-6 py-2 text-base font-semibold rounded-full text-slate-400 bg-slate-700 disabled:opacity-50 cursor-not-allowed" title="Upgrade to VIP/Pro to create case studies">
+                        <Lock size={18} /> Create Case Study
+                    </button>
+                )}
             </div>
             {/* Thông báo trạng thái tạo Case Study */}
             {caseStudyStatus.text && (
@@ -416,71 +432,100 @@ export default function AlertDetailPage() {
                     platformOptions={PLATFORM_OPTIONS}
                     selectedPlatforms={selectedPlatforms}
                     onPlatformChange={handlePlatformChange}
-                    sentimentOptions={SENTIMENT_OPTIONS}
-                    selectedSentiments={selectedSentiments}
-                    onSentimentChange={handleSentimentChange}
+
+                    // --- Khóa Filter Sentiment ---
+                    // Chỉ truyền các prop này nếu không phải Free tier
+                    sentimentOptions={!isFreeTier ? SENTIMENT_OPTIONS : undefined}
+                    selectedSentiments={!isFreeTier ? selectedSentiments : undefined}
+                    onSentimentChange={!isFreeTier ? handleSentimentChange : undefined}
                 />
 
+                {/* --- Thông báo khóa Sentiment --- */}
+                {isFreeTier && (
+                    <div
+                        className="mt-4 mb-6 p-4 rounded-lg bg-yellow-900/50 border border-yellow-700/60 text-yellow-300 text-sm 
+                                   flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                        role="alert"
+                    >
+                        {/* 1. Phần Text (Icon + Chữ) */}
+                        <div className="flex items-start gap-3">
+                            <Lock size={18} className="flex-shrink-0 mt-0.5" />
+                            <span>Sentiment analysis for each post is a VIP/Pro feature. Upgrade your plan if you need to view sentiments of each posts.</span>
+                        </div>
+
+                        <Link
+                            href="/buy"
+                            className="flex-shrink-0 w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-all text-xs sm:text-sm"
+                        >
+                            <Zap size={16} />
+                            Unlock Feature
+                        </Link>
+                    </div>
+                )}
+
                 {/* Loading / Error / Data / Empty cho Posts */}
-                {isPostsLoading && !postsData && (
+                {isPostsLoading ? (
                     <div className="space-y-4 py-10">
                         {[...Array(POSTS_SKELETON_COUNT)].map((_, index) => (
                             <PostItemSkeleton key={index} />
                         ))}
                     </div>
-                )}
-                {postsError && (
-                    <div className="text-center py-10 px-4 border-2 border-dashed border-red-900/50 rounded-lg bg-red-900/10">
-                        <AlertIcon className="mx-auto h-12 w-12 text-red-400" />
-                        <h3 className="mt-2 text-lg font-semibold text-white">Error Loading Posts</h3>
-                        <p className="mt-1 text-sm text-red-300">{postsError.message || 'Could not load posts for this alert.'}</p>
-                        <div className="mt-6">
-                            <button type="button" onClick={() => mutatePosts()} className="inline-flex items-center rounded-md bg-slate-700 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-600 focus-visible:outline">
-                                <RefreshCw className="w-4 h-4 mr-2" />
-                                Retry
-                            </button>
+                ) :
+                    postsError ? (
+                        <div className="text-center py-10 px-4 border-2 border-dashed border-red-900/50 rounded-lg bg-red-900/10">
+                            <AlertIcon className="mx-auto h-12 w-12 text-red-400" />
+                            <h3 className="mt-2 text-lg font-semibold text-white">Error Loading Posts</h3>
+                            <p className="mt-1 text-sm text-red-300">{postsError.message || 'Could not load posts for this alert.'}</p>
+                            <div className="mt-6">
+                                <button type="button" onClick={() => mutatePosts()} className="inline-flex items-center rounded-md bg-slate-700 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-600 focus-visible:outline">
+                                    <RefreshCw className="w-4 h-4 mr-2" />
+                                    Retry
+                                </button>
+                            </div>
                         </div>
-                    </div>
-                )}
-                {/* Render danh sách posts hoặc trạng thái rỗng */}
-                {!isPostsLoading && !postsError && (
-                    <div className="space-y-4">
-                        {posts.length > 0 ? posts.map(post => (
-                            // --- Thẻ Post ---
-                            <div key={post.id} className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 hover:border-slate-600 transition-colors duration-150 overflow-hidden">
-                                <div className="flex justify-between items-start gap-2 min-w-0">
-                                    <div className="min-w-0 flex-1"><h3 className="font-semibold text-lg text-white mb-1 truncate" title={post.title}>{post.title}</h3></div>
-                                    <a href={post.sourceUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300"><ExternalLink size={16} /> View Source</a>
+                    ) : (
+                        /* Render danh sách posts hoặc trạng thái rỗng */
+                        <div className="space-y-4">
+                            {posts.length > 0 ? posts.map(post => (
+                                // --- Thẻ Post ---
+                                <div key={post.id} className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 hover:border-slate-600 transition-colors duration-150 overflow-hidden">
+                                    <div className="flex justify-between items-start gap-2 min-w-0">
+                                        <div className="min-w-0 flex-1"><h3 className="font-semibold text-lg text-white mb-1 truncate" title={post.title}>{post.title}</h3></div>
+                                        <a href={post.sourceUrl} target="_blank" rel="noopener noreferrer" className="flex-shrink-0 flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300"><ExternalLink size={16} /> View Source</a>
+                                    </div>
+                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-400 mb-2">
+                                        <span>From: <span className="font-medium text-gray-300 break-words">{post.source}</span></span>
+                                        {post.platform && (<span className="flex items-center gap-1.5"><Globe size={14} />Platform: <span className="font-medium text-blue-300 capitalize">{post.platform}</span></span>)}
+                                    </div>
+                                    <p className="text-gray-300 text-base line-clamp-3">{post.content}</p>
+
+                                    {/* --- Khóa Sentiment trên Post Item --- */}
+                                    {!isFreeTier && (
+                                        <div className="mt-3">
+                                            <span className={`text-xs font-semibold px-2 py-1 rounded-full ${post.sentiment === 'NEGATIVE' && 'bg-red-500/30 text-red-300'} ${post.sentiment === 'POSITIVE' && 'bg-green-500/30 text-green-300'} ${post.sentiment === 'NEUTRAL' && 'bg-gray-500/30 text-gray-300'}`}>{post.sentiment || 'N/A'}</span>
+                                        </div>
+                                    )}
                                 </div>
-                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-400 mb-2">
-                                    <span>From: <span className="font-medium text-gray-300 break-words">{post.source}</span></span>
-                                    {post.platform && (<span className="flex items-center gap-1.5"><Globe size={14} />Platform: <span className="font-medium text-blue-300 capitalize">{post.platform}</span></span>)}
+                            )) : (
+                                // --- Trạng thái rỗng cho Posts ---
+                                <div className="text-center py-16 px-4 border-2 border-dashed border-slate-700 rounded-lg">
+                                    <Search size={48} className="mx-auto h-12 w-12 text-slate-500" />
+                                    <h3 className="mt-2 text-lg font-semibold text-white">No Matching Posts Found</h3>
+                                    <p className="mt-1 text-sm text-slate-400">
+                                        {searchTerm || selectedPlatforms.length > 0 || selectedSentiments.length > 0
+                                            ? "No posts associated with this alert match your current filters."
+                                            : "No posts have been linked to this alert yet. Try scanning for posts."
+                                        }
+                                    </p>
+                                    {(searchTerm || selectedPlatforms.length > 0 || selectedSentiments.length > 0) && (
+                                        <button onClick={() => { const params = new URLSearchParams(searchParams.toString()); params.delete('q'); params.delete('fields'); params.delete('platforms'); params.delete('sentiments'); router.push(`${pathname}?${params.toString()}`, { scroll: false }); setSearchTerm(''); }} className="mt-4 inline-flex items-center rounded-md bg-slate-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-600">
+                                            Clear Filters
+                                        </button>
+                                    )}
                                 </div>
-                                <p className="text-gray-300 text-base line-clamp-3">{post.content}</p>
-                                <div className="mt-3">
-                                    <span className={`text-xs font-semibold px-2 py-1 rounded-full ${post.sentiment === 'NEGATIVE' && 'bg-red-500/30 text-red-300'} ${post.sentiment === 'POSITIVE' && 'bg-green-500/30 text-green-300'} ${post.sentiment === 'NEUTRAL' && 'bg-gray-500/30 text-gray-300'}`}>{post.sentiment || 'N/A'}</span>
-                                </div>
-                            </div>
-                        )) : (
-                            // --- Trạng thái rỗng cho Posts ---
-                            <div className="text-center py-16 px-4 border-2 border-dashed border-slate-700 rounded-lg">
-                                <Search size={48} className="mx-auto h-12 w-12 text-slate-500" />
-                                <h3 className="mt-2 text-lg font-semibold text-white">No Matching Posts Found</h3>
-                                <p className="mt-1 text-sm text-slate-400">
-                                    {searchTerm || selectedPlatforms.length > 0 || selectedSentiments.length > 0
-                                        ? "No posts associated with this alert match your current filters."
-                                        : "No posts have been linked to this alert yet. Try scanning for posts."
-                                    }
-                                </p>
-                                {(searchTerm || selectedPlatforms.length > 0 || selectedSentiments.length > 0) && (
-                                    <button onClick={() => { const params = new URLSearchParams(searchParams.toString()); params.delete('q'); params.delete('fields'); params.delete('platforms'); params.delete('sentiments'); router.push(`${pathname}?${params.toString()}`, { scroll: false }); setSearchTerm(''); }} className="mt-4 inline-flex items-center rounded-md bg-slate-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-600">
-                                        Clear Filters
-                                    </button>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                )}
+                            )}
+                        </div>
+                    )}
 
                 {/* --- PHẦN PHÂN TRANG --- */}
                 {totalPages > 1 && (
