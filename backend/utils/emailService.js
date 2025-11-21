@@ -1,4 +1,3 @@
-// backend/utils/emailService.js
 const nodemailer = require('nodemailer');
 
 // ----- 1. CẤU HÌNH CHO MAILHOG (Gửi thông báo) -----
@@ -72,7 +71,8 @@ const sendNotificationEmail = async (userEmail, alertTitle, post, ccRecipients =
 const sendVerificationEmail = async (toEmail, otp) => {
     try {
         const mailOptions = {
-            from: `"Crisis Alert" <${process.env.GMAIL_USER}>`,
+            from: `"Crisis Alert" <${process.env.GMAIL_USER}>`, // Gmail sender
+            // from : `"Crisis Alert" <${process.env.EMAIL_USER || 'bot@crisis-alert.com'}>`, // Dòng này nếu dùng MailHog
             to: toEmail,
             subject: 'OTP For Verifying Crisis Alert Account',
             html: `
@@ -88,8 +88,9 @@ const sendVerificationEmail = async (toEmail, otp) => {
             `,
         };
 
-        // Gửi email bằng GMAIL transporter
-        const info = await gmailTransporter.sendMail(mailOptions);
+        // const info = await mailhogTransporter.sendMail(mailOptions); // Nếu muốn dùng MailHog để test
+
+        const info = await gmailTransporter.sendMail(mailOptions); // Gửi email bằng GMAIL transporter
         console.log('✅ Verification email (Gmail) sent:', info.messageId);
         return info;
 
@@ -99,7 +100,6 @@ const sendVerificationEmail = async (toEmail, otp) => {
     }
 };
 
-// ----- HÀM MỚI -----
 /**
  * Hàm gửi email chứa OTP để reset mật khẩu
  * @param {string} toEmail - Email của người nhận
@@ -108,7 +108,8 @@ const sendVerificationEmail = async (toEmail, otp) => {
 const sendPasswordResetEmail = async (toEmail, otp) => {
     try {
         const mailOptions = {
-            from: `"Crisis Alert" <${process.env.GMAIL_USER}>`,
+            from: `"Crisis Alert" <${process.env.GMAIL_USER}>`, // Gmail sender
+            // from : `"Crisis Alert" <${process.env.EMAIL_USER || 'bot@crisis-alert.com'}>`, // Dòng này nếu dùng MailHog
             to: toEmail,
             subject: 'Password Resetting Request For Crisis Alert Account',
             html: `
@@ -125,8 +126,9 @@ const sendPasswordResetEmail = async (toEmail, otp) => {
             `,
         };
 
-        // Gửi email bằng GMAIL transporter
-        const info = await gmailTransporter.sendMail(mailOptions);
+        // const info = await mailhogTransporter.sendMail(mailOptions); // Nếu muốn dùng MailHog để test
+
+        const info = await gmailTransporter.sendMail(mailOptions); // Gửi email bằng GMAIL transporter
         console.log('✅ Password reset email (Gmail) sent:', info.messageId);
         return info;
 
@@ -136,9 +138,40 @@ const sendPasswordResetEmail = async (toEmail, otp) => {
     }
 };
 
+// ----- HÀM MỚI: Gửi email chung (dùng cho Subscription, System alert...) -----
+/**
+ * Hàm gửi email tùy chỉnh
+ * @param {object} options - { email, subject, message }
+ */
+const sendEmail = async ({ email, subject, message }) => {
+    try {
+        const mailOptions = {
+            from: `"Crisis Alert Support" <${process.env.GMAIL_USER}>`, // Gmail sender
+            // from : `"Crisis Alert Support" <${process.env.EMAIL_USER || 'bot@crisis-alert.com'}>`, // MailHog sender
+            to: email,
+            subject: subject,
+            html: message, // Nội dung HTML
+        };
+
+        // Uncomment dòng dưới nếu muốn dùng MailHog
+        // const info = await mailhogTransporter.sendMail(mailOptions); 
+
+        // Gửi email bằng GMAIL transporter (Hiện tại đang dùng cái này)
+        const info = await gmailTransporter.sendMail(mailOptions);
+
+        console.log(`✅ Generic Email sent to ${email}. ID: ${info.messageId}`);
+        return info;
+    } catch (error) {
+        console.error('❌ Error sending generic email:', error);
+        // Không ném lỗi để tránh làm crash luồng chính nếu gửi mail thất bại
+        return null;
+    }
+};
+
 // ----- EXPORTS -----
 module.exports = {
     sendNotificationEmail,
     sendVerificationEmail,
     sendPasswordResetEmail,
+    sendEmail, // 👈 Export thêm hàm này
 };

@@ -1,11 +1,11 @@
 // backend/middleware/authMiddleware.js
 const jwt = require('jsonwebtoken');
-// (MỚI) Import User model
+// Import User model
 const User = require('../models/User');
 
 exports.protect = async (req, res, next) => {
 
-    // (FIX LỖI 1) Tự động bỏ qua TẤT CẢ các request OPTIONS
+    // Tự động bỏ qua TẤT CẢ các request OPTIONS
     if (req.method === 'OPTIONS') {
         return next(); // Cho phép request OPTIONS đi qua
     }
@@ -21,7 +21,7 @@ exports.protect = async (req, res, next) => {
             // Giải mã token
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-            // (FIX LỖI 2) Gán user thật vào req.user (tốt hơn)
+            // Gán user thật vào req.user (tốt hơn)
             req.user = await User.findByPk(decoded.id, {
                 attributes: { exclude: ['password'] }
             });
@@ -40,5 +40,13 @@ exports.protect = async (req, res, next) => {
     // Nếu không có token
     if (!token) {
         return res.status(401).json({ message: 'Not authorized, no token' });
+    }
+};
+
+exports.admin = (req, res, next) => {
+    if (req.user && req.user.role === 'admin') {
+        next();
+    } else {
+        res.status(403).json({ message: 'Not authorized as an admin' });
     }
 };

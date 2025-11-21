@@ -1,16 +1,44 @@
 // frontend/app/buy/page.jsx
 'use client';
+
 import { useState } from 'react';
-// --- Thêm Link, ArrowLeft, BookOpen ---
 import Link from 'next/link';
-import { Check, X, Loader2, Shield, Zap, Crown, BookOpen, ArrowLeft } from 'lucide-react';
-import { api } from '@/utils/api';
+import { Check, X, Loader2, Shield, Zap, Crown, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/app/providers.jsx';
+import { createSubRequest } from '@/utils/api';
+import { toast } from 'react-toastify';
 
 // --- Payment Modal ---
 function PaymentModal({ plan, onClose }) {
+    const [isLoading, setIsLoading] = useState(false);
+
     const qrData = `Payment for ${plan.name} Plan: $${plan.price} USD`;
     const qrLink = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrData)}`;
+
+    // Hàm xử lý khi bấm nút xác nhận thanh toán
+    const handlePaymentCompleted = async () => {
+        if (isLoading) return;
+        setIsLoading(true);
+
+        try {
+            // Gọi API gửi yêu cầu duyệt
+            await createSubRequest({
+                plan: plan.name,
+                amount: plan.price
+            });
+
+            // 2. Thay alert bằng Toast Success
+            toast.success('Upgrade request sent! Please wait for admin approval.');
+
+            onClose(); // Đóng modal
+        } catch (error) {
+            console.error(error);
+            // 3. Thay alert bằng Toast Error
+            toast.error(error.message || 'Failed to send request.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
@@ -45,23 +73,29 @@ function PaymentModal({ plan, onClose }) {
                             alt="Payment QR Code"
                             className="w-48 h-48 object-contain"
                         />
+                        {/* Hiệu ứng quét */}
                         <div className="absolute top-0 left-0 w-full h-1 bg-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.8)] animate-scan"></div>
                     </div>
 
-                    {/* Giữ nguyên text gốc */}
                     <div className="text-sm text-slate-400 bg-slate-900/50 p-3 rounded-lg w-full">
                         <p><strong>Content:</strong> {plan.name} [Your_Email]</p>
-                        <p>Hệ thống sẽ tự động nâng cấp sau 1-5 phút.</p>
+                        <p className="mt-1 text-xs">System will auto-upgrade after Admin approval (1-5 mins).</p>
                     </div>
                 </div>
 
                 {/* Footer */}
                 <div className="p-4 border-t border-slate-700 bg-slate-900/50 flex justify-center">
                     <button
-                        onClick={onClose}
-                        className="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-full font-medium transition-all"
+                        onClick={handlePaymentCompleted}
+                        disabled={isLoading}
+                        className={`px-6 py-2 rounded-full font-medium transition-all flex items-center gap-2
+                            ${isLoading
+                                ? 'bg-slate-600 cursor-not-allowed text-slate-300'
+                                : 'bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20'
+                            }`}
                     >
-                        I have completed payment
+                        {isLoading && <Loader2 className="animate-spin" size={18} />}
+                        {isLoading ? 'Processing...' : 'I have completed payment'}
                     </button>
                 </div>
             </div>
@@ -181,17 +215,17 @@ export default function BuyPage() {
                         <div
                             key={index}
                             className={`relative flex flex-col p-8 rounded-2xl transition-all duration-300 ${isCurrentPlan
-                                    ? 'bg-slate-800 border-2 border-green-500 shadow-[0_0_40px_rgba(74,222,128,0.15)]'
-                                    : plan.isPopular
-                                        ? 'bg-slate-800 border-2 border-blue-500 shadow-[0_0_40px_rgba(59,130,246,0.15)] transform hover:-translate-y-2'
-                                        : 'bg-slate-800/50 border border-slate-700 hover:bg-slate-800'
-                                }`}>
+                                ? 'bg-slate-800 border-2 border-green-500 shadow-[0_0_40px_rgba(74,222,128,0.15)]'
+                                : plan.isPopular
+                                    ? 'bg-slate-800 border-2 border-blue-500 shadow-[0_0_40px_rgba(59,130,246,0.15)] transform hover:-translate-y-2'
+                                    : 'bg-slate-800/50 border border-slate-700 hover:bg-slate-800'
+                                }`}
+                        >
 
                             {isCurrentPlan && (
                                 <div className="absolute -top-4 left-1/2 transform -translate-x-1/2 bg-gradient-to-r from-green-500 to-emerald-500 text-white px-4 py-1 rounded-full text-sm font-bold shadow-lg">
                                     CURRENT PLAN
                                 </div>
-
                             )}
 
                             {plan.isPopular && !isCurrentPlan && (
@@ -225,7 +259,6 @@ export default function BuyPage() {
                                         ) : (
                                             <X className="text-slate-600 shrink-0" size={20} />
                                         )}
-                                        {/* Thêm line-through cho giống page.jsx */}
                                         <span className={feature.included ? 'text-slate-200' : 'text-slate-500 line-through'}>
                                             {feature.text}
                                         </span>
@@ -238,15 +271,14 @@ export default function BuyPage() {
                                 onClick={plan.action}
                                 disabled={!plan.action || isCurrentPlan}
                                 className={`w-full py-3 rounded-xl font-bold transition-all ${isCurrentPlan
-                                        ? 'bg-slate-700 text-slate-400 cursor-default'
-                                        : plan.action
-                                            ? (plan.isPopular
-                                                ? 'bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white shadow-lg'
-                                                : 'bg-slate-700 hover:bg-slate-600 text-white')
-                                            : 'bg-slate-700 text-slate-400 cursor-default'
+                                    ? 'bg-slate-700 text-slate-400 cursor-default'
+                                    : plan.action
+                                        ? (plan.isPopular
+                                            ? 'bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white shadow-lg'
+                                            : 'bg-slate-700 hover:bg-slate-600 text-white')
+                                        : 'bg-slate-700 text-slate-400 cursor-default'
                                     }`}
                             >
-
                                 {isCurrentPlan ? 'Your Current Plan' : plan.buttonText}
                             </button>
                         </div>

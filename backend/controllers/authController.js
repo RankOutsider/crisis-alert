@@ -5,41 +5,47 @@ const User = require('../models/User');
 const Otp = require('../models/Otp');
 const { Op } = require('sequelize');
 
+const sequelize = User.sequelize;
+
 const {
     sendVerificationEmail,
     sendPasswordResetEmail
 } = require('../utils/emailService');
-
 
 const SECRET = process.env.JWT_SECRET;
 
 // @desc    Đăng ký người dùng mới
 exports.register = async (req, res) => {
     const { username, email, phone, password } = req.body;
+    const t = await sequelize.transaction();
+
     try {
         // 1. Kiểm tra username đã tồn tại
         let existingUser = await User.findOne({ where: { username } });
         if (existingUser) {
+            await t.rollback();
             return res.status(400).json({ message: 'Username already exists.' });
         }
 
         // 2. Kiểm tra SĐT đã tồn tại
         existingUser = await User.findOne({ where: { phone } });
         if (existingUser) {
+            await t.rollback();
             return res.status(400).json({ message: 'Phone number is already in use.' });
         }
 
         // 3. Kiểm tra email đã tồn tại VÀ ĐÃ XÁC THỰC
         existingUser = await User.findOne({ where: { email, is_verified: true } });
         if (existingUser) {
+            await t.rollback();
             return res.status(400).json({ message: 'Email is already in use.' });
         }
 
         // 4. Xử lý email đã đăng ký nhưng CHƯA XÁC THỰC
         existingUser = await User.findOne({ where: { email, is_verified: false } });
         if (existingUser) {
-            await Otp.destroy({ where: { email } });
-            await User.destroy({ where: { id: existingUser.id } });
+            await Otp.destroy({ where: { email }, transaction: t });
+            await User.destroy({ where: { id: existingUser.id }, transaction: t });
         }
 
         // 5. Băm mật khẩu
@@ -53,8 +59,7 @@ exports.register = async (req, res) => {
             phone,
             password: hashedPassword,
             is_verified: false,
-            // subscriptionTier sẽ tự động được set là 'Free' (nhờ Bước 1)
-        });
+        }, { transaction: t });
 
         // 7. Tạo mã OTP
         const otpCode = Math.floor(100000 + Math.random() * 900000).toString(); // Mã 6 số
@@ -65,10 +70,11 @@ exports.register = async (req, res) => {
             email: newUser.email,
             otp_code: otpCode,
             expires_at: expiresAt,
-        });
+        }, { transaction: t });
 
         // 9. Gửi email xác thực (dùng hàm Gmail)
         await sendVerificationEmail(newUser.email, otpCode);
+        await t.commit();
 
         // 10. Trả về thông báo thành công (bằng tiếng Anh)
         res.status(201).json({
@@ -76,7 +82,11 @@ exports.register = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Lỗi khi đăng ký:", error);
+        await t.rollback();
+        console.error("Error during registration (has been rollback):", error);
+        if (error.responseCode === 535){
+            return res.status(500).json({ message: 'Email service error: Unable to send verification email. Please contact support.' });
+        }
         res.status(500).json({ message: 'Internal server error, please try again' });
     }
 };
@@ -105,7 +115,11 @@ exports.login = async (req, res) => {
             return res.status(401).json({ message: 'Invalid username or password' });
         }
 
-        const token = jwt.sign({ id: user.id, username: user.username }, SECRET, { expiresIn: '8h' });
+        const token = jwt.sign({
+            id: user.id,
+            username: user.username,
+            role: user.role
+        }, SECRET, { expiresIn: '8h' });
         res.json({ message: 'Login successful', token });
 
     } catch (error) {
@@ -131,7 +145,8 @@ exports.getMe = async (req, res) => {
                 'date_of_birth',
                 'address',
                 'cc_emails',
-                'subscriptionTier'
+                'subscriptionTier',
+                'role'
             ]
         });
         if (!user) { return res.status(404).json({ message: 'User not found' }); }

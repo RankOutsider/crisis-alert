@@ -3,6 +3,12 @@ const { Op } = require('sequelize');
 const { Post, Alert, CaseStudy, sequelize } = require('../models/associations');
 const puppeteer = require('puppeteer');
 
+// Danh sách cột mặc định cho export
+const ALL_EXPORT_COLUMNS = [
+    'id', 'title', 'content', 'source',
+    'sourceUrl', 'platform', 'sentiment', 'publishedAt'
+];
+
 // @desc Lấy tất cả posts của user (cho trang Mentions)
 exports.getAllUserPosts = async (req, res) => {
     try {
@@ -466,51 +472,160 @@ exports.getPostStatsOverTime = async (req, res) => {
     }
 };
 
+
+// @desc Lấy dữ liệu thống kê Positive/Negative theo TỪNG NGÀY trong 1 tháng
+exports.getPostStatsByDayInMonth = async (req, res) => {
+    // Gói 'Free' không thể xem
+    if (req.user.subscriptionTier === 'Free') {
+        return res.status(403).json({ message: 'Access denied.' });
+    }
+
+    const { month } = req.query;
+    const userId = req.user.id;
+
+    let startDate;
+    let endDate;
+    let monthShortName;
+
+    try {
+        const parsedDate = new Date(month);
+        if (isNaN(parsedDate.getTime())) {
+            return res.status(400).json({ message: 'Invalid month format. Expected "Mmm YYYY" or ISO date' });
+        }
+
+        const year = parsedDate.getFullYear();
+        const monthIndex = parsedDate.getMonth();
+
+        // Lấy tên tháng ngắn gọn (Jan, Feb, Nov...) để khớp với DB format
+        monthShortName = parsedDate.toLocaleDateString('en-US', { month: 'short' });
+
+        startDate = new Date(year, monthIndex, 1);
+        endDate = new Date(year, monthIndex + 1, 0);
+        endDate.setHours(23, 59, 59, 999);
+    } catch (e) {
+        return res.status(400).json({ message: 'Invalid date format.' });
+    }
+
+    // 2. Định dạng Group By cho MySQL: 'Tháng Ngày' (e.g., 'Nov 01', 'Nov 02')
+    // Lưu ý: %d trả về 01, 02...
+    const dateGroupFormat = `DATE_FORMAT(Post.publishedAt, '%b %d')`;
+
+    try {
+        // 3. Query Database
+        const results = await Post.findAll({
+            attributes: [
+                [sequelize.literal(dateGroupFormat), 'name'],
+                [
+                    sequelize.fn('SUM', sequelize.literal("CASE WHEN sentiment = 'POSITIVE' THEN 1 ELSE 0 END")),
+                    'positive'
+                ],
+                [
+                    sequelize.fn('SUM', sequelize.literal("CASE WHEN sentiment = 'NEGATIVE' THEN 1 ELSE 0 END")),
+                    'negative'
+                ]
+            ],
+            where: {
+                publishedAt: { [Op.between]: [startDate, endDate] }, // Lọc trong tháng
+                sentiment: { [Op.in]: ['POSITIVE', 'NEGATIVE'] }
+            },
+            include: [{
+                model: Alert,
+                where: { userId: userId }, // Chỉ lấy của user
+                attributes: [],
+                through: { attributes: [] }
+            }],
+            group: ['name'], // Nhóm theo chuỗi ngày
+            order: [[sequelize.literal('MIN(Post.publishedAt)'), 'ASC']],
+            raw: true
+        });
+
+        // 4. XỬ LÝ DỮ LIỆU: Lấp đầy những ngày không có dữ liệu (Padding)
+        const resultsMap = new Map(results.map(item => [item.name, item]));
+
+        const finalData = [];
+        const daysInMonth = endDate.getDate(); // Lấy tổng số ngày của tháng đó (28, 30, hoặc 31)
+
+        for (let i = 1; i <= daysInMonth; i++) {
+            // Tạo key ngày: i < 10 thêm số 0 đằng trước (pad)
+            // Ví dụ: i=1 -> "01", i=15 -> "15"
+            const dayString = i.toString().padStart(2, '0');
+
+            // Tạo key hoàn chỉnh: "Nov 01"
+            const keyName = `${monthShortName} ${dayString}`;
+
+            const dbEntry = resultsMap.get(keyName);
+
+            if (dbEntry) {
+                // Nếu ngày đó có dữ liệu trong DB
+                finalData.push({
+                    name: keyName,
+                    positive: parseInt(dbEntry.positive, 10),
+                    negative: parseInt(dbEntry.negative, 10)
+                });
+            } else {
+                // Nếu ngày đó không có bài viết nào -> Điền 0
+                finalData.push({
+                    name: keyName,
+                    positive: 0,
+                    negative: 0
+                });
+            }
+        }
+
+        res.status(200).json({ data: finalData });
+
+    } catch (error) {
+        console.error("Error fetching daily stats:", error);
+        res.status(500).json({ message: 'Server error fetching daily stats' });
+    }
+};
+
 // @desc Export tất cả posts của user trong 1 khoảng thời gian
 exports.exportUserPosts = async (req, res) => {
 
     // --- KIỂM TRA GÓI (TIER) ---
-    // Chỉ gói 'Pro' mới được export Excel
     if (req.user.subscriptionTier !== 'Pro') {
         return res.status(403).json({ message: 'Access denied. Excel export is available for Pro users only.' });
     }
-    // --- KẾT THÚC KIỂM TRA ---
 
-    const { startDate, endDate } = req.query;
+    const {
+        startDate, endDate, columns,
+        sortField, sortOrder
+    } = req.query;
     const userId = req.user.id;
 
     // Đảm bảo endDate bao gồm cả ngày
     const endOfDay = new Date(endDate);
     endOfDay.setHours(23, 59, 59, 999);
 
+    // --- Xử lý tham số ---
+    // 1. Chọn cột
+    // Nếu frontend gửi 'columns', dùng nó. Nếu không, dùng tất cả các cột.
+    const selectedColumns = columns ? columns.split(',') : ALL_EXPORT_COLUMNS;
+
+    // 2. Sắp xếp
+    // Mặc định sắp xếp theo 'publishedAt' DESC (mới nhất)
+    const order = (sortField && sortOrder)
+        ? [[sortField, sortOrder.toUpperCase()]]
+        : [['publishedAt', 'DESC']];
+
     try {
         const posts = await Post.findAll({
-            // Các trường (attributes) bạn muốn thấy trong file Excel
-            attributes: [
-                'id',
-                'title',
-                'content',
-                'source',
-                'sourceUrl',
-                'platform',
-                'sentiment',
-                'publishedAt'
-            ],
+            attributes: selectedColumns, // Chỉ lấy các cột đã chọn
             where: {
                 publishedAt: {
-                    [Op.between]: [new Date(startDate), endOfDay] // Lọc theo ngày
+                    [Op.between]: [new Date(startDate), endOfDay]
                 },
-                // Theo yêu cầu trên modal (chỉ Pos/Neg)
                 sentiment: { [Op.in]: ['POSITIVE', 'NEGATIVE'] }
             },
             include: [{
                 model: Alert,
-                where: { userId: userId }, // Đảm bảo an toàn, chỉ lấy của user
+                where: { userId: userId },
                 attributes: [],
                 through: { attributes: [] }
             }],
-            order: [['publishedAt', 'DESC']], // Sắp xếp
-            raw: true // Trả về JSON thô, sạch
+            order: order, // Sắp xếp theo lựa chọn
+            raw: true
         });
 
         // Trả về mảng JSON. Frontend sẽ xử lý việc tạo file Excel.
@@ -530,9 +645,11 @@ exports.exportPdf = async (req, res) => {
     if (req.user.subscriptionTier === 'Free') {
         return res.status(403).json({ message: 'Access denied. PDF export is available for VIP and Pro users.' });
     }
-    // --- KẾT THÚC KIỂM TRA ---
 
-    const { startDate, endDate } = req.query;
+    const {
+        startDate, endDate, columns,
+        sortField, sortOrder
+    } = req.query;
     const userId = req.user.id;
     let browser;
 
@@ -540,19 +657,18 @@ exports.exportPdf = async (req, res) => {
     const endOfDay = new Date(endDate);
     endOfDay.setHours(23, 59, 59, 999);
 
+    // --- Xử lý tham số ---
+    // 1. Chọn cột
+    // Nếu frontend gửi 'columns', dùng nó. Nếu không, dùng tất cả các cột.
+    const selectedColumns = columns ? columns.split(',') : ALL_EXPORT_COLUMNS;
+    const order = (sortField && sortOrder)
+        ? [[sortField, sortOrder.toUpperCase()]]
+        : [['publishedAt', 'DESC']];
+
     try {
-        // 1. LẤY DỮ LIỆU TỪ DB (Tái sử dụng logic của hàm exports.exportUserPosts)
+        // 1. LẤY DỮ LIỆU TỪ DB
         const data = await Post.findAll({
-            attributes: [
-                'id',
-                'title',
-                'content',
-                'source',
-                'sourceUrl',
-                'platform',
-                'sentiment',
-                'publishedAt'
-            ],
+            attributes: selectedColumns,
             where: {
                 publishedAt: {
                     [Op.between]: [new Date(startDate), endOfDay]
@@ -565,7 +681,7 @@ exports.exportPdf = async (req, res) => {
                 attributes: [],
                 through: { attributes: [] }
             }],
-            order: [['publishedAt', 'DESC']],
+            order: order,
             raw: true
         });
 

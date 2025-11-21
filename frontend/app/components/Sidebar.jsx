@@ -4,10 +4,10 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
     LayoutDashboard, AlertCircle, LogOut, X, Settings,
-    FileSearch, Book, User as UserIcon, Zap
+    FileSearch, Book, User as UserIcon, Zap, Shield
 } from 'lucide-react';
 import { useEffect } from 'react';
-import { clearToken } from '@/utils/api';
+import { getToken } from '@/utils/api';
 import { useSWRConfig } from 'swr';
 import { toast } from 'react-toastify';
 import { socket } from '@/utils/socket';
@@ -20,27 +20,14 @@ const menuItems = [
     { name: 'Case Studies', href: '/dashboard/casestudies', icon: Book },
 ];
 
-const getUserIdFromToken = () => {
-    const token = getToken();
-    if (token) {
-        try {
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            return { username: payload.username, userId: payload.id };
-        } catch (error) {
-            console.error("Failed to decode token.");
-        }
-    }
-    return { username: '', userId: null };
-};
-
 export default function Sidebar({ isOpen, onClose }) {
     const pathname = usePathname();
     const router = useRouter();
     const { mutate } = useSWRConfig();
+    const { user, logout } = useAuth();
 
-    const { user } = useAuth();
     const userId = user?.id;
-    const username = user?.username;
+    const username = user?.username || user?.name;
 
     useEffect(() => {
         console.log("🧠 useEffect ran — setting up socket listeners...");
@@ -72,7 +59,7 @@ export default function Sidebar({ isOpen, onClose }) {
                 }
             );
 
-            // Gọi hàm 'mutate' toàn cục của SWR, trỏ vào key của API
+            // Gọi hàm 'mutate' toàn cục của SWR
             mutate('/api/alerts/stats');
 
             mutate((key) => key.startsWith('/api/posts/over-time'));
@@ -90,48 +77,74 @@ export default function Sidebar({ isOpen, onClose }) {
 
     const handleLogout = () => {
         if (socket.connected) {
-            socket.disconnect(); // Ngắt kết nối khi logout
+            socket.disconnect();
         }
-        clearToken();
-        router.push('/login');
+        logout();
     };
 
     return (
         <>
             {/* Overlay */}
             <div
-                className={`fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-300 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+                className={`fixed inset-0 bg-black/60 z-40 md:hidden transition-opacity duration-300 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+                    }`}
                 onClick={onClose}
             ></div>
 
-            {/* Sidebar */}
+            {/* Sidebar Container */}
             <aside
-                className={`fixed inset-y-0 left-0 w-3/4 sm:w-64 bg-slate-800/80 backdrop-blur-md p-6 flex flex-col
-                            transform transition-transform duration-300 ease-in-out z-50
-                            md:static md:translate-x-0 
-                            ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+                className={`
+                    fixed inset-y-0 left-0 z-50 w-72 bg-slate-800/80 backdrop-blur-md border-r border-slate-700/50
+                    transform transition-transform duration-300 ease-in-out flex flex-col h-full
+                    md:static md:translate-x-0 md:w-64
+                    ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+                `}
             >
-                <div className="flex items-center justify-between">
+                {/* Header (Logo + Close Btn) */}
+                <div className="flex items-center justify-between p-6 shrink-0">
                     <div className="flex items-center gap-3">
-                        <div className="bg-blue-500 p-2 rounded-lg">
-                            <AlertCircle className="text-white" />
+                        <div className="bg-blue-600 p-2 rounded-lg shadow-lg shadow-blue-900/20">
+                            <AlertCircle className="text-white" size={22} />
                         </div>
-                        <h1 className="text-xl font-bold text-white">Crisis Alert</h1>
+                        <h1 className="text-xl font-bold text-white tracking-tight">Crisis Alert</h1>
                     </div>
-                    <button onClick={onClose} className="p-2 md:hidden rounded-md hover:bg-slate-700">
-                        <X size={24} className="text-white" />
+                    {/* Nút X chỉ hiện trên Mobile */}
+                    <button
+                        onClick={onClose}
+                        className="p-2 md:hidden text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-700"
+                    >
+                        <X size={24} />
                     </button>
                 </div>
 
-                {/* Welcome */}
+                {/* User Info */}
                 {username && (
-                    <div className="mt-4 p-2">
-                        <p className="text-sm text-gray-400">Welcome,</p>
-                        <p className="font-semibold text-gray-200 truncate">{username}</p>
+                    <div className="px-6 pb-4 shrink-0">
+                        <div className="p-3 bg-slate-700/50 rounded-lg border border-slate-600/50">
+                            <p className="text-xs text-slate-400 uppercase font-semibold tracking-wider mb-1">HELLO USER</p>
+                            <p className="font-medium text-white truncate">{username}</p>
+                        </div>
                     </div>
                 )}
 
-                <nav className="flex flex-col gap-2 mt-8 overflow-y-auto max-h-[60vh] sm:max-h-[auto]">
+                {/* Navigation */}
+                <nav className="flex-1 overflow-y-auto px-4 py-2 space-y-1 custom-scrollbar">
+                    {/* Admin Panel */}
+                    {user?.role === 'admin' && (
+                        <Link
+                            href="/admin"
+                            onClick={onClose}
+                            className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 mb-2 group border border-purple-500/30 ${pathname.startsWith('/admin')
+                                    ? 'bg-purple-600/20 text-purple-300 shadow-md shadow-purple-900/20'
+                                    : 'text-purple-400 hover:bg-purple-600/10'
+                                }`}
+                        >
+                            <Shield size={20} />
+                            <span className="text-sm font-bold">Admin Panel</span>
+                        </Link>
+                    )}
+
+                    {/* Menu Items */}
                     {menuItems.map((item) => {
                         const isActive = (item.href === '/dashboard')
                             ? pathname === item.href
@@ -139,17 +152,13 @@ export default function Sidebar({ isOpen, onClose }) {
 
                         const isFreeTier = user?.subscriptionTier === 'Free';
                         const isCaseStudyLink = item.name === 'Case Studies';
+
                         if (isCaseStudyLink && isFreeTier) {
                             return (
-                                <div
-                                    key={item.name}
-                                    // Dùng 'title' để giải thích vì sao bị vô hiệu hóa
-                                    title="Nâng cấp lên VIP hoặc Pro để sử dụng Case Studies"
-                                    className="flex items-center gap-3 px-4 py-2 rounded-md transition-colors cursor-not-allowed text-gray-600"
-                                >
+                                <div key={item.name} className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-500 cursor-not-allowed opacity-70">
                                     <item.icon size={20} />
-                                    {/* Thêm gạch ngang để rõ hơn */}
-                                    <span className="text-sm sm:text-base line-through">{item.name}</span>
+                                    <span className="text-sm font-medium">{item.name}</span>
+                                    <span className="ml-auto text-[10px] border border-slate-600 px-1 rounded text-slate-500">PRO</span>
                                 </div>
                             );
                         }
@@ -159,59 +168,63 @@ export default function Sidebar({ isOpen, onClose }) {
                                 key={item.name}
                                 href={item.href}
                                 onClick={onClose}
-                                className={`flex items-center gap-3 px-4 py-2 rounded-md transition-colors ${isActive
-                                    ? 'bg-blue-500/20 text-blue-300'
-                                    : 'hover:bg-slate-700/50 text-gray-400'
+                                className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${isActive
+                                    ? 'bg-blue-600 text-white shadow-md shadow-blue-900/20'
+                                    : 'text-slate-400 hover:bg-slate-700/50 hover:text-white'
                                     }`}
                             >
-                                <item.icon size={20} />
-                                <span className="text-sm sm:text-base">{item.name}</span>
+                                <item.icon size={20} className={isActive ? 'text-white' : 'text-slate-400 group-hover:text-white'} />
+                                <span className="text-sm font-medium">{item.name}</span>
                             </Link>
                         );
                     })}
                 </nav>
 
-                <div className="mt-auto pt-4 border-t border-slate-700/50">
+                {/* Footer (Upgrade + Settings + Logout) */}
+                <div className="p-4 border-t border-slate-700/50 shrink-0 bg-slate-800/30">
+                    {/* Nút Upgrade nổi bật */}
                     <Link
                         href="/buy"
                         onClick={onClose}
-                        className={`flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg transition-colors mb-4 bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-semibold text-sm sm:text-base`}
+                        className="flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg transition-colors mb-4 bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-semibold text-sm sm:text-base shadow-lg"
                     >
-                        <Zap size={18} />
-                        <span>Upgrade Plan</span>
+                        <Zap size={18}/>
+                        <span>Subscription Plan</span>
                     </Link>
 
-                    <Link
-                        href="/dashboard/profile"
-                        onClick={onClose}
-                        className={`flex items-center gap-3 px-4 py-2 rounded-md transition-colors mb-2 ${pathname === '/dashboard/profile'
-                            ? 'bg-blue-500/20 text-blue-300'
-                            : 'hover:bg-slate-700/50 text-gray-400'
-                            }`}
-                    >
-                        <UserIcon size={20} />
-                        <span className="text-sm sm:text-base">Profile</span>
-                    </Link>
+                    <div className="grid grid-cols-3 gap-2">
+                        {/* Nút vào Profile */}
+                        <Link
+                            href="/dashboard/profile"
+                            onClick={onClose}
+                            className="flex flex-col items-center justify-center p-2 rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
+                            title="Profile"
+                        >
+                            <UserIcon size={20} />
+                            <span className="text-[10px] mt-1">Profile</span>
+                        </Link>
 
-                    <Link
-                        href="/dashboard/settings"
-                        onClick={onClose}
-                        className={`flex items-center gap-3 px-4 py-2 rounded-md transition-colors ${pathname === '/dashboard/settings'
-                            ? 'bg-blue-500/20 text-blue-300'
-                            : 'hover:bg-slate-700/50 text-gray-400'
-                            }`}
-                    >
-                        <Settings size={20} />
-                        <span className="text-sm sm:text-base">Settings</span>
-                    </Link>
+                        {/* Nút vào Setting */}
+                        <Link
+                            href="/dashboard/settings"
+                            onClick={onClose}
+                            className="flex flex-col items-center justify-center p-2 rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
+                            title="Settings"
+                        >
+                            <Settings size={20} />
+                            <span className="text-[10px] mt-1">Settings</span>
+                        </Link>
 
-                    <button
-                        onClick={handleLogout}
-                        className="w-full mt-2 flex items-center gap-3 px-4 py-2 rounded-md transition-colors bg-red-500/20 hover:bg-red-500/40 text-red-300"
-                    >
-                        <LogOut size={20} />
-                        <span className="text-sm sm:text-base">Logout</span>
-                    </button>
+                        {/* Nút Logout */}
+                        <button
+                            onClick={handleLogout}
+                            className="flex flex-col items-center justify-center p-2 rounded-lg text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                            title="Logout"
+                        >
+                            <LogOut size={20} />
+                            <span className="text-[10px] mt-1">Logout</span>
+                        </button>
+                    </div>
                 </div>
             </aside>
         </>

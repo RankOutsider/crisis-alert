@@ -1,10 +1,10 @@
+// frontend/app/dashboard/DashboardContent.jsx
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, use } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
 import StatCard from '@/app/components/StatCard';
-import MainChart from '@/app/components/MainChart';
 import Modal from '@/app/components/Modal';
 import { fetcher, api, getToken } from '@/utils/api';
 import * as XLSX from 'xlsx';
@@ -13,11 +13,21 @@ import MultiSelectDropdown from '../components/MultiSelectDropdown';
 
 import { useAuth } from '@/app/providers.jsx';
 import {
-    AlertCircle, Newspaper, MessageSquare, RefreshCw, Loader2, Download, Lock,
-    Zap
+    AlertCircle, Newspaper, MessageSquare, RefreshCw, Loader2,
+    Download, Lock, Zap, X as XIcon, Plus, Minus, Search
 } from 'lucide-react';
 
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
+
+const MainChart = dynamic(() => import('@/app/components/MainChart'), {
+    ssr: false,
+    loading: () => (
+        <div className="flex items-center justify-center h-full w-full bg-slate-800/50 rounded-lg">
+            <p className="text-gray-400 text-sm">Loading Chart...</p>
+        </div>
+    )
+});
 
 // --- Skeleton Component cho StatCard ---
 function StatCardSkeleton({ icon: Icon, color, title }) {
@@ -43,7 +53,7 @@ function MainChartSkeleton() {
     );
 }
 
-const EXPORT_COLUMN_OPTIONS = ['title', 'content', 'sourceUrl', 'platform', 'sentiment', 'scannedAt'];
+const EXPORT_COLUMN_OPTIONS = ['id', 'title', 'content', 'source', 'sourceUrl', 'platform', 'sentiment', 'publishedAt'];
 
 // --- Component Chính ---
 export default function DashboardContent() {
@@ -60,9 +70,27 @@ export default function DashboardContent() {
     const [isExporting, setIsExporting] = useState(false);
     const [exportType, setExportType] = useState('excel');
 
-    // --- State cho các tùy chọn export mới ---
+    // --- State cho các tùy chọn export ---
+    const [sortBy, setSortBy] = useState('publishedAt');
     const [sortOrder, setSortOrder] = useState('desc');
     const [selectedColumns, setSelectedColumns] = useState(EXPORT_COLUMN_OPTIONS);
+
+    const [chartModalData, setChartModalData] = useState(null);
+    const [detailData, setDetailData] = useState(null);
+    const [isDetailLoading, setIsDetailLoading] = useState(false);
+
+    const [searchDay, setSearchDay] = useState('');
+    const [debouncedSearchDay, setDebouncedSearchDay] = useState(searchDay);
+
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedSearchDay(searchDay);
+        }, 300);
+
+        return () => {
+            clearTimeout(handler);
+        };
+    }, [searchDay]);
 
     // --- SWR Hook cho STAT CARDS ---
     const {
@@ -108,6 +136,7 @@ export default function DashboardContent() {
             const params = new URLSearchParams({
                 startDate: exportStartDate,
                 endDate: exportEndDate,
+                sortField: sortBy,
                 sortOrder: sortOrder,
                 columns: selectedColumns.join(','),
                 format: 'json'
@@ -122,13 +151,23 @@ export default function DashboardContent() {
                 return;
             }
 
+            const filteredData = data.map(row => {
+                const filteredRow = {};
+                EXPORT_COLUMN_OPTIONS.forEach(columnkey => {
+                    if (selectedColumns.includes(columnkey) && row.hasOwnProperty(columnkey)) {
+                        filteredRow[columnkey] = row[columnkey];
+                    }
+                })
+                return filteredRow;
+            });
+
             const titleRow = ["Crisis Alert Mentions Export"];
             const dateRangeRow = [`Date Range: ${exportStartDate} to ${exportEndDate}`];
             const blankRow = [];
             const headerAOA = [titleRow, dateRangeRow, blankRow];
             const worksheet = XLSX.utils.aoa_to_sheet(headerAOA);
 
-            XLSX.utils.sheet_add_json(worksheet, data, {
+            XLSX.utils.sheet_add_json(worksheet, filteredData, {
                 origin: "A4",
                 skipHeader: false
             });
@@ -163,6 +202,7 @@ export default function DashboardContent() {
             const params = new URLSearchParams({
                 startDate: exportStartDate,
                 endDate: exportEndDate,
+                sortField: sortBy,
                 sortOrder: sortOrder,
                 columns: selectedColumns.join(',')
             });
@@ -217,6 +257,7 @@ export default function DashboardContent() {
         }
     };
 
+    // Xử lý nút "Xuất" cuối cùng
     const handleFinalExport = () => {
         if (!exportStartDate || !exportEndDate) {
             alert("Please select both start and end dates.");
@@ -228,6 +269,50 @@ export default function DashboardContent() {
             handleExportPdf();
         }
     }
+
+    // --- Hàm xử lý khi click vào cột biểu đồ ---
+    const handleBarClick = (data, dataKey) => {
+        console.log("3. [Dashboard] Đã nhận được data:", data);
+        console.log("4. [Dashboard] Chế độ TimeRange hiện tại:", timeRange);
+
+        // data: { name: "Nov 2025", positive: 25, negative: 25 }
+        // dataKey: 'positive' | 'negative'
+        // 1. Chỉ thực hiện khi đang xem "6months"
+        if (timeRange !== '6months') {
+            // Nếu đang xem 7days, chỉ hiện tổng (như cũ)
+            setChartModalData({
+                name: data.name,
+                type: dataKey,
+                value: data[dataKey]
+            });
+            return;
+        }
+
+        // 2. Đặt dữ liệu Tổng cho Modal
+        setChartModalData({
+            name: data.name, // "Nov 2025"
+            totalPositive: data.positive,
+            totalNegative: data.negative
+        });
+
+        // 3. Bắt đầu tải chi tiết
+        fetchDetails(data.name);
+    };
+
+    // --- Hàm fetch chi tiết (API call) ---
+    const fetchDetails = async (monthName) => {
+        setIsDetailLoading(true);
+        setDetailData(null);
+        try {
+            const result = await api(`posts/stats-by-day?month=${encodeURIComponent(monthName)}`);
+            setDetailData(result.data); // result.data là mảng [ { name: 'Nov 01', ... } ]
+        } catch (error) {
+            console.error("Failed to fetch chart details:", error);
+            setDetailData([]); // Đặt là mảng rỗng để biết là đã fetch xong
+        } finally {
+            setIsDetailLoading(false);
+        }
+    };
 
     // --- Khối xử lý Lỗi (cho Stats) ---
     if (statsError && !statsData) {
@@ -253,20 +338,20 @@ export default function DashboardContent() {
     }
 
     // --- Khối xử lý Loading (Skeleton) ---
-    if (isAuthLoading || (isStatsLoading && !statsData) || (isChartLoading && !chartResponse && chartApiUrl != null)) {
+    if (isAuthLoading || !user || (isStatsLoading && !statsData) || (isChartLoading && !chartResponse && chartApiUrl != null)) {
         return (
             <div className="min-h-screen text-gray-200 overflow-x-hidden">
                 <main className="p-4 sm:p-6 md:p-8">
                     {/* Skeleton cho Header */}
                     <div className="mb-8 animate-pulse">
                         <div className="h-10 bg-slate-700 rounded w-1/2 mb-2"></div>
-                        <div className="h-4 bg-slate-700 rounded w-1/DASHBOARD CONTENT (WITH EXPORT OPTIONS):/3"></div>
+                        <div className="h-4 bg-slate-700 rounded w-1/DASHBOARD CONTENT:/3"></div>
                     </div>
 
                     {/* Skeleton cho STAT CARDS */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
                         <StatCardSkeleton title="Active Alerts" icon={AlertCircle} color="text-red-400" />
-                        <StatCardSkeleton title="Total Alert-Mentioned Posts" icon={MessageSquare} color="text-blue-400" />
+                        <StatCardSkeleton title="Total Alert-Triggered Posts" icon={MessageSquare} color="text-blue-400" />
                         <StatCardSkeleton title="Total Alerts" icon={Newspaper} color="text-green-400" />
                     </div>
 
@@ -295,7 +380,7 @@ export default function DashboardContent() {
                         color="text-red-400"
                     />
                     <StatCard
-                        title="Total Alert-Mentioned Posts"
+                        title="Total Alert-Triggered Posts"
                         value={(statsData?.totalMentionedPosts ?? 0).toLocaleString()}
                         icon={MessageSquare}
                         color="text-blue-400"
@@ -389,6 +474,8 @@ export default function DashboardContent() {
                                 isLoading={isChartLoading}
                                 error={chartError}
                                 onRetry={() => mutateChart()}
+
+                                onBarClick={handleBarClick}
                             />
                         </div>
                     )}
@@ -415,12 +502,11 @@ export default function DashboardContent() {
                                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-wait flex items-center gap-2"
                                 disabled={!exportStartDate || !exportEndDate || isExporting}
                             >
-                                {isExporting ? (
-                                    <Loader2 size={16} className="animate-spin" />
-                                ) : (
-                                    <Download size={16} />
-                                )}
-                                {isExporting ? 'Exporting...' : `Export ${exportType.toUpperCase()}`}
+                                {isExporting ? <Loader2 size={16}
+                                    className="animate-spin" /> :
+                                    <Download size={16} />}
+                                {isExporting ? 'Exporting...' :
+                                    `Export ${exportType.toUpperCase()}`}
                             </button>
                         </>
                     }
@@ -428,6 +514,10 @@ export default function DashboardContent() {
                     {/* Children của Modal */}
                     <div className="space-y-4">
                         <div>
+                            <p className="text-sm text-slate-300">
+                                Select a date range and options to export mention posts.
+                            </p>
+
                             <label className="block text-sm font-medium text-slate-300 mb-1">
                                 Export Format
                             </label>
@@ -478,35 +568,47 @@ export default function DashboardContent() {
                             />
                         </div>
 
-                        {/* Tùy chọn 3: Sắp xếp */}
+                        {/* Tùy chọn 3: Sắp xếp theo Trường */}
                         <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-1">
-                                Sort Order (by Date)
-                            </label>
-
+                            <label className="block text-sm font-medium text-slate-300 mb-1">Sort By</label>
                             <div className="flex bg-slate-700 rounded-lg p-1">
                                 <button
-                                    onClick={() => setSortOrder('desc')}
-                                    className={`flex-1 px-3 py-1 rounded-md text-sm font-medium ${sortOrder === 'desc'
-                                            ? 'bg-blue-500 text-white'
-                                            : 'text-gray-300 hover:bg-slate-600'
-                                        }`}
+                                    onClick={() => setSortBy('publishedAt')}
+                                    className={`flex-1 px-3 py-1 rounded-md text-sm font-medium ${sortBy === 'publishedAt' ? 'bg-blue-500 text-white' : 'text-gray-300 hover:bg-slate-600'}`}
                                 >
-                                    Newest First
+                                    Date
                                 </button>
 
                                 <button
-                                    onClick={() => setSortOrder('asc')}
-                                    className={`flex-1 px-3 py-1 rounded-md text-sm font-medium ${sortOrder === 'asc'
-                                            ? 'bg-blue-500 text-white'
-                                            : 'text-gray-300 hover:bg-slate-600'
-                                        }`}
+                                    onClick={() => setSortBy('id')}
+                                    className={`flex-1 px-3 py-1 rounded-md text-sm font-medium ${sortBy === 'id' ? 'bg-blue-500 text-white' : 'text-gray-300 hover:bg-slate-600'}`}
                                 >
-                                    Oldest First
+                                    ID
                                 </button>
                             </div>
                         </div>
 
+                        {/* Tùy chọn 4: Sắp xếp theo Thứ tự */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-1">Order</label>
+                            <div className="flex bg-slate-700 rounded-lg p-1">
+                                <button
+                                    onClick={() => setSortOrder('desc')}
+                                    className={`flex-1 px-3 py-1 rounded-md text-sm font-medium ${sortOrder === 'desc' ? 'bg-blue-500 text-white' : 'text-gray-300 hover:bg-slate-600'}`}
+                                >
+                                    Descending
+                                </button>
+
+                                <button
+                                    onClick={() => setSortOrder('asc')}
+                                    className={`flex-1 px-3 py-1 rounded-md text-sm font-medium ${sortOrder === 'asc' ? 'bg-blue-500 text-white' : 'text-gray-300 hover:bg-slate-600'}`}
+                                >
+                                    Ascending
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Tùy chọn 5: Chọn ngày bắt đầu */}
                         <div>
                             <label htmlFor="startDate" className="block text-sm font-medium text-slate-300 mb-1">
                                 Start Date
@@ -519,6 +621,8 @@ export default function DashboardContent() {
                                 className="mt-1 block w-full bg-slate-700 border-slate-600 rounded-md p-2 text-white"
                             />
                         </div>
+                        
+                        {/* Tùy chọn 6: Chọn ngày kết thúc */}
                         <div>
                             <label htmlFor="endDate" className="block text-sm font-medium text-slate-300 mb-1">
                                 End Date
@@ -533,7 +637,142 @@ export default function DashboardContent() {
                         </div>
                     </div>
                 </Modal>
+                
             )}
+
+            {chartModalData && (
+                <Modal
+                    isOpen={!!chartModalData}
+                    onClose={() => {
+                        setChartModalData(null);
+                        setDetailData(null);
+                        setSearchDay('');
+                    }}
+                    title="Chart Data Detail"
+                    size="max-w-sm"
+                    footer={
+                        <button
+                            onClick={() => {
+                                setChartModalData(null);
+                                setDetailData(null);
+                                setSearchDay('');
+                            }}
+                            className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold"
+                        >
+                            Close
+                        </button>
+                    }
+                >
+                    <div className="space-y-4 p-2">
+                        {/* 1. Thời gian */}
+                        <div>
+                            <p className="text-sm text-slate-400">Time Range</p>
+                            <p className="text-xl font-bold text-white">{chartModalData.name}</p>
+                        </div>
+
+                        {/* 2. Logic hiển thị (Đơn giản hay Chi tiết) */}
+                        {chartModalData.type && (
+                            <div className={`p-4 rounded-lg ${chartModalData.type === 'positive'
+                                    ? 'bg-green-500/10 border border-green-500/30'
+                                    : 'bg-red-500/10 border border-red-500/30'
+                                }`}>
+                                <p className={`text-sm capitalize ${chartModalData.type === 'positive' ? 'text-green-300' : 'text-red-300'
+                                    }`}>{chartModalData.type} Mentions</p>
+                                <p className="text-3xl font-bold text-white">{chartModalData.value.toLocaleString()}</p>
+                            </div>
+                        )}
+
+                        {/* B. Nếu là click 6-MONTH (dạng mới) */}
+                        {!chartModalData.type && (
+                            <>
+                                {/* Tổng quan 2 cột */}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/30">
+                                        <p className="text-sm text-green-300">Total Positive</p>
+                                        <p className="text-2xl font-bold text-white">{(chartModalData.totalPositive || 0).toLocaleString()}</p>
+                                    </div>
+                                    <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+                                        <p className="text-sm text-red-300">Total Negative</p>
+                                        <p className="text-2xl font-bold text-white">{(chartModalData.totalNegative || 0).toLocaleString()}</p>
+                                    </div>
+                                </div>
+
+                                {/* Phân cách */}
+                                <div className="border-t border-slate-700"></div>
+
+                                {/* Chi tiết theo ngày */}
+                                <div className="space-y-3">
+                                    <div className="flex justify-between items-end">
+                                        <p className="text-sm text-slate-400">Daily Breakdown</p>
+                                    </div>
+
+                                    {/* Ô TÌM KIẾM */}
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            <Search size={14} className="text-slate-400" />
+                                        </div>
+
+                                        <input
+                                            type="text"
+                                            placeholder="Filter by day (e.g. 05, 12)..."
+                                            className="block w-full pl-9 pr-3 py-2 border border-slate-600 rounded-md leading-5 bg-slate-700 text-slate-200 placeholder-slate-400 focus:outline-none focus:bg-slate-600 focus:border-blue-500 sm:text-sm transition duration-150 ease-in-out"
+                                            value={searchDay}
+                                            onChange={(e) => setSearchDay(e.target.value)}
+                                        />
+                                    </div>
+
+                                    {/* Loading */}
+                                    {isDetailLoading && (
+                                        <div className="flex items-center justify-center h-24">
+                                            <Loader2 size={24} className="animate-spin text-blue-400" />
+                                        </div>
+                                    )}
+
+                                    {/* Danh sách hiển thị */}
+                                    {detailData && !isDetailLoading && (
+                                        <div className="max-h-40 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+
+                                            {/* HIỆU ỨNG LOADING KHI ĐANG GÕ */}
+                                            {searchDay !== debouncedSearchDay ? (
+                                                <div className="flex items-center justify-center py-4 text-slate-400 text-sm">
+                                                    <Loader2 size={16} className="animate-spin mr-2" />
+                                                    Searching...
+                                                </div>
+                                            ) : (
+                                                // LOGIC LỌC
+                                                (() => {
+                                                    const filteredDetailData = detailData.filter(day =>
+                                                        day.name.toLowerCase().includes(debouncedSearchDay.toLowerCase())
+                                                    );
+
+                                                    if (filteredDetailData.length === 0) {
+                                                        return <p className="text-sm text-slate-500 text-center py-4">No days found.</p>;
+                                                    }
+
+                                                    return filteredDetailData.map((day) => (
+                                                        <div key={day.name} className="flex justify-between items-center text-sm p-2 rounded-md bg-slate-800/60 hover:bg-slate-700/80 transition-colors">
+                                                            <span className="font-medium text-slate-200">{day.name}</span>
+                                                            <div className="flex gap-3">
+                                                                <span className="flex items-center gap-1 text-green-400" title="Positive">
+                                                                    <Plus size={12} /> {day.positive}
+                                                                </span>
+                                                                <span className="flex items-center gap-1 text-red-400" title="Negative">
+                                                                    <Minus size={12} /> {day.negative}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    ));
+                                                })()
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </Modal>
+            )}
+
         </div>
     );
 }

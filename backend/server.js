@@ -8,10 +8,12 @@ const cors = require('cors');
 const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 
+// Import sequelize từ config/db để dùng lệnh sync
 const { connectDB, sequelize } = require('./config/db');
 const { runScanJob } = require('./utils/scan_job');
 
 // === LOAD CÁC MODEL VÀ MỐI QUAN HỆ ===
+// Dòng này rất quan trọng để Sequelize biết về các models trước khi sync
 require('./models/associations');
 
 // === CONFIG ===
@@ -19,7 +21,7 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Định nghĩa CLIENT_URL ngay tại đây
+// Định nghĩa CLIENT_URL
 const CLIENT_URL = "http://localhost:3000";
 
 // Tạo HTTP server từ Express app
@@ -35,7 +37,6 @@ const io = new Server(httpServer, {
 });
 
 // === MIDDLEWARES ===
-// Cấu hình CORS
 app.use(cors({
     origin: CLIENT_URL,
     credentials: true
@@ -45,6 +46,7 @@ app.use(morgan('dev'));
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 
+// Middleware chèn io vào req để dùng ở Controller
 app.use((req, res, next) => {
     req.io = io;
     next();
@@ -63,13 +65,14 @@ io.on('connection', (socket) => {
         console.log(`🔌 [Socket.IO] Client has disconnected: ${socket.id}`);
     });
 });
-// --- Kết thúc Socket.IO Logic ---
 
 // === KÍCH HOẠT CÁC ROUTES ===
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/alerts', require('./routes/alerts'));
 app.use('/api/posts', require('./routes/posts'));
 app.use('/api/casestudies', require('./routes/casestudies'));
+app.use('/api/subscription', require('./routes/subscription'));
+app.use('/api/admin', require('./routes/admin'));
 
 app.get('/', (req, res) => {
     res.send('API for CrisisAlert is running!');
@@ -78,8 +81,14 @@ app.get('/', (req, res) => {
 // === KHỞI ĐỘNG SERVER ===
 const startServer = async () => {
     try {
+        // Kết nối DB
         await connectDB();
 
+        // console.log("🔄 Syncing database models...");
+        // await sequelize.sync({});
+        console.log("✅ Database connected successfully!");
+
+        // Khởi động Server
         httpServer.listen(PORT, () => {
             console.log(`🚀 Backend (with Socket.IO) is running at: http://localhost:${PORT}`);
 

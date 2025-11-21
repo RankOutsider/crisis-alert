@@ -4,6 +4,7 @@ const Alert = require('./Alert');
 const Post = require('./Post');
 const CaseStudy = require('./CaseStudy');
 const User = require('./User');
+const SubscriptionRequest = require('./SubscriptionRequest');
 
 // --- Quan hệ User - Alert (Một-Nhiều) ---
 User.hasMany(Alert, { foreignKey: 'userId', onDelete: 'CASCADE' });
@@ -25,7 +26,11 @@ Post.belongsToMany(Alert, { through: 'postalerts' });
 CaseStudy.belongsToMany(Post, { through: 'postcasestudies' });
 Post.belongsToMany(CaseStudy, { through: 'postcasestudies' });
 
+// --- QUAN HỆ MỚI: USER - SUBSCRIPTION REQUEST ---
+User.hasMany(SubscriptionRequest, { foreignKey: 'userId', onDelete: 'CASCADE' });
+SubscriptionRequest.belongsTo(User, { foreignKey: 'userId' });
+
 console.log("✅ Database associations have been set up.");
 
 // Xuất các model đã được "kết nối" (associated)
-module.exports = { User, Alert, Post, CaseStudy, sequelize };
+module.exports = { User, Alert, Post, CaseStudy, SubscriptionRequest, sequelize };
