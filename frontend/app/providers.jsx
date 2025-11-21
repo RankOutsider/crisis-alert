@@ -1,36 +1,33 @@
 // frontend/app/providers.jsx
 'use client';
 
-import { SWRConfig } from 'swr';
+import { SWRConfig, useSWRConfig } from 'swr';
 import { HeroUIProvider } from "@heroui/react";
-// --- THÊM MỚI ---
 import { createContext, useContext, useState, useEffect } from 'react';
 import { fetcher, api } from '@/utils/api';
-// --- KẾT THÚC THÊM MỚI ---
+import { io } from 'socket.io-client';
+import { useRouter, usePathname } from 'next/navigation';
 
-// --- THÊM MỚI: TẠO AUTH CONTEXT ---
-// 1. Tạo Context để lưu trữ thông tin user
 const AuthContext = createContext({
-    user: null,         // Thông tin user (gồm cả subscriptionTier)
-    isLoading: true,    // Trạng thái loading
-    refetchUser: () => { } // Hàm để tải lại thông tin user (ví dụ: sau khi nâng cấp gói)
+    user: null,
+    isLoading: true,
+    refetchUser: () => { },
+    logout: () => { }
 });
 
-// 2. Tạo Provider (Nơi gọi API 'auth/me' và cung cấp dữ liệu)
 function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
+    const router = useRouter();
+    const pathname = usePathname();
+    const { mutate } = useSWRConfig();
 
     const fetchUser = async () => {
-        setIsLoading(true);
+        if (!user) setIsLoading(true);
         try {
-            // Gọi API 'auth/me' mà chúng ta đã sửa ở Bước 6
-            // API này giờ đã trả về { id, email, username, subscriptionTier }
             const userData = await api('auth/me');
             setUser(userData);
         } catch (error) {
-            // Lỗi (thường là 401 - chưa đăng nhập), user sẽ là null
-            // hàm api() trong utils/api.js sẽ tự động xử lý redirect sang /login
             console.warn("Auth Provider:", error.message);
             setUser(null);
         } finally {
@@ -38,40 +35,107 @@ function AuthProvider({ children }) {
         }
     };
 
+    const logout = () => {
+        localStorage.removeItem('crisisAlertToken');
+        setUser(null);
+        mutate(() => true, undefined, { revalidate: false });
+        router.push('/login');
+    };
+
+    // Tải user lúc đầu chạy mỗi khi đường dẫn thay đổi
     useEffect(() => {
-        // Tải thông tin user ngay khi ứng dụng khởi động
-        fetchUser();
-    }, []); // Chạy 1 lần duy nhất
+        const token = localStorage.getItem('crisisAlertToken');
+
+        if (token) {
+            fetchUser();
+        } else if (!token) {
+            setUser(null);
+            setIsLoading(false);
+        }
+    }, [pathname]);
+
+    // Kết nối Socket.IO khi đã có User
+    useEffect(() => {
+        // Chỉ kết nối khi user đã đăng nhập
+        if (!user) return;
+
+        // Lấy URL backend (hoặc mặc định localhost:5000)
+        const SOCKET_URL = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:5000';
+
+        const socket = io(SOCKET_URL, {
+            withCredentials: true,
+            transports: ['websocket']
+        });
+
+        socket.on('connect', () => {
+            console.log("🟢 Socket Connected:", socket.id);
+            // Gia nhập phòng riêng của user để nhận thông báo cá nhân
+            socket.emit('join_user_room', user.id);
+        });
+
+        // --- LẮNG NGHE SỰ KIỆN NÂNG CẤP GÓI ---
+        socket.on('subscription_updated', (data) => {
+            console.log("✨ Subscription Updated:", data);
+
+            if (window.location.pathname.startsWith('/admin')) return;
+
+            // 1. Thông báo cho người dùng
+            alert(data.message);
+
+            // 2. Tự động tải lại thông tin User (để UI cập nhật từ Free -> VIP)
+            fetchUser();
+        });
+
+        socket.on('user_updated', (data) => {
+            console.log("🔄 Admin updated profile:", data);
+
+            if (window.location.pathname.startsWith('/admin')) {
+                fetchUser();
+                // Nếu đang ở trang admin, không cần thông báo gì thêm
+                return;
+            }
+
+            alert(data.message); 
+
+            fetchUser();
+        });
+
+        // Lắng nghe sự kiện bị từ chối (nếu có)
+        socket.on('subscription_rejected', (data) => {
+            if (window.location.pathname.startsWith('/admin')) return;
+            
+            alert(data.message || 'Your subscription request was rejected.');
+        });
+
+        // Cleanup: Ngắt kết nối khi user logout hoặc component unmount
+        return () => {
+            console.log("🔴 Socket Disconnecting...");
+            socket.disconnect();
+        };
+    }, [user?.id]); // Chạy lại khi user ID thay đổi (login/logout)
 
     return (
-        <AuthContext.Provider value={{ user, isLoading, refetchUser: fetchUser }}>
+        <AuthContext.Provider value={{ user, isLoading, refetchUser: fetchUser, logout }}>
             {children}
         </AuthContext.Provider>
     );
 }
 
-// 3. Tạo Hook (Cách để các component khác lấy dữ liệu)
-// Thay vì import useContext và AuthContext ở mọi nơi,
-// chúng ta chỉ cần gọi: const { user } = useAuth();
 export const useAuth = () => useContext(AuthContext);
-// --- KẾT THÚC THÊM MỚI ---
-
 
 export default function Providers({ children }) {
     return (
         <SWRConfig
             value={{
                 fetcher: fetcher,
-                refreshInterval: 60000 // Giữ nguyên refresh 1 phút
+                refreshInterval: 60000
             }}
         >
-            {/* --- THÊM MỚI: BỌC ỨNG DỤNG TRONG AUTHPROVIDER --- */}
             <AuthProvider>
                 <HeroUIProvider>
                     {children}
                 </HeroUIProvider>
             </AuthProvider>
-            {/* --- KẾT THÚC THÊM MỚI --- */}
         </SWRConfig>
     );
 }

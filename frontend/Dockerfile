@@ -8,7 +8,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Cài đặt tất cả dependencies (bao gồm cả devDependencies)
-RUN npm ci
+RUN npm install --legacy-peer-deps
 
 # Vẫn cần tham số này cho Next.js
 ARG NEXT_PUBLIC_API_URL

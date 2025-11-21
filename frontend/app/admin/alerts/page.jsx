@@ -1,0 +1,247 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import useSWR, { mutate } from 'swr'; // 1. Import SWR
+import { swrFetcher, deleteAdminAlert, deleteAdminAlertsBulk } from '@/utils/api'; // 2. Import swrFetcher
+import { Search, Trash2, ChevronLeft, ChevronRight, Loader2, User, CheckSquare, Square, Hash } from 'lucide-react';
+
+export default function AdminAlerts() {
+    // State UI
+    const [page, setPage] = useState(1);
+    const [search, setSearch] = useState('');
+    const [selectedIds, setSelectedIds] = useState([]);
+
+    // --- 1. SWR FETCH DATA ---
+    const endpoint = `admin/alerts?page=${page}&limit=10&search=${search}`;
+
+    const { data, error, isLoading } = useSWR(endpoint, swrFetcher, {
+        keepPreviousData: true,
+    });
+
+    // Parse dữ liệu
+    const alerts = data?.alerts || [];
+    const totalPages = data?.pages || 1;
+    const totalAlerts = data?.totalAlerts || 0;
+
+    // Scroll lên đầu khi chuyển trang
+    useEffect(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, [page]);
+
+    // --- CHECKBOX LOGIC ---
+    const toggleSelect = (id) => {
+        selectedIds.includes(id)
+            ? setSelectedIds(prev => prev.filter(item => item !== id))
+            : setSelectedIds(prev => [...prev, id]);
+    };
+
+    const toggleSelectAll = () => {
+        selectedIds.length === alerts.length && alerts.length > 0
+            ? setSelectedIds([])
+            : setSelectedIds(alerts.map(a => a.id));
+    };
+
+    // --- ACTION HANDLERS (Dùng mutate) ---
+
+    // 1. Xóa đơn lẻ
+    const handleDelete = async (id) => {
+        if (!window.confirm('Delete this alert? This will stop tracking for the user.')) return;
+
+        try {
+            await deleteAdminAlert(id);
+
+            // Optimistic update: Xóa trên UI ngay
+            mutate(endpoint, {
+                ...data,
+                alerts: alerts.filter(a => a.id !== id)
+            }, false);
+
+            mutate(endpoint); // Refresh lại data thật
+            alert('Alert deleted');
+        } catch (error) {
+            console.error(error);
+            alert('Failed to delete alert');
+        }
+    };
+
+    // 2. Xóa hàng loạt
+    const handleBulkDelete = async () => {
+        if (selectedIds.length === 0) return;
+
+        if (window.confirm(`Delete ${selectedIds.length} alerts?`)) {
+            try {
+                await deleteAdminAlertsBulk(selectedIds);
+
+                mutate(endpoint); // Refresh data
+                setSelectedIds([]); // Reset chọn
+
+                alert(`Deleted ${selectedIds.length} alerts.`);
+            } catch (error) {
+                console.error(error);
+                alert('Failed to delete selected alerts.');
+            }
+        }
+    };
+
+    // Helper Colors
+    const getSeverityColor = (sev) => {
+        switch (sev) {
+            case 'Critical': return 'text-red-500 border-red-500/50 bg-red-500/10';
+            case 'High': return 'text-orange-400 border-orange-500/50 bg-orange-500/10';
+            case 'Medium': return 'text-yellow-400 border-yellow-500/50 bg-yellow-500/10';
+            case 'Low': return 'text-green-400 border-green-500/50 bg-green-500/10';
+            default: return 'text-green-400 border-green-500/50 bg-green-500/10';
+        }
+    };
+
+    const Pagination = () => (
+        <div className="flex items-center gap-4">
+            <span className="text-sm text-gray-400 hidden md:inline">Page {page} of {totalPages}</span>
+            <div className="flex space-x-2">
+                <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="p-2 rounded bg-gray-800 border border-gray-700 hover:bg-gray-700 disabled:opacity-50"><ChevronLeft size={20} /></button>
+                <button disabled={page === totalPages} onClick={() => setPage(p => p + 1)} className="p-2 rounded bg-gray-800 border border-gray-700 hover:bg-gray-700 disabled:opacity-50"><ChevronRight size={20} /></button>
+            </div>
+        </div>
+    );
+
+    if (error) return <div className="text-center py-10 text-red-400">Failed to load alerts.</div>;
+
+    return (
+        <div className="space-y-6 pb-20">
+            {/* Header */}
+            <div className="flex flex-col gap-4">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <h1 className="text-2xl font-bold">Alert Management ({totalAlerts})</h1>
+
+                    <div className="flex flex-col-reverse md:flex-row gap-4 w-full md:w-auto items-end md:items-center">
+                        <Pagination />
+                        <div className="relative w-full md:w-auto">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                            <input
+                                type="text"
+                                placeholder="Search title or owner email..."
+                                className="bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none w-full md:w-64"
+                                value={search}
+                                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Bulk Actions */}
+                {selectedIds.length > 0 && (
+                    <div className="bg-blue-600/20 border border-blue-500/50 p-3 rounded-lg flex items-center justify-between animate-in fade-in slide-in-from-top-2">
+                        <span className="text-blue-400 font-medium flex items-center gap-2">
+                            <CheckSquare size={20} /> Selected {selectedIds.length} alerts
+                        </span>
+                        <button onClick={handleBulkDelete} className="bg-red-500 hover:bg-red-600 text-white px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-colors shadow-lg shadow-red-900/20">
+                            <Trash2 size={16} /> Delete Selected
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {/* Loading & Empty */}
+            {isLoading ? (
+                <div className="flex justify-center py-8 text-gray-400"><Loader2 className="animate-spin mr-2" /> Loading alerts...</div>
+            ) : alerts.length === 0 ? (
+                <div className="text-center py-8 text-gray-400 bg-gray-800 rounded-xl border border-gray-700">No alerts found.</div>
+            ) : (
+                /* --- DATA CONTENT --- */
+                <>
+                    {/* MOBILE VIEW */}
+                    <div className="md:hidden flex flex-col gap-3">
+                        <div className="flex items-center gap-3 px-2 mb-1">
+                            <button onClick={toggleSelectAll} className="text-gray-400 hover:text-white flex items-center gap-2">
+                                {selectedIds.length === alerts.length ? <CheckSquare className="text-blue-500" size={22} /> : <Square size={22} />}
+                                <span className="text-sm font-medium text-gray-300">Select All</span>
+                            </button>
+                        </div>
+                        {alerts.map((alert) => {
+                            const isSelected = selectedIds.includes(alert.id);
+                            return (
+                                <div key={alert.id} className={`bg-gray-800 p-4 rounded-xl border shadow-sm flex flex-col gap-3 ${isSelected ? 'border-blue-500 ring-1 ring-blue-500/50 bg-blue-900/10' : 'border-gray-700'}`}>
+                                    <div className="flex justify-between items-start gap-3">
+                                        <div className="flex items-start gap-3 min-w-0 flex-1">
+                                            <button onClick={() => toggleSelect(alert.id)} className="mt-1 text-gray-400 hover:text-white shrink-0">
+                                                {isSelected ? <CheckSquare className="text-blue-500" size={22} /> : <Square size={22} />}
+                                            </button>
+                                            <div className="min-w-0 flex-1">
+                                                <h3 className="font-bold text-white text-base cursor-pointer truncate" onClick={() => toggleSelect(alert.id)}>{alert.title}</h3>
+                                                <div className="text-xs text-gray-500 flex items-center gap-1 mt-1 break-all">
+                                                    <User size={12} className="shrink-0" />
+                                                    {alert.User?.email || 'Unknown User'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button onClick={() => handleDelete(alert.id)} className="text-red-400 hover:text-red-300 p-1 shrink-0 ml-2"><Trash2 size={18} /></button>
+                                    </div>
+
+                                    <div className="pl-9 space-y-2">
+                                        <div className="flex flex-wrap gap-2">
+                                            {alert.keywords?.slice(0, 3).map((kw, idx) => (
+                                                <span key={idx} className="px-2 py-0.5 rounded text-xs bg-gray-700 text-gray-300 border border-gray-600 flex items-center gap-1">
+                                                    <Hash size={10} /> {kw}
+                                                </span>
+                                            ))}
+                                            {alert.keywords?.length > 3 && <span className="text-xs text-gray-500">+{alert.keywords.length - 3} more</span>}
+                                        </div>
+                                        <div className="flex items-center justify-between text-sm pt-2 border-t border-gray-700/50">
+                                            <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getSeverityColor(alert.severity)}`}>{alert.severity}</span>
+                                            <span className={`text-xs font-bold ${alert.status === 'ACTIVE' ? 'text-green-400' : 'text-gray-500'}`}>{alert.status}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {/* DESKTOP VIEW */}
+                    <div className="hidden md:block bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
+                        <table className="w-full text-left border-collapse table-fixed">
+                            <thead>
+                                <tr className="bg-gray-700/50 text-gray-300 border-b border-gray-700">
+                                            <th className="p-4 w-12"><button onClick={toggleSelectAll}>{alerts.length > 0 && selectedIds.length === alerts.length ? <CheckSquare className="text-blue-500" size={20} /> : <Square size={20} />}</button></th>
+                                    <th className="p-4 font-medium w-[20%]">Alert Details</th>
+                                    <th className="p-4 font-medium w-[25%]">Owner</th>
+                                    <th className="p-4 font-medium w-[25%]">Keywords</th>
+                                    <th className="p-4 font-medium w-[10%]">Severity</th>
+                                    <th className="p-4 font-medium w-[10%]">Status</th>
+                                    <th className="p-4 font-medium w-[10%] text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-700">
+                                {alerts.map((alert) => {
+                                    const isSelected = selectedIds.includes(alert.id);
+                                    return (
+                                        <tr key={alert.id} className={`transition-colors ${isSelected ? 'bg-blue-900/20 hover:bg-blue-900/30' : 'hover:bg-gray-700/30'}`}>
+                                            <td className="p-4"><button onClick={() => toggleSelect(alert.id)} className="text-gray-400">{isSelected ? <CheckSquare className="text-blue-500" size={20} /> : <Square size={20} />}</button></td>
+                                            <td className="p-4 truncate font-semibold text-white cursor-pointer" title={alert.title} onClick={() => toggleSelect(alert.id)}>{alert.title}</td>
+                                            <td className="p-4 overflow-hidden">
+                                                <div className="text-sm text-white font-medium truncate">{alert.User?.username}</div>
+                                                <div className="text-xs text-gray-500 truncate" title={alert.User?.email}>{alert.User?.email}</div>
+                                            </td>
+                                            <td className="p-4">
+                                                <div className="flex flex-wrap gap-1 overflow-hidden h-6">
+                                                    {alert.keywords?.slice(0, 2).map((kw, i) => (
+                                                        <span key={i} className="px-1.5 py-0.5 rounded text-xs bg-gray-700 text-gray-300 border border-gray-600 truncate max-w-[80px]">{kw}</span>
+                                                    ))}
+                                                    {alert.keywords?.length > 2 && <span className="text-xs text-gray-500">...</span>}
+                                                </div>
+                                            </td>
+                                            <td className="p-4"><span className={`px-2 py-1 rounded text-xs font-medium border whitespace-nowrap ${getSeverityColor(alert.severity)}`}>{alert.severity}</span></td>
+                                            <td className="p-4"><span className={`text-xs font-bold ${alert.status === 'ACTIVE' ? 'text-green-400' : 'text-gray-500'}`}>{alert.status}</span></td>
+                                            <td className="p-4 text-right"><button onClick={() => handleDelete(alert.id)} className="p-2 bg-red-500/10 text-red-400 hover:bg-red-600 hover:text-white rounded"><Trash2 size={16} /></button></td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </>
+            )}
+
+            <div className="flex justify-end"><Pagination /></div>
+        </div>
+    );
+}

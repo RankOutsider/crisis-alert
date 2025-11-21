@@ -88,6 +88,18 @@ User.init({
         type: DataTypes.ENUM('Free', 'VIP', 'Pro'),
         allowNull: false,
         defaultValue: 'Free'
+    },
+    // Vai trò người dùng
+    role: {
+        type: DataTypes.STRING,
+        allowNull: false,
+        defaultValue: 'user'
+    },
+    // Trạng thái hoạt động của người dùng
+    is_active: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true
     }
 }, {
     sequelize,

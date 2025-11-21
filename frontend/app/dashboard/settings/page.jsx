@@ -1,4 +1,3 @@
-// frontend/app/dashboard/settings/page.jsx
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import useSWR from 'swr';
@@ -59,23 +58,17 @@ export default function SettingsPage() {
     const [toast, setToast] = useState({ type: '', message: '' });
 
     // --- LẤY DỮ LIỆU USER ---
-    // userData sẽ chứa subscriptionTier
     const { data: userData, error: swrError, mutate } = useSWR('/api/auth/me', fetcher);
 
     const ccEmailLimit = useMemo(() => {
-        // Mặc định là 5 nếu chưa tải được user
         if (!userData) return 5;
-
         switch (userData.subscriptionTier) {
-            case 'Pro':
-                return 500;
-            case 'VIP':
-                return 50;
+            case 'Pro': return 500;
+            case 'VIP': return 50;
             case 'Free':
-            default:
-                return 5;
+            default: return 5;
         }
-    }, [userData]); // Tính toán lại khi userData thay đổi
+    }, [userData]);
 
     const hasReachedLimit = useMemo(() => {
         return formValues.ccEmailsArray.length >= ccEmailLimit;
@@ -97,16 +90,11 @@ export default function SettingsPage() {
 
     // --- HANDLERS ---
     const handleCcEmailsChange = (newEmailsArray) => {
-        // Không cho phép thêm nếu mảng mới vượt quá giới hạn
         if (newEmailsArray.length > ccEmailLimit) {
             setToast({ type: 'error', message: `Your plan limit is ${ccEmailLimit} CC emails.` });
             return;
         }
-
-        setFormValues(prev => ({
-            ...prev,
-            ccEmailsArray: newEmailsArray
-        }));
+        setFormValues(prev => ({ ...prev, ccEmailsArray: newEmailsArray }));
     };
 
     const handleToggleNotificationsClick = async () => {
@@ -131,8 +119,6 @@ export default function SettingsPage() {
 
     const handleSubmitCcEmails = useCallback(async (e) => {
         e.preventDefault();
-
-        // Kiểm tra lại lần cuối trước khi lưu
         if (formValues.ccEmailsArray.length > ccEmailLimit) {
             setToast({ type: 'error', message: `Cannot save. Your plan limit is ${ccEmailLimit} CC emails.` });
             return;
@@ -165,15 +151,16 @@ export default function SettingsPage() {
         } finally {
             setIsSaving(false);
         }
-    }, [formValues, mutate, ccEmailLimit]); // Thêm ccEmailLimit vào dependencies
+    }, [formValues, mutate, ccEmailLimit]);
 
-    // Dùng (isLoading || !userData) để đảm bảo ccEmailLimit được tính toán đúng
     if (isLoading || !userData) return <div className="p-8 text-center text-gray-400 flex justify-center"><Loader2 className="animate-spin" /></div>;
     if (error) return <div className="p-8 text-center text-red-400">{error}</div>;
 
     return (
-        <main className="w-full max-w-full p-3 sm:p-6 md:p-8 min-h-screen text-gray-200 overflow-x-hidden box-border">
-            <div className="max-w-3xl mx-auto scroll-mt-20 w-full">
+        // 👇 ĐÃ SỬA: Đổi main -> div, Bỏ padding (p-3 sm:p-6...) để tránh padding kép với Layout
+        <div className="w-full max-w-full text-gray-200 box-border">
+            <div className="max-w-3xl mx-auto w-full">
+
                 <header className="mb-6 sm:mb-8">
                     <h1 className="text-xl sm:text-3xl font-bold text-white mb-2 flex items-center gap-2">
                         <Settings className="w-6 h-6 sm:w-7 sm:h-7 shrink-0" />
@@ -185,7 +172,7 @@ export default function SettingsPage() {
                 </header>
 
                 {/* --- CARD 1: Cài đặt chung --- */}
-                <div className="bg-slate-800/50 p-4 sm:p-6 rounded-xl shadow-lg border border-slate-700/30 mb-6 w-full">
+                <div className="bg-slate-800/50 p-4 sm:p-6 rounded-xl shadow-lg border border-slate-700/30 mb-6 w-full overflow-hidden">
                     <h2 className="text-base sm:text-xl font-semibold text-white mb-3 sm:mb-4">General Notification</h2>
                     <div className="flex items-center justify-between p-3 sm:p-4 bg-slate-700/40 rounded-lg border border-slate-600 w-full">
                         <div className="flex items-start gap-3 flex-1 min-w-0 mr-2">
@@ -195,6 +182,7 @@ export default function SettingsPage() {
                                     Enable Email Notifications
                                     {isToggleSaving && <Loader2 size={14} className="animate-spin text-blue-300" />}
                                 </span>
+                                {/* break-words để email dài tự xuống dòng */}
                                 <span className="text-xs sm:text-sm text-gray-400 leading-snug break-words">
                                     Receive alerts to ({userData.email}).
                                 </span>
@@ -216,7 +204,7 @@ export default function SettingsPage() {
 
                 {/* --- CARD 2: Cài đặt CC Email --- */}
                 <form onSubmit={handleSubmitCcEmails} className="space-y-6 w-full">
-                    <div className="bg-slate-800/50 p-4 sm:p-6 rounded-xl shadow-lg border border-slate-700/30 w-full">
+                    <div className="bg-slate-800/50 p-4 sm:p-6 rounded-xl shadow-lg border border-slate-700/30 w-full overflow-hidden">
 
                         <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-1 mb-3 sm:mb-4">
                             <h2 className="text-base sm:text-xl font-semibold text-white">CC Email List (Carbon Copy)</h2>
@@ -229,7 +217,8 @@ export default function SettingsPage() {
                             Secondary emails to receive alert copies. Your plan allows up to {ccEmailLimit} emails.
                         </p>
 
-                        <div className="w-full max-w-full">
+                        {/* Thêm overflow-hidden cho container này */}
+                        <div className="w-full max-w-full overflow-hidden">
                             <EmailTagInput
                                 emails={formValues.ccEmailsArray}
                                 onChange={handleCcEmailsChange}
@@ -259,6 +248,6 @@ export default function SettingsPage() {
                     />
                 )}
             </div>
-        </main>
+        </div>
     );
 }

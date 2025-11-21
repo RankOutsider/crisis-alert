@@ -5,36 +5,45 @@ import { useState } from 'react';
 import AuthGuard from '@/app/components/AuthGuard';
 import Sidebar from '@/app/components/Sidebar';
 import { Menu } from 'lucide-react';
+import PullToRefreshLayout from '../components/PullToRefreshLayout';
 
 export default function DashboardLayout({ children }) {
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     return (
         <AuthGuard>
-            <div className="flex flex-col md:flex-row h-screen bg-slate-900 text-gray-300">
+            <div className="flex h-[100dvh] bg-slate-900 text-gray-300 overflow-hidden">
                 {/* Sidebar */}
                 <Sidebar
                     isOpen={isSidebarOpen}
                     onClose={() => setIsSidebarOpen(false)}
                 />
 
-                {/* Content area */}
-                <div className="flex-1 flex flex-col min-h-0">
-                    {/* Header chỉ hiện trên mobile */}
-                    <header className="md:hidden z-10 flex items-center justify-between p-2 bg-slate-800/50 border-b border-slate-700">
-                        <h1 className="text-lg font-bold text-white">Crisis Alert</h1>
-                        <button
-                            onClick={() => setIsSidebarOpen(true)}
-                            className="p-2 rounded-md hover:bg-slate-700"
-                        >
-                            <Menu size={24} className="text-white" />
-                        </button>
-                    </header>
+                <div className="flex-1 ml-0 transition-all duration-300">
+                    <PullToRefreshLayout>
+                        {/* Content area */}
+                        <div className="flex-1 flex flex-col min-w-0 relative">
+                            {/* Header chỉ hiện trên mobile */}
+                            <header className="md:hidden flex items-center justify-between p-4 bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-20">
+                                <div className="flex items-center gap-2">
+                                    <h1 className="text-lg font-bold text-white">Crisis Alert</h1>
+                                </div>
+                                <button
+                                    onClick={() => setIsSidebarOpen(true)}
+                                    className="p-2 rounded-lg bg-slate-800 text-slate-200 hover:bg-slate-700 transition-colors"
+                                >
+                                    <Menu size={24} />
+                                </button>
+                            </header>
 
-                    {/* Main content */}
-                    <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 scroll-mt-20">
-                        {children}
-                    </main>
+                            {/* Main content */}
+                            <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 md:p-8 scroll-smooth">
+                                <div className="max-w-7xl mx-auto">
+                                    {children}
+                                </div>
+                            </main>
+                        </div>
+                    </PullToRefreshLayout>
                 </div>
             </div>
         </AuthGuard>

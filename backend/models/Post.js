@@ -36,7 +36,7 @@ Post.init({
     sentiment: {
         type: DataTypes.STRING,
         allowNull: false,
-        defaultValue: 'NEUTRAL' // Mặc định là 'NEUTRAL'
+        defaultValue: 'NEUTRAL'
     },
     // Ngày/giờ bài post được đăng tải
     publishedAt: {

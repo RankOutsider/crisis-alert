@@ -18,8 +18,7 @@ const CustomTooltip = ({ active, payload, label }) => {
     return null;
 };
 
-// Thay đổi lớn: MainChart giờ nhận props
-export default function MainChart({ chartData, isLoading, error, onRetry }) {
+export default function MainChart({ chartData, isLoading, error, onRetry, onBarClick }) {
     if (error) {
         return (
             <div className="bg-slate-800/50 p-4 sm:p-6 rounded-lg h-full flex flex-col items-center justify-center">
@@ -43,12 +42,36 @@ export default function MainChart({ chartData, isLoading, error, onRetry }) {
         );
     }
 
+    // --- Hàm xử lý click nội bộ của Recharts ---
+    const handleChartClick = (data) => {
+        if (!onBarClick || !data) return;
+
+        // Cách 1: Click trúng thanh màu (Recharts trả về activePayload)
+        if (data.activePayload && data.activePayload.length > 0) {
+            const barData = data.activePayload[0].payload;
+            onBarClick(barData);
+            return;
+        }
+
+        // Cách 2 (FALLBACK): Click vào nhãn hoặc khoảng trắng của cột (Recharts trả về activeLabel)
+        if (data.activeLabel) {
+            // Tìm lại data gốc dựa trên cái nhãn (ví dụ: "Nov 2025")
+            const foundData = chartData.find(item => item.name === data.activeLabel);
+            if (foundData) {
+                onBarClick(foundData);
+            }
+        }
+    };
+
     // --- JSX chính ---
     return (
         <ResponsiveContainer width="100%" height="100%">
             <BarChart
-                data={chartData} // Sử dụng chartData từ props
+                data={chartData}
                 margin={{ top: 5, right: 15, left: -10, bottom: 35 }}
+
+                // --- Gắn sự kiện click ---
+                onClick={handleChartClick}
             >
                 <CartesianGrid strokeDasharray="3 3" stroke="#475569" />
                 <XAxis
@@ -69,8 +92,8 @@ export default function MainChart({ chartData, isLoading, error, onRetry }) {
                     verticalAlign="bottom"
                     wrapperStyle={{ paddingTop: '20px', fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
                 />
-                <Bar dataKey="negative" stackId="a" fill="#ef4444" name="Negative" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="positive" stackId="a" fill="#22c55e" name="Positive" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="negative" fill="#ef4444" name="Negative" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="positive" fill="#22c55e" name="Positive" radius={[4, 4, 0, 0]} />
             </BarChart>
         </ResponsiveContainer>
     );

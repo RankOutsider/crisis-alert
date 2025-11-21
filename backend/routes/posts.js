@@ -8,7 +8,8 @@ const {
     getPostsByCaseStudy,
     getPostStatsOverTime,
     exportUserPosts,
-    exportPdf
+    exportPdf,
+    getPostStatsByDayInMonth
 } = require('../controllers/postController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -32,6 +33,9 @@ const handleValidationErrors = (req, res, next) => {
 const VALID_SENTIMENTS = ['POSITIVE', 'NEUTRAL', 'NEGATIVE'];
 const VALID_PLATFORMS = ['Facebook', 'X', 'Instagram', 'News', 'Tiktok', 'Forum', 'Threads', 'Youtube', 'Blog'];
 const VALID_POST_SEARCH_FIELDS = ['title', 'content', 'source'];
+
+const VALID_EXPORT_COLUMNS = ['id', 'title', 'content', 'source', 'sourceUrl', 'platform', 'sentiment', 'publishedAt'];
+const VALID_SORT_FIELDS = ['id', 'publishedAt'];
 
 // --- HẰNG SỐ CHUNG CHO QUERY PARAMS ---
 const postQueryValidation = [
@@ -63,15 +67,37 @@ const validateCaseStudyIdParam = [
     handleValidationErrors
 ];
 
+// --- Validation cho Export Query ---
+const exportQueryValidation = [
+    query('startDate', 'Ngày bắt đầu là bắt buộc').isISO8601().toDate(),
+    query('endDate', 'Ngày kết thúc là bắt buộc').isISO8601().toDate(),
+    query('sortField', 'Trường sắp xếp không hợp lệ')
+        .optional().isIn(VALID_SORT_FIELDS),
+    query('sortOrder', 'Thứ tự sắp xếp phải là "asc" hoặc "desc"')
+        .optional().isIn(['asc', 'desc']),
+    query('columns', 'Các cột export không hợp lệ')
+        .optional().isString()
+        .custom(value => value.split(',').every(col => VALID_EXPORT_COLUMNS.includes(col)))
+        .withMessage(`Chỉ chấp nhận các cột: ${VALID_EXPORT_COLUMNS.join(', ')}`)
+];
+
 router.route('/export-pdf')
     .get(
         protect,
-        [ // Validation ngày tháng
-            query('startDate', 'Ngày bắt đầu là bắt buộc').isISO8601().toDate(),
-            query('endDate', 'Ngày kết thúc là bắt buộc').isISO8601().toDate()
-        ],
+        exportQueryValidation,
         handleValidationErrors,
         exportPdf
+    );
+
+// === GET /api/posts/stats-by-day ===
+router.route('/stats-by-day')
+    .get(
+        protect,
+        [
+            query('month', 'Month (e.g., "Nov 2025") is required').isString().notEmpty()
+        ],
+        handleValidationErrors,
+        getPostStatsByDayInMonth
     );
 
 // === GET /api/posts/over-time ===
@@ -90,12 +116,9 @@ router.route('/over-time')
 router.route('/export')
     .get(
         protect,
-        [ // Validation cho route này
-            query('startDate', 'Ngày bắt đầu là bắt buộc').isISO8601().toDate(),
-            query('endDate', 'Ngày kết thúc là bắt buộc').isISO8601().toDate()
-        ],
+        exportQueryValidation,
         handleValidationErrors,
-        exportUserPosts // <-- CONTROLLER MỚI
+        exportUserPosts
     );
 
 // === GET /api/posts/all ===
