@@ -1,3 +1,4 @@
+// frontend/app/admin/casestudies/page.jsx
 'use client';
 
 import { useState, useEffect } from 'react';

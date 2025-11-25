@@ -366,6 +366,7 @@ export default function DashboardContent() {
     return (
         <div className="min-h-screen text-gray-200 overflow-x-hidden">
             <main className="p-4 sm:p-6 md:p-8">
+                {/* --- HEADER --- */}
                 <div className="mb-8">
                     <h1 className="text-3xl md:text-4xl font-bold text-white mb-1">Alerts Dashboard</h1>
                     <p className="text-gray-300">Overview of your brand's current status.</p>
@@ -397,22 +398,29 @@ export default function DashboardContent() {
                 <div className="bg-slate-800/50 p-4 sm:p-6 md:p-8 rounded-lg shadow-lg">
 
                     {/* --- TIÊU ĐỀ, TOGGLE, VÀ NÚT EXPORT --- */}
-                    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
-                        <h2 className="text-xl md:text-2xl font-semibold text-white">
-                            {user && user.subscriptionTier === 'Free'
-                                ? 'Sentiment Analysis (Upgrade to Unlock)'
-                                : `Mentions Over Time (Last ${timeRange === '7days' ? '7 Days' : '6 Months'})`
-                            }
+                    <div className="flex flex-col sm:flex-row items-center sm:items-center sm:justify-between gap-4 mb-4">
+                        <h2 className="text-xl md:text-2xl font-semibold text-white text-center sm:text-left">
+                            {user && user.subscriptionTier === 'Free' ? (
+                                'Sentiment Analysis (Upgrade to Unlock)'
+                            ) : (
+                                <>
+                                    Mentions Over Time
+                                    <br className="sm:hidden" />
+                                    <span className="text-sm md:text-base text-gray-300">
+                                        {timeRange === '7days' ? '7 Days' : '6 Months'}
+                                    </span>
+                                </>
+                            )}
                         </h2>
 
                         {/* --- CẢ KHỐI NÚT BẤM --- */}
                         {user && user.subscriptionTier !== 'Free' && (
-                            <div className="flex items-center gap-2 flex-shrink-0">
+                            <div className="flex sm:flex-row items-stretch sm:items-center gap-2 flex-shrink-0 w-full sm:w-auto justify-center sm:justify-start">
                                 {/* Nút Toggle */}
-                                <div className="flex bg-slate-700 rounded-lg p-1">
+                                <div className="flex bg-slate-700 rounded-lg p-1 w-full sm:w-auto">
                                     <button
                                         onClick={() => setTimeRange('7days')}
-                                        className={`px-3 py-1 rounded-md text-sm font-medium ${timeRange === '7days'
+                                        className={`flex-1 px-3 py-2 rounded-md text-sm font-medium ${timeRange === '7days'
                                             ? 'bg-blue-500 text-white'
                                             : 'text-gray-300 hover:bg-slate-600'
                                             }`}
@@ -421,7 +429,7 @@ export default function DashboardContent() {
                                     </button>
                                     <button
                                         onClick={() => setTimeRange('6months')}
-                                        className={`px-3 py-1 rounded-md text-sm font-medium ${timeRange === '6months'
+                                        className={`flex-1 px-3 py-2 rounded-md text-sm font-medium ${timeRange === '6months'
                                             ? 'bg-blue-500 text-white'
                                             : 'text-gray-300 hover:bg-slate-600'
                                             }`}
@@ -440,10 +448,13 @@ export default function DashboardContent() {
                                         }
                                         setIsModalOpen(true);
                                     }}
-                                    className="p-2 bg-slate-700 text-green-400 rounded-lg hover:bg-slate-600"
+                                    className="px-3 py-2 bg-slate-700 text-green-400 rounded-lg hover:bg-slate-600 flex items-center justify-center transition-colors flex-shrink-0"
                                     title="Export Data"
                                 >
-                                    <Download size={20} />
+                                    <div className="flex items-center justify-center w-6 h-6">
+                                        <Download size={20} />
+                                    </div>
+                                    <span className="text-sm font-medium hidden lg:inline">Export Data</span>
                                 </button>
                             </div>
                         )}
@@ -621,7 +632,7 @@ export default function DashboardContent() {
                                 className="mt-1 block w-full bg-slate-700 border-slate-600 rounded-md p-2 text-white"
                             />
                         </div>
-                        
+
                         {/* Tùy chọn 6: Chọn ngày kết thúc */}
                         <div>
                             <label htmlFor="endDate" className="block text-sm font-medium text-slate-300 mb-1">
@@ -637,7 +648,7 @@ export default function DashboardContent() {
                         </div>
                     </div>
                 </Modal>
-                
+
             )}
 
             {chartModalData && (
@@ -673,8 +684,8 @@ export default function DashboardContent() {
                         {/* 2. Logic hiển thị (Đơn giản hay Chi tiết) */}
                         {chartModalData.type && (
                             <div className={`p-4 rounded-lg ${chartModalData.type === 'positive'
-                                    ? 'bg-green-500/10 border border-green-500/30'
-                                    : 'bg-red-500/10 border border-red-500/30'
+                                ? 'bg-green-500/10 border border-green-500/30'
+                                : 'bg-red-500/10 border border-red-500/30'
                                 }`}>
                                 <p className={`text-sm capitalize ${chartModalData.type === 'positive' ? 'text-green-300' : 'text-red-300'
                                     }`}>{chartModalData.type} Mentions</p>
