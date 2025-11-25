@@ -1,3 +1,4 @@
+// frontend/app/dashboard/settings/page.jsx
 'use client';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import useSWR from 'swr';

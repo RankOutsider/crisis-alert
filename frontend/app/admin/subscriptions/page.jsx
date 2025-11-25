@@ -1,3 +1,4 @@
+// frontend/app/admin/subscriptions/page.jsx
 'use client';
 
 import useSWR, { mutate } from 'swr';

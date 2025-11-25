@@ -1,3 +1,4 @@
+// frontend/app/components/StatCard.jsx
 export default function StatCard({ title, value, icon: Icon, color }) {
     return (
         <div className="bg-slate-800/50 min-w-0 p-4 sm:p-5 md:p-6 rounded-lg shadow-lg flex items-center gap-3 sm:gap-4 md:gap-6 flex-wrap sm:flex-nowrap">
