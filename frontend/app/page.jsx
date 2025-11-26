@@ -1,10 +1,14 @@
+// frontend/app/page.jsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react'; // Cần import useEffect
 import {
     Search, Zap, Send, FileText, Lock, DollarSign,
-    Check, X, Shield, Crown, BookOpen, Menu, LogOut
+    Check, X, Shield, Crown, BookOpen, Menu, LogOut,
+    User as UserIcon, Settings, AlertCircle // Icons mới cho MobileMenu
 } from 'lucide-react';
+
+// --- CÁC COMPONENT PHỤ ---
 
 const FeatureCard = ({ icon: Icon, title, description }) => (
     <div className="p-6 rounded-xl shadow-2xl bg-gray-900/70 backdrop-blur-sm border border-gray-700 hover:border-blue-500 transition-all duration-300 transform hover:scale-[1.02] cursor-default">
@@ -35,47 +39,129 @@ const XItem = ({ children }) => (
 );
 
 // --- COMPONENT MOBILE NAVIGATION ---
-const MobileMenu = ({ isOpen, onClose }) => (
-    <div
-        className={`fixed inset-0 z-40 transform transition-transform duration-300 ${isOpen ? 'translate-x-0' : 'translate-x-full'
-            } lg:hidden`}
-    >
-        <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-        <div className="absolute right-0 top-0 w-64 h-full bg-gray-800 p-6 shadow-2xl flex flex-col space-y-6">
-            <div className="flex justify-between items-center border-b border-gray-700 pb-4">
-                <h3 className="text-xl font-bold text-white">Menu</h3>
-                <button onClick={onClose} className="p-1 text-gray-400 hover:text-white">
-                    <X size={24} />
-                </button>
-            </div>
 
-            <nav className="flex flex-col space-y-4 text-lg font-medium">
-                <a href="#features" onClick={onClose} className="hover:text-cyan-300 transition-colors">Features</a>
-                <a href="#ai" onClick={onClose} className="hover:text-cyan-300 transition-colors">AI Technology</a>
-                <a href="#pricing" onClick={onClose} className="hover:text-cyan-300 transition-colors">Pricing</a>
-            </nav>
+const MobileMenu = ({ isOpen, onClose, activeSection, onLinkClick }) => {
 
-            <div className="flex flex-col space-y-3 pt-6 border-t border-gray-700">
-                <a href="/login" onClick={onClose}>
-                    <span className="w-full h-10 px-4 text-sm font-semibold rounded-full text-white border border-blue-500 hover:bg-blue-500/20 transition-all duration-300 flex items-center justify-center">
-                        Login
-                    </span>
-                </a>
-                <a href="/register" onClick={onClose}>
-                    <span className="w-full h-10 px-4 text-sm font-semibold rounded-full text-white bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 transition-all duration-300 shadow-md flex items-center justify-center">
-                        Get Started
-                    </span>
-                </a>
-            </div>
-        </div>
-    </div>
-);
+    // Dữ liệu menu cho Landing Page
+    const menuItems = [
+        { name: 'Features', href: 'features' },
+        { name: 'AI Technology', href: 'ai' },
+        { name: 'Pricing', href: 'pricing' },
+    ];
 
+    // Hàm xử lý click và ngăn hành vi mặc định của thẻ <a>
+    const handleClick = (e, sectionId) => {
+        e.preventDefault();
+        onLinkClick(sectionId);
+    };
+
+    return (
+        <>
+            {/* 1. Overlay (Lớp phủ tối màu mờ nền) */}
+            <div
+                className={`fixed inset-0 z-40 md:hidden transition-opacity duration-300 ${isOpen ? 'opacity-100 pointer-events-auto bg-black/60' : 'opacity-0 pointer-events-none'
+                    }`}
+                onClick={onClose}
+            />
+
+            {/* 2. Thanh Sidebar chính (Glassmorphism) */}
+            <aside
+                className={`
+                    fixed inset-y-0 right-0 z-50 w-72 h-full 
+                    bg-slate-800/80 backdrop-blur-md border-l border-slate-700/50
+                    transform transition-transform duration-300 ease-in-out flex flex-col
+                    ${isOpen ? 'translate-x-0' : 'translate-x-full'}
+                `}
+            >
+                {/* Header (Logo + Close Btn) */}
+                <div className="flex items-center justify-between p-6 shrink-0">
+                    <div className="flex items-center gap-3">
+                        {/* Logo Icon */}
+                        <div className="bg-blue-600 p-2 rounded-lg shadow-lg shadow-blue-900/20">
+                            <AlertCircle className="text-white" size={22} />
+                        </div>
+                        {/* Title */}
+                        <h1 className="text-xl font-bold text-white tracking-tight">Crisis Alert</h1>
+                    </div>
+                    {/* Nút X chỉ hiện trên Mobile */}
+                    <button
+                        onClick={onClose}
+                        className="p-2 md:hidden text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-700"
+                    >
+                        <X size={24} />
+                    </button>
+                </div>
+
+                {/* Navigation (Menu Items) */}
+                <nav className="flex-1 overflow-y-auto px-4 py-2 space-y-1 custom-scrollbar">
+
+                    {menuItems.map((item) => {
+                        const isActive = item.href === activeSection; // Logic Active
+
+                        return (
+                            <a
+                                key={item.name}
+                                href={`#${item.href}`}
+                                onClick={(e) => handleClick(e, item.href)} // Gọi hàm cuộn và set active
+                                className={`
+                                    flex items-center px-4 py-3 rounded-lg transition-all duration-200 group text-sm
+                                    ${isActive
+                                        ? 'bg-blue-600 text-white shadow-md shadow-blue-900/20 font-bold' // ACTIVE CSS
+                                        : 'text-slate-400 hover:bg-slate-700/50 hover:text-white' // INACTIVE CSS
+                                    }
+                                `}
+                            >
+                                <span className="font-medium">{item.name}</span>
+                            </a>
+                        );
+                    })}
+                </nav>
+
+                {/* Footer (Login/Register) - Dạng nút nổi bật */}
+                <div className="p-4 border-t border-slate-700/50 shrink-0 bg-slate-800/30">
+
+                    {/* Nút Login (Dạng Inactive Link - Màu xám) */}
+                    <a href="/login" onClick={onClose} className="w-full block mb-2">
+                        <div className="flex items-center justify-center p-3 rounded-lg text-slate-400 hover:bg-slate-700/50 hover:text-white transition-colors text-sm font-medium">
+                            <UserIcon size={18} className="mr-3" />
+                            Login
+                        </div>
+                    </a>
+
+                    {/* Nút Get Started (Dạng Active Link - Gradient) */}
+                    <a href="/register" onClick={onClose} className="w-full block">
+                        <div className="flex items-center justify-center gap-3 px-4 py-3 rounded-lg transition-colors bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 text-white font-semibold text-sm shadow-lg shadow-blue-500/30">
+                            <Zap size={18} />
+                            Get Started Now
+                        </div>
+                    </a>
+                </div>
+            </aside>
+        </>
+    );
+};
+
+// --- COMPONENT CHÍNH HOMEPAGE (ĐÃ CHỈNH SỬA) ---
 
 export default function HomePage() {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    // Mặc định là features, sẽ thay đổi khi người dùng click vào menu
+    const [activeSection, setActiveSection] = useState('features');
 
-    // Dữ liệu gói dịch vụ
+    // Hàm XỬ LÝ KHI BẤM VÀO LINK MENU (Đã sửa lại logic)
+    const handleLinkClick = (sectionId) => {
+        // Đặt mục đang active
+        setActiveSection(sectionId);
+        // Đóng menu
+        setIsMenuOpen(false);
+        // Cuộn đến phần tử tương ứng
+        const section = document.getElementById(sectionId);
+        if (section) {
+            section.scrollIntoView({ behavior: 'smooth' });
+        }
+    };
+
+    // Dữ liệu gói dịch vụ (Giữ nguyên)
     const plans = [
         { name: 'Free', price: '$Free', period: '', icon: Shield, isPopular: false, buttonClass: 'bg-slate-700 text-slate-400 cursor-default', actionText: 'Default Plan' },
         { name: 'VIP', price: '$20', period: '/month', icon: Zap, isPopular: true, buttonClass: 'bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white shadow-lg', actionText: 'Upgrade Now' },
@@ -83,9 +169,9 @@ export default function HomePage() {
     ];
 
     return (
-        <div className="min-h-screen bg-gray-900 text-gray-200 overflow-x-hidden">
-            {/* --- 1. Header --- */}
-            <header className="sticky top-0 z-10 w-full bg-gray-900/90 backdrop-blur-sm border-b border-gray-800">
+        <div className="min-h-screen bg-gray-900 text-gray-200 overflow-x-hidden pt-16">
+            {/* --- Header --- */}
+            <header className="fixed top-0 z-10 w-full bg-gray-900/90 backdrop-blur-sm border-b border-gray-800">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-16">
                     <div className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">
                         Crisis Alert
@@ -93,13 +179,13 @@ export default function HomePage() {
 
                     {/* Desktop Navigation */}
                     <nav className="hidden lg:flex space-x-6 text-sm font-medium">
+                        {/* Cập nhật logic active cho Desktop nếu cần thiết, tạm thời giữ nguyên hover */}
                         <a href="#features" className="hover:text-cyan-300 transition-colors">Features</a>
                         <a href="#ai" className="hover:text-cyan-300 transition-colors">AI Technology</a>
                         <a href="#pricing" className="hover:text-cyan-300 transition-colors">Pricing</a>
                     </nav>
 
                     <div className="flex items-center space-x-4">
-                        {/* Mobile: Ẩn Login, Desktop: Hiện Login */}
                         <a href="/login" className="text-sm font-medium hover:text-cyan-300 transition-colors hidden lg:block">
                             Login
                         </a>
@@ -121,11 +207,17 @@ export default function HomePage() {
                 </div>
             </header>
 
-            <MobileMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
+            {/* Cập nhật props truyền xuống MobileMenu */}
+            <MobileMenu
+                isOpen={isMenuOpen}
+                onClose={() => setIsMenuOpen(false)}
+                activeSection={activeSection}
+                onLinkClick={handleLinkClick}
+            />
 
             <main>
-                {/* --- 2. Hero Section --- */}
-                <section className="py-20 md:py-32 bg-gradient-to-br from-gray-900 via-slate-900 to-gray-900">
+                {/* --- Hero Section --- */}
+                <section id="features" className="py-20 md:py-32 bg-gradient-to-br from-gray-900 via-slate-900 to-gray-900">
                     <div className="max-w-7xl mx-auto px-4 text-center">
                         <h1 className="text-5xl md:text-7xl font-extrabold mb-6 leading-tight">
                             Protect Your Brand with <br className="hidden md:inline" />
@@ -143,7 +235,7 @@ export default function HomePage() {
                                     Start Free Trial
                                 </span>
                             </a>
-                            <a href="#features" className="w-full sm:w-auto">
+                            <a href="#features" className="w-full sm:w-auto" onClick={(e) => handleLinkClick('features')}>
                                 <span className="flex items-center justify-center h-14 w-full px-12 font-bold rounded-full text-white bg-transparent border-2 border-blue-400 hover:bg-blue-400/20 transition-all duration-300 transform hover:scale-105 text-lg">
                                     Explore Features
                                 </span>
@@ -152,7 +244,7 @@ export default function HomePage() {
                     </div>
                 </section>
 
-                {/* --- 3. Feature Section --- */}
+                {/* --- Feature Section --- */}
                 <section id="features" className="py-20 md:py-28 bg-gray-800/50 border-t border-gray-800">
                     <div className="max-w-7xl mx-auto px-4">
                         <SectionTitle>
@@ -170,7 +262,7 @@ export default function HomePage() {
                     </div>
                 </section>
 
-                {/* --- 4. AI Section --- */}
+                {/* --- AI Section --- */}
                 <section id="ai" className="py-20 md:py-28 bg-gray-900 border-t border-gray-800">
                     <div className="max-w-7xl mx-auto px-4">
                         <SectionTitle>
@@ -273,20 +365,28 @@ export default function HomePage() {
                                         {/* Features List */}
                                         <ul className="space-y-4 mb-8 flex-1">
                                             <CheckItem>Up to 5 Alerts</CheckItem>
+
                                             <CheckItem>10 Keywords per Alert</CheckItem>
+
                                             <CheckItem>Email Support</CheckItem>
+
                                             {plan.name !== 'Free' ? <CheckItem>Sentiment Analysis</CheckItem> : <XItem>Sentiment Analysis</XItem>}
-                                            {plan.name === 'Pro' || plan.name === 'VIP' ? <CheckItem>PDF Report Export</CheckItem> : <XItem>PDF Report Export</XItem>}
+
+                                            {plan.name === 'Pro' ? (<CheckItem>PDF/Excel Report Export</CheckItem>) : plan.name === 'VIP' ? (<CheckItem>PDF Report Export</CheckItem>) : (<XItem>PDF Report Export</XItem>)}
+
                                             {plan.name !== 'Free' ? <CheckItem>Real-time Alerts via Email</CheckItem> : <XItem>Real-time Alerts via Email</XItem>}
+
                                             {plan.name !== 'Free' ? <CheckItem>Case Study Generation</CheckItem> : <XItem>Case Study Generation</XItem>}
+
                                             {plan.name === 'Pro' ? <CheckItem>Excel Report Export</CheckItem> : <XItem>Excel Report Export</XItem>}
+
                                             {plan.name === 'Pro' ? <CheckItem>Full API Access</CheckItem> : <XItem>Full API Access</XItem>}
                                         </ul>
 
                                         {/* Action Button */}
                                         <a href="/buy" className="block text-center w-full">
                                             <span className={`w-full py-2 px-4 rounded-xl font-semibold text-sm tracking-wide text-center leading-normal transition-all
-                                                    ${plan.name === 'Free' ? 'bg-slate-700 text-slate-400 cursor-default' : plan.buttonClass}`}>
+                                                ${plan.name === 'Free' ? 'bg-slate-700 text-slate-400 cursor-default' : plan.buttonClass}`}>
                                                 {plan.actionText}
                                             </span>
                                         </a>
