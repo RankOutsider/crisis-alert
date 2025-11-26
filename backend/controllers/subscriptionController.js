@@ -124,7 +124,6 @@ exports.handleSubscriptionRequest = async (req, res) => {
                     
                     <p style="font-size: 14px; color: #666;">
                         Thank you for choosing CrisisAlert.<br>
-                        <a href="${process.env.CLIENT_URL || 'http://localhost:3000'}" style="color: #2563eb; text-decoration: none;">Go to Dashboard</a>
                     </p>
                 </div>
             `;

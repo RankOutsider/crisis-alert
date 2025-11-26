@@ -16,6 +16,19 @@ const gmailTransporter = nodemailer.createTransport({
     },
 })
 
+// Dòng nhắc nhở tiêu chuẩn, đặt trong một block riêng để dễ định vị
+
+const NO_REPLY_NOTICE_BLOCK = `
+    <div style="background-color: #fff3cd; padding: 12px; border-radius: 5px; margin-bottom: 20px; border: 1px solid #ffeeba;">
+        <p style="font-size: 13px; color: #856404; text-align: center; margin: 0;">
+            <strong style="color: #d9534f;">IMPORTANT:</strong>
+            This email is sent automatically.
+            <strong style="color: #d9534f;">Do not reply</strong>
+            to this mail.
+        </p>
+    </div>
+`;
+
 /**
  * Hàm gửi email thông báo khi có bài đăng mới khớp với alert
  * @param {string} userEmail - Email của người nhận chính
@@ -26,14 +39,16 @@ const gmailTransporter = nodemailer.createTransport({
 const sendNotificationEmail = async (userEmail, alertTitle, post, ccRecipients = '') => {
     try {
         const mailOptions = {
-            from: `"Crisis Alert" <${process.env.GMAIL_USER}>`, // Dòng này cho gửi mail đơn lẻ qua Gmail và CC mail
+            // from: `"Crisis Alert" <${process.env.GMAIL_USER}>`, // Dòng này cho gửi mail đơn lẻ qua Gmail và CC mail
 
-            // from: `"Crisis Alert" <${process.env.EMAIL_USER || 'bot@crisis-alert.com'}>`, // Dòng này cho gửi mail hàng loạt cho MailHog
+            from: `"Crisis Alert" <${process.env.EMAIL_USER || 'bot@crisis-alert.com'}>`, // Dòng này cho gửi mail hàng loạt cho MailHog
 
             to: userEmail,
             subject: `🚨 New Mention for Alert: "${alertTitle}"`,
             cc: ccRecipients,
+            
             html: `
+                ${NO_REPLY_NOTICE_BLOCK} 
                 <h1>New Mention Detected!</h1>
                 <p>A new post matching your alert "<b>${alertTitle}</b>" has been found.</p>
                 <hr>
@@ -50,9 +65,9 @@ const sendNotificationEmail = async (userEmail, alertTitle, post, ccRecipients =
             `,
         };
 
-        // const info = await mailhogTransporter.sendMail(mailOptions); // Sử dụng MailHog cho lúc gửi mail nhiều và hàng loạt không bị flag spam
+        const info = await mailhogTransporter.sendMail(mailOptions); // Sử dụng MailHog cho lúc gửi mail nhiều và hàng loạt không bị flag spam
 
-        const info = await gmailTransporter.sendMail(mailOptions); // Sử dụng Gmail cho mail test đơn lẻ và test CC mail
+        // const info = await gmailTransporter.sendMail(mailOptions); // Sử dụng Gmail cho mail test đơn lẻ và test CC mail
 
         console.log(`✅ Notification email (MailHog) sent to ${userEmail} and CC: ${ccRecipients || 'None'}. ID: ${info.messageId}`);
         return info;
@@ -71,12 +86,15 @@ const sendNotificationEmail = async (userEmail, alertTitle, post, ccRecipients =
 const sendVerificationEmail = async (toEmail, otp) => {
     try {
         const mailOptions = {
-            from: `"Crisis Alert" <${process.env.GMAIL_USER}>`, // Gmail sender
-            // from : `"Crisis Alert" <${process.env.EMAIL_USER || 'bot@crisis-alert.com'}>`, // Dòng này nếu dùng MailHog
+            // from: `"Crisis Alert" <${process.env.GMAIL_USER}>`, // Gmail sender
+
+            from : `"Crisis Alert" <${process.env.EMAIL_USER || 'bot@crisis-alert.com'}>`, // Dòng này nếu dùng MailHog
+            
             to: toEmail,
             subject: 'OTP For Verifying Crisis Alert Account',
             html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+                    ${NO_REPLY_NOTICE_BLOCK} 
                     <h1 style="color: #333;">Crisis Alert System Password Verification</h1>
                     <p style="font-size: 16px;">Your OTP to verify your account is:</p>
                     <h2 style="color: #007bff; font-size: 32px; letter-spacing: 5px; text-align: center; margin: 20px 0;">
@@ -88,9 +106,10 @@ const sendVerificationEmail = async (toEmail, otp) => {
             `,
         };
 
-        // const info = await mailhogTransporter.sendMail(mailOptions); // Nếu muốn dùng MailHog để test
+        const info = await mailhogTransporter.sendMail(mailOptions); // Nếu muốn dùng MailHog để test
 
-        const info = await gmailTransporter.sendMail(mailOptions); // Gửi email bằng GMAIL transporter
+        // const info = await gmailTransporter.sendMail(mailOptions); // Gửi email bằng GMAIL transporter
+        
         console.log('✅ Verification email (Gmail) sent:', info.messageId);
         return info;
 
@@ -108,12 +127,15 @@ const sendVerificationEmail = async (toEmail, otp) => {
 const sendPasswordResetEmail = async (toEmail, otp) => {
     try {
         const mailOptions = {
-            from: `"Crisis Alert" <${process.env.GMAIL_USER}>`, // Gmail sender
-            // from : `"Crisis Alert" <${process.env.EMAIL_USER || 'bot@crisis-alert.com'}>`, // Dòng này nếu dùng MailHog
+            // from: `"Crisis Alert" <${process.env.GMAIL_USER}>`, // Gmail sender
+
+            from : `"Crisis Alert" <${process.env.EMAIL_USER || 'bot@crisis-alert.com'}>`, // Dòng này nếu dùng MailHog
+            
             to: toEmail,
             subject: 'Password Resetting Request For Crisis Alert Account',
             html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+                    ${NO_REPLY_NOTICE_BLOCK} 
                     <h1 style="color: #333;">Password Resetting Request</h1>
                     <p style="font-size: 16px;">We've receive a request for resetting your account password.</p>
                     <p style="font-size: 16px;">The OTP for resetting your account password is:</p>
@@ -126,9 +148,9 @@ const sendPasswordResetEmail = async (toEmail, otp) => {
             `,
         };
 
-        // const info = await mailhogTransporter.sendMail(mailOptions); // Nếu muốn dùng MailHog để test
+        const info = await mailhogTransporter.sendMail(mailOptions); // Nếu muốn dùng MailHog để test
 
-        const info = await gmailTransporter.sendMail(mailOptions); // Gửi email bằng GMAIL transporter
+        // const info = await gmailTransporter.sendMail(mailOptions); // Gửi email bằng GMAIL transporter
         console.log('✅ Password reset email (Gmail) sent:', info.messageId);
         return info;
 
@@ -145,25 +167,26 @@ const sendPasswordResetEmail = async (toEmail, otp) => {
  */
 const sendEmail = async ({ email, subject, message }) => {
     try {
+        const finalMessage = NO_REPLY_NOTICE_BLOCK + message;
+
         const mailOptions = {
-            from: `"Crisis Alert Support" <${process.env.GMAIL_USER}>`, // Gmail sender
-            // from : `"Crisis Alert Support" <${process.env.EMAIL_USER || 'bot@crisis-alert.com'}>`, // MailHog sender
+            // from: `"Crisis Alert Support" <${process.env.GMAIL_USER}>`, // Gmail sender
+
+            from : `"Crisis Alert Support" <${process.env.EMAIL_USER || 'bot@crisis-alert.com'}>`, // MailHog sender
+            
             to: email,
             subject: subject,
-            html: message, // Nội dung HTML
+            html: finalMessage,
         };
 
-        // Uncomment dòng dưới nếu muốn dùng MailHog
-        // const info = await mailhogTransporter.sendMail(mailOptions); 
+        const info = await mailhogTransporter.sendMail(mailOptions); // Dùng MailHog để test
 
-        // Gửi email bằng GMAIL transporter (Hiện tại đang dùng cái này)
-        const info = await gmailTransporter.sendMail(mailOptions);
+        // const info = await gmailTransporter.sendMail(mailOptions); // Gửi email bằng GMAIL transporter
 
         console.log(`✅ Generic Email sent to ${email}. ID: ${info.messageId}`);
         return info;
     } catch (error) {
         console.error('❌ Error sending generic email:', error);
-        // Không ném lỗi để tránh làm crash luồng chính nếu gửi mail thất bại
         return null;
     }
 };
@@ -173,5 +196,5 @@ module.exports = {
     sendNotificationEmail,
     sendVerificationEmail,
     sendPasswordResetEmail,
-    sendEmail, // 👈 Export thêm hàm này
+    sendEmail,
 };
