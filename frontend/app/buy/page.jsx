@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Check, X, Loader2, Shield, Zap, Crown, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/app/providers.jsx';
 import { createSubRequest } from '@/utils/api';
-import { toast } from 'react-toastify';
+import { toast } from 'react-toastify'; // Dùng react-toastify vì GlobalToast.jsx đang sử dụng thư viện này
 
 // --- Payment Modal ---
 function PaymentModal({ plan, onClose }) {
@@ -27,14 +27,19 @@ function PaymentModal({ plan, onClose }) {
                 amount: plan.price
             });
 
-            // 2. Thay alert bằng Toast Success
-            toast.success('Upgrade request sent! Please wait for admin approval.');
+            // 1. Thêm Toast Success Confirmation
+            toast.success(`Upgrade request for ${plan.name} sent! Please wait for Admin approval.`, {
+                autoClose: 5000,
+                containerId: "dashboard-toast" // Dùng container ID từ GlobalToast
+            });
 
             onClose(); // Đóng modal
         } catch (error) {
             console.error(error);
-            // 3. Thay alert bằng Toast Error
-            toast.error(error.message || 'Failed to send request.');
+            // 2. Thêm Toast Error
+            toast.error(error.message || 'Failed to send request. Please try again.', {
+                containerId: "dashboard-toast"
+            });
         } finally {
             setIsLoading(false);
         }
@@ -210,6 +215,11 @@ export default function BuyPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full max-w-7xl">
                 {plans.map((plan, index) => {
                     const isCurrentPlan = !isAuthLoading && user && user.subscriptionTier === plan.name;
+                    // Khóa: Đang là Pro và cố gắng mua VIP (Hạ cấp)
+                    const isDowngradeToVIP = !isAuthLoading && user && user.subscriptionTier === 'Pro' && plan.name === 'VIP';
+                    // Điều kiện Khóa chung:
+                    const isDisabled = !plan.action || isCurrentPlan || isDowngradeToVIP;
+
 
                     return (
                         <div
@@ -269,17 +279,21 @@ export default function BuyPage() {
                             {/* Action Button */}
                             <button
                                 onClick={plan.action}
-                                disabled={!plan.action || isCurrentPlan}
-                                className={`w-full py-3 rounded-xl font-bold transition-all ${isCurrentPlan
-                                    ? 'bg-slate-700 text-slate-400 cursor-default'
+                                disabled={isDisabled} // Sử dụng biến isDisabled
+                                className={`w-full py-3 rounded-xl font-bold transition-all ${isDisabled
+                                    ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
                                     : plan.action
                                         ? (plan.isPopular
                                             ? 'bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white shadow-lg'
                                             : 'bg-slate-700 hover:bg-slate-600 text-white')
-                                        : 'bg-slate-700 text-slate-400 cursor-default'
+                                        : 'bg-slate-700 text-slate-400 cursor-not-allowed'
                                     }`}
                             >
-                                {isCurrentPlan ? 'Your Current Plan' : plan.buttonText}
+                                {isCurrentPlan
+                                    ? 'Your Current Plan'
+                                    : isDowngradeToVIP
+                                        ? 'Downgrade Not Allowed' // Nội dung khi khóa nút Downgrade
+                                        : plan.buttonText}
                             </button>
                         </div>
                     )
