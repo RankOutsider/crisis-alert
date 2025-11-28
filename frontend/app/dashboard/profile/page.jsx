@@ -5,10 +5,11 @@ import { useRouter } from 'next/navigation';
 import { api, clearToken } from '@/utils/api';
 import {
     Mail, Phone, KeyRound, Save, Loader2, ShieldAlert, X, CheckCircle2,
-    User, Building, Image, Users, Calendar, Home, Lock // Thêm Lock icon
+    User, Building, Image, Users, Calendar, Home, Lock, Clock, CreditCard
 } from 'lucide-react';
 import { useFormValidation } from '@/hooks/useFormValidation';
 import Input from '@/app/components/Input';
+import { format } from 'date-fns';
 
 // --- Toast Component ---
 function Toast({ message, type, onClose }) {
@@ -35,7 +36,7 @@ function Toast({ message, type, onClose }) {
     );
 }
 
-// --- ChangePasswordModal (MỚI) ---
+// --- ChangePasswordModal ---
 function ChangePasswordModal({ onClose, onSuccess }) {
     const [isSavingPassword, setIsSavingPassword] = useState(false);
 
@@ -62,7 +63,7 @@ function ChangePasswordModal({ onClose, onSuccess }) {
         try {
             await api('auth/updatepassword', { method: 'PUT', body: JSON.stringify(passwordForm) });
             onSuccess('Password changed successfully!');
-            onClose(); // Đóng modal sau khi thành công
+            onClose();
         } catch (err) {
             const errorMessage = err.message || "Failed to change password.";
             let backendErrors = {};
@@ -137,7 +138,7 @@ function ChangePasswordModal({ onClose, onSuccess }) {
                                 name="newPassword"
                                 value={passwordForm.newPassword}
                                 onChange={handlePasswordChange}
-                                leftIcon={<Lock size={20} />} // Dùng icon Lock cho mật khẩu mới
+                                leftIcon={<Lock size={20} />}
                                 className={passwordErrors.newPassword ? 'border-red-500' : 'border-slate-600'}
                                 placeholder="Enter new password (min 6 chars)"
                             />
@@ -262,8 +263,9 @@ export default function ProfilePage() {
     const [loading, setLoading] = useState(true);
     const [isSavingDetails, setIsSavingDetails] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-    const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false); // State mới cho Password Modal
+    const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
     const [toast, setToast] = useState({ type: '', message: '' });
+    const [subscription, setSubscription] = useState({ tier: 'Free', expiresAt: null });
 
     const {
         values: detailsForm,
@@ -287,6 +289,10 @@ export default function ProfilePage() {
         const fetchUserData = async () => {
             try {
                 const userData = await api('auth/me');
+                setSubscription({
+                    tier: userData.subscriptionTier || 'Free',
+                    expiresAt: userData.subscriptionExpiresAt
+                });
                 setDetailsForm({
                     email: userData.email || '',
                     phone: userData.phone || '',
@@ -336,12 +342,18 @@ export default function ProfilePage() {
         }, 1000);
     };
 
+    const getPlanColor = (tier) => {
+        if (tier === 'VIP') return 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20';
+        if (tier === 'Pro') return 'text-blue-400 bg-blue-400/10 border-blue-400/20';
+        return 'text-gray-400 bg-gray-500/10 border-gray-500/20';
+    };
+
     if (loading) return <div className="p-8 text-center text-gray-400">Loading profile...</div>;
 
     return (
         <div className="p-4 sm:p-6 md:p-8 text-gray-200 overflow-x-hidden relative"> {/* relative để định vị nút absolute nếu cần */}
 
-            {/* Header Row: Title + Change Password Button */}
+            {/* Header Row */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 scroll-mt-20">
                 <h1 className="text-2xl sm:text-3xl font-bold text-white">User Profile</h1>
 
@@ -356,6 +368,38 @@ export default function ProfilePage() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* THẺ HIỂN THỊ GÓI DỊCH VỤ (SUBSCRIPTION CARD) */}
+                <div className="lg:col-span-2 bg-gradient-to-r from-slate-800 to-slate-800/80 p-5 sm:p-6 rounded-xl shadow-lg border border-slate-700">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                        <div>
+                            <h2 className="text-lg font-semibold text-white flex items-center gap-2 mb-1">
+                                <CreditCard size={20} className="text-blue-400" />
+                                Current Plan
+                            </h2>
+
+                            <p className="text-slate-400 text-sm">Manage your subscription and billing.</p>
+                        </div>
+
+                        <div className="flex flex-col sm:items-end gap-1 w-full sm:w-auto">
+                            <div className={`px-4 py-1.5 rounded-full border text-sm font-bold flex items-center gap-2 w-fit ${getPlanColor(subscription.tier)}`}>
+                                {subscription.tier.toUpperCase()} PLAN
+                            </div>
+
+                            {subscription.expiresAt ? (
+                                <div className="text-sm text-red-300 flex items-center gap-1.5 mt-1 bg-red-900/20 px-3 py-1 rounded-md border border-red-500/20">
+                                    <Clock size={14} />
+                                    <span>Expires: {format(new Date(subscription.expiresAt), 'PPP p')}</span>
+                                </div>
+                            ) : (
+                                <div className="text-sm text-slate-500 flex items-center gap-1.5 mt-1 px-2">
+                                    <CheckCircle2 size={14} />
+                                    <span>No expiration date</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
                 {/* --- Form Cập nhật Thông tin --- */}
                 <div className="bg-slate-800/50 p-5 sm:p-6 rounded-xl shadow-lg lg:col-span-2">
                     <h2 className="text-lg sm:text-xl font-semibold text-white mb-4">Update Information</h2>
@@ -466,8 +510,6 @@ export default function ProfilePage() {
                         </div>
                     </form>
                 </div>
-
-                {/* ĐÃ XÓA PHẦN FORM CHANGE PASSWORD CŨ TẠI ĐÂY */}
             </div>
 
             {/* --- Danger Zone --- */}

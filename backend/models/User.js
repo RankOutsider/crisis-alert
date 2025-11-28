@@ -89,6 +89,11 @@ User.init({
         allowNull: false,
         defaultValue: 'Free'
     },
+    // Thời hạn hết hạn gói (Null: vĩnh viễn hoặc gói Free)
+    subscriptionExpiresAt: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
     // Vai trò người dùng
     role: {
         type: DataTypes.STRING,

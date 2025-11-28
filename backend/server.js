@@ -12,6 +12,8 @@ const cookieParser = require('cookie-parser');
 const { connectDB, sequelize } = require('./config/db');
 const { runScanJob } = require('./utils/scan_job');
 
+const { initCronJobs } = require('./utils/cron_job');
+
 // === LOAD CÁC MODEL VÀ MỐI QUAN HỆ ===
 // Dòng này rất quan trọng để Sequelize biết về các models trước khi sync
 require('./models/associations');
@@ -84,14 +86,17 @@ const startServer = async () => {
         // Kết nối DB
         await connectDB();
 
+        // Đồng bộ các model với database (nếu cần)
         // console.log("🔄 Syncing database models...");
-        
         // await sequelize.sync({ alter: true });
+
         console.log("✅ Database synced and connected successfully!");
 
         // Khởi động Server
         httpServer.listen(PORT, () => {
             console.log(`🚀 Backend (with Socket.IO) is running at: http://localhost:${PORT}`);
+
+            initCronJobs();
 
             console.log("⏰ [node-cron] Scheduled to run once every minute.");
             cron.schedule('*/1 * * * *', () => {

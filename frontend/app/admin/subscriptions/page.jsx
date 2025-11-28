@@ -179,23 +179,26 @@ export default function AdminSubscriptions() {
                     </div>
 
                     {/* DESKTOP VIEW (Table) */}
-                    <div className="hidden md:block bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-sm">
-                        <table className="w-full text-left border-collapse">
+                    <div className="hidden md:block bg-slate-800 rounded-xl border border-slate-700 overflow-x-auto shadow-sm">
+
+                        {/* ➤ [FIX] Thêm min-w-[900px] để bảng không bị bóp méo khi thu nhỏ cửa sổ */}
+                        <table className="w-full text-left border-collapse min-w-[900px]">
                             <thead>
                                 <tr className="bg-slate-900/50 text-slate-300 border-b border-slate-700 text-xs uppercase font-semibold">
-                                    <th className="p-4 w-[25%]">User Info</th>
-                                    <th className="p-4 w-[15%]">Current Plan</th>
-                                    <th className="p-4 w-[15%]">Requested Plan</th>
-                                    <th className="p-4 w-[15%]">Status</th>
+                                    {/* Điều chỉnh lại % width cho hợp lý hơn */}
+                                    <th className="p-4 w-[25%] min-w-[200px]">User Info</th>
+                                    <th className="p-4 w-[12%]">Current Plan</th>
+                                    <th className="p-4 w-[12%]">Req. Plan</th>
+                                    <th className="p-4 w-[12%]">Status</th>
                                     <th className="p-4 w-[15%]">Date</th>
-                                    <th className="p-4 w-[15%] text-right">Actions</th>
+                                    <th className="p-4 w-[24%] text-right">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-700/50">
                                 {requests.map((req) => (
                                     <tr key={req.id} className="hover:bg-slate-700/30 transition-colors">
                                         <td className="p-4">
-                                            <div className="font-semibold text-white">{req.User?.email || 'Unknown'}</div>
+                                            <div className="font-semibold text-white break-all">{req.User?.email || 'Unknown'}</div>
                                             {req.adminNote && (
                                                 <div className="text-xs text-yellow-500/80 mt-1 truncate max-w-[200px]" title={req.adminNote}>
                                                     Note: {req.adminNote}
@@ -216,16 +219,16 @@ export default function AdminSubscriptions() {
                                             <div className="flex justify-end gap-2">
                                                 {req.status === 'PENDING' ? (
                                                     <>
-                                                        <button onClick={() => openModal(req, 'APPROVE')} className="p-1.5 bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white rounded transition-colors" title="Approve">
-                                                            <CheckCircle size={18} />
+                                                        <button onClick={() => openModal(req, 'APPROVE')} className="px-3 py-1.5 bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white rounded transition-colors flex items-center gap-1" title="Approve">
+                                                            <CheckCircle size={16} /> <span className="hidden lg:inline">Approve</span>
                                                         </button>
-                                                        <button onClick={() => openModal(req, 'REJECT')} className="p-1.5 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded transition-colors" title="Reject">
-                                                            <XCircle size={18} />
+                                                        <button onClick={() => openModal(req, 'REJECT')} className="px-3 py-1.5 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded transition-colors flex items-center gap-1" title="Reject">
+                                                            <XCircle size={16} /> <span className="hidden lg:inline">Reject</span>
                                                         </button>
                                                     </>
                                                 ) : (
-                                                    <button onClick={() => handleDelete(req.id)} className="p-1.5 bg-gray-700 text-gray-400 hover:bg-red-500 hover:text-white rounded transition-colors" title="Delete">
-                                                        <Trash2 size={18} />
+                                                    <button onClick={() => handleDelete(req.id)} className="px-3 py-1.5 bg-gray-700 text-gray-400 hover:bg-red-500 hover:text-white rounded transition-colors flex items-center gap-1" title="Delete">
+                                                        <Trash2 size={16} /> <span className="hidden lg:inline">Delete</span>
                                                     </button>
                                                 )}
                                             </div>

@@ -8,18 +8,19 @@ import {
     Search, Edit, X, Save,
     ChevronLeft, ChevronRight, Loader2,
     CheckSquare, Square, Trash2, Lock, Unlock,
-    User, Mail, Calendar, Shield
+    User, Mail, Calendar, Shield, Clock
 } from 'lucide-react';
 import Portal from '@/app/components/Portal';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
 
 // --- COMPONENT NÚT TOGGLE RIÊNG (Cho User Active) ---
-const UserStatusToggle = ({ isActive, onClick, isLoading, disabled }) => {
+const UserStatusToggle = ({ isActive, onClick, isLoading, disabled, title }) => {
     return (
         <button
             onClick={onClick}
             disabled={isLoading || disabled}
+            title={title}
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 ${isActive ? 'bg-green-500' : 'bg-gray-600'
                 } ${isLoading || disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         >
@@ -39,13 +40,14 @@ export default function AdminUsers() {
 
     // State Edit
     const [editingUser, setEditingUser] = useState(null);
-    const [formData, setFormData] = useState({ role: '', subscriptionTier: '' });
+    const [formData, setFormData] = useState({ role: '', subscriptionTier: '', subscriptionExpiresAt: '' });
 
     // Loading state cho toggle
     const [togglingId, setTogglingId] = useState(null);
     const [adminTogglingId, setAdminTogglingId] = useState(null);
 
     // --- 1. SWR SETUP ---
+    const { data: currentUser } = useSWR('auth/me', swrFetcher);
     const endpoint = `admin/users?page=${page}&limit=10&search=${search}`;
 
     const { data, error, isLoading } = useSWR(endpoint, swrFetcher, {
@@ -78,6 +80,12 @@ export default function AdminUsers() {
     // 1. Bulk Delete
     const handleBulkDelete = async () => {
         if (selectedIds.length === 0) return;
+
+        if (currentUser && selectedIds.includes(currentUser.id)) {
+            toast.error("You cannot delete the currently logged-in account.");
+            return;
+        }
+
         const confirmMsg = `WARNING: Delete ${selectedIds.length} users? Cannot undo.`;
 
         if (window.confirm(confirmMsg)) {
@@ -95,6 +103,11 @@ export default function AdminUsers() {
 
     // 2. Toggle User Active Status (Is Active)
     const handleStatusChange = async (user) => {
+        if (currentUser && user.id === currentUser.id) {
+            toast.warning("You cannot deactivate the currently logged-in account from the Admin Dashboard.");
+            return;
+        }
+
         // Nếu không phải Admin VÀ đang bị Admin khóa -> Không cho bật lại
         if (user.role !== 'admin' && !user.is_active_admin) {
             toast.warning("Cannot activate this user because they are locked by Admin.");
@@ -125,6 +138,10 @@ export default function AdminUsers() {
 
     // 3. Toggle Admin Lock Status (Is Active Admin)
     const handleToggleAdminLock = async (user) => {
+        if (currentUser && user.id === currentUser.id) {
+            toast.warning("Security Alert: You cannot Admin-Lock your own ADMIN account.");
+            return;
+        }
         if (user.role === 'admin') {
             toast.error("Security Alert: You cannot Admin-Lock another Administrator account.");
             return;
@@ -167,13 +184,53 @@ export default function AdminUsers() {
     // 4. Edit User
     const handleEditClick = (user) => {
         setEditingUser(user);
-        setFormData({ role: user.role, subscriptionTier: user.subscriptionTier });
+
+        // Format cần thiết: YYYY-MM-DDTHH:mm
+        let formattedDate = '';
+
+        if (user.subscriptionExpiresAt) {
+            const date = new Date(user.subscriptionExpiresAt);
+
+            // Lấy từng thành phần theo giờ địa phương
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0'); // Tháng bắt đầu từ 0
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+
+            // Ghép lại thành chuỗi đúng chuẩn input datetime-local
+            formattedDate = `${year}-${month}-${day}T${hours}:${minutes}`;
+        }
+
+        setFormData({
+            role: user.role,
+            subscriptionTier: user.subscriptionTier,
+            subscriptionExpiresAt: formattedDate
+        });
     };
 
     const handleSave = async () => {
         if (!editingUser) return;
         try {
-            await updateAdminUser(editingUser.id, formData);
+            // Chuẩn bị dữ liệu ngày tháng
+            let finalDate = null;
+            if (formData.subscriptionExpiresAt) {
+                // 1. Tạo đối tượng Date từ chuỗi giờ địa phương trong input
+                // Ví dụ: Input là "2025-12-28T16:41" (giờ VN) -> new Date() sẽ hiểu đúng là giờ VN
+                const localDate = new Date(formData.subscriptionExpiresAt);
+
+                // 2. Chuyển đổi sang chuẩn ISO (UTC) để gửi lên Server
+                // Kết quả sẽ là: "2025-12-28T09:41:00.000Z" (Chuẩn quốc tế)
+                finalDate = localDate.toISOString();
+            }
+
+            const payload = {
+                role: formData.role,
+                subscriptionTier: formData.subscriptionTier,
+                subscriptionExpiresAt: finalDate // Gửi chuỗi UTC chuẩn
+            };
+
+            await updateAdminUser(editingUser.id, payload);
             toast.success('User updated successfully!');
             setEditingUser(null);
             mutate(endpoint);
@@ -267,6 +324,7 @@ export default function AdminUsers() {
                                     <th className="p-4">User Info</th>
                                     <th className="p-4">Role</th>
                                     <th className="p-4">Subscription</th>
+                                    <th className="p-4">Expires At</th>
                                     <th className="p-4 text-center">User Active</th>
                                     <th className="p-4 text-center">Admin Lock</th>
                                     <th className="p-4 text-right">Actions</th>
@@ -277,23 +335,45 @@ export default function AdminUsers() {
                                     const isSelected = selectedIds.includes(user.id);
                                     const isAdminUser = user.role === 'admin';
 
+                                    const isSelf = currentUser && currentUser.id === user.id;
+
                                     return (
                                         <tr key={user.id} className={`transition-colors ${isSelected ? 'bg-blue-900/10 hover:bg-blue-900/20' : 'hover:bg-slate-700/30'}`}>
-                                            <td className="p-4 text-center"><button onClick={() => toggleSelect(user.id)} className="text-slate-400 hover:text-white transition-colors">{isSelected ? <CheckSquare className="text-blue-500" size={18} /> : <Square size={18} />}</button></td>
+                                            <td className="p-4 text-center">
+                                                <button onClick={() => toggleSelect(user.id)} className="text-slate-400 hover:text-white transition-colors">{isSelected ? <CheckSquare className="text-blue-500" size={18} /> : <Square size={18} />}
+                                                </button>
+                                            </td>
+
                                             <td className="p-4 max-w-[200px]">
-                                                <div className="font-semibold text-white truncate">{user.username}</div>
+                                                <div className="font-semibold text-white truncate">{user.username} {isSelf && <span className="text-xs text-blue-400 ml-1">(You)</span>}</div>
                                                 <div className="text-sm text-slate-400 truncate">{user.email}</div>
                                                 <div className="text-xs text-slate-600 mt-0.5 flex items-center gap-1">
-                                                    <Calendar size={10} /> {user.createdAt ? format(new Date(user.createdAt), 'MMM dd, yyyy') : '-'}
+                                                    <Calendar size={10} /> Joined: {user.createdAt ? format(new Date(user.createdAt), 'MMM dd, yyyy') : '-'}
                                                 </div>
                                             </td>
+
                                             <td className="p-4">
                                                 <span className={`px-2 py-1 rounded text-[10px] font-bold border tracking-wide whitespace-nowrap ${getRoleColor(user.role)}`}>
                                                     {user.role.toUpperCase()}
                                                 </span>
                                             </td>
-                                            <td className="p-4"><span className={`px-2 py-1 rounded text-[10px] font-bold border tracking-wide whitespace-nowrap ${getTierColor(user.subscriptionTier)}`}>
-                                                {user.subscriptionTier}</span>
+
+                                            <td className="p-4">
+                                                <span className={`px-2 py-1 rounded text-[10px] font-bold border tracking-wide whitespace-nowrap ${getTierColor(user.subscriptionTier)}`}>
+                                                    {user.subscriptionTier}
+                                                </span>
+                                            </td>
+
+                                            {/* Hiển thị Ngày hết hạn */}
+                                            <td className="p-4 text-sm">
+                                                {user.subscriptionExpiresAt ? (
+                                                    <span className="text-slate-300 flex items-center gap-1">
+                                                        <Clock size={12} className="text-slate-500" />
+                                                        {format(new Date(user.subscriptionExpiresAt), 'MMM dd, yyyy')}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-slate-600 italic text-xs">Forever / None</span>
+                                                )}
                                             </td>
 
                                             {/* Cột User Active */}
@@ -302,7 +382,8 @@ export default function AdminUsers() {
                                                     <UserStatusToggle
                                                         isActive={user.is_active}
                                                         isLoading={togglingId === user.id}
-                                                        disabled={!isAdminUser && !user.is_active_admin}
+                                                        disabled={(!isAdminUser && !user.is_active_admin) || isSelf}
+                                                        title={isSelf ? "You cannot deactivate yourself here" : ""}
                                                         onClick={() => handleStatusChange(user)}
                                                     />
                                                     <span className="text-[10px] text-gray-500">
@@ -316,14 +397,14 @@ export default function AdminUsers() {
                                                 <div className="flex flex-col items-center gap-1">
                                                     <button
                                                         onClick={() => handleToggleAdminLock(user)}
-                                                        disabled={adminTogglingId === user.id || isAdminUser}
-                                                        className={`p-1.5 rounded-md transition-colors ${isAdminUser
-                                                                ? 'bg-slate-700 text-slate-500 cursor-not-allowed opacity-50'
-                                                                : user.is_active_admin
-                                                                    ? 'bg-green-500/10 text-green-500 hover:bg-green-500/20'
-                                                                    : 'bg-red-500/10 text-red-500 hover:bg-red-500/20'
+                                                        disabled={adminTogglingId === user.id || isAdminUser || isSelf}
+                                                        className={`p-1.5 rounded-md transition-colors ${isAdminUser || isSelf
+                                                            ? 'bg-slate-700 text-slate-500 cursor-not-allowed opacity-50'
+                                                            : user.is_active_admin
+                                                                ? 'bg-green-500/10 text-green-500 hover:bg-green-500/20'
+                                                                : 'bg-red-500/10 text-red-500 hover:bg-red-500/20'
                                                             }`}
-                                                        title={isAdminUser ? 'Cannot lock an Administrator' : (user.is_active_admin ? 'Account Unlocked (Click to Lock)' : 'Account Locked by Admin (Click to Unlock)')}
+                                                        title={isSelf ? 'Cannot lock yourself' : (isAdminUser ? 'Cannot lock an Administrator' : (user.is_active_admin ? 'Account Unlocked (Click to Lock)' : 'Account Locked by Admin (Click to Unlock)'))}
                                                     >
                                                         {adminTogglingId === user.id ? (
                                                             <Loader2 size={18} className="animate-spin" />
@@ -356,27 +437,36 @@ export default function AdminUsers() {
                         {users.map((user) => {
                             const isSelected = selectedIds.includes(user.id);
                             const isAdminUser = user.role === 'admin';
+                            const isSelf = currentUser && currentUser.id === user.id;
 
                             return (
                                 <div key={user.id} className={`bg-slate-800 p-5 rounded-xl border shadow-sm flex flex-col gap-3 transition-all ${isSelected ? 'border-blue-500/50 bg-blue-900/10' : 'border-slate-700 hover:border-slate-600'}`}>
                                     <div className="flex justify-between items-start gap-3">
                                         <div className="min-w-0 flex-1">
-                                            <div className="font-bold text-white text-lg truncate pr-2">{user.username}</div>
+                                            <div className="font-bold text-white text-lg truncate pr-2">
+                                                {user.username} {isSelf && <span className="text-xs text-blue-400 ml-1">(You)</span>}
+                                            </div>
                                             <div className="text-sm text-slate-400 break-all">{user.email}</div>
                                             <div className="text-xs text-slate-600 mt-1 flex items-center gap-1">
                                                 <Calendar size={10} /> Joined: {user.createdAt ? format(new Date(user.createdAt), 'MMM dd, yyyy') : '-'}
                                             </div>
+
+                                            {user.subscriptionExpiresAt && (
+                                                <div className="text-xs text-red-400 mt-1 flex items-center gap-1">
+                                                    <Clock size={10} /> Exp: {format(new Date(user.subscriptionExpiresAt), 'MMM dd, yyyy')}
+                                                </div>
+                                            )}
                                         </div>
 
                                         <div className="flex items-center gap-2 shrink-0">
                                             <button
                                                 onClick={() => handleToggleAdminLock(user)}
-                                                disabled={isAdminUser}
-                                                className={`p-2 rounded-lg transition-colors ${isAdminUser
-                                                        ? 'bg-slate-700 text-slate-500 opacity-50 cursor-not-allowed'
-                                                        : user.is_active_admin
-                                                            ? 'bg-green-900/30 text-green-400 hover:bg-green-900/50'
-                                                            : 'bg-red-900/30 text-red-400 hover:bg-red-900/50'
+                                                disabled={isAdminUser || isSelf}
+                                                className={`p-2 rounded-lg transition-colors ${isAdminUser || isSelf
+                                                    ? 'bg-slate-700 text-slate-500 opacity-50 cursor-not-allowed'
+                                                    : user.is_active_admin
+                                                        ? 'bg-green-900/30 text-green-400 hover:bg-green-900/50'
+                                                        : 'bg-red-900/30 text-red-400 hover:bg-red-900/50'
                                                     }`}
                                             >
                                                 {(user.is_active_admin || isAdminUser) ? <Unlock size={18} /> : <Lock size={18} />}
@@ -394,8 +484,9 @@ export default function AdminUsers() {
                                             <span className="text-xs text-slate-500">Active:</span>
                                             <UserStatusToggle
                                                 isActive={user.is_active}
+                                                isLoading={togglingId === user.id}
+                                                disabled={!isAdminUser && !user.is_active_admin || isSelf}
                                                 onClick={() => handleStatusChange(user)}
-                                                disabled={!isAdminUser && !user.is_active_admin}
                                             />
                                         </div>
                                     </div>
@@ -447,6 +538,18 @@ export default function AdminUsers() {
                                         <option value="VIP">VIP</option>
                                         <option value="Pro">Pro</option>
                                     </select>
+                                </div>
+
+                                {/* Input chọn ngày hết hạn */}
+                                <div>
+                                    <label className="block text-sm text-gray-300 mb-1">Expires At (Optional)</label>
+                                    <input
+                                        type="datetime-local"
+                                        value={formData.subscriptionExpiresAt}
+                                        onChange={(e) => setFormData({ ...formData, subscriptionExpiresAt: e.target.value })}
+                                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none transition-colors [color-scheme:dark]"
+                                    />
+                                    <p className="text-[10px] text-gray-500 mt-1">Leave empty to set as "Never Expires" (Free) or auto-set 30 days (VIP/Pro).</p>
                                 </div>
                             </div>
                             <div className="mt-8 flex justify-end space-x-3 pt-4 border-t border-slate-700">

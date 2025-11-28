@@ -1,4 +1,3 @@
-// backend/controllers/subscriptionController.js
 const { User, SubscriptionRequest } = require('../models/associations');
 const { sendEmail } = require('../utils/emailService');
 
@@ -48,7 +47,7 @@ exports.getSubscriptionRequests = async (req, res) => {
 // [ADMIN] Xử lý yêu cầu (Approve/Reject)
 exports.handleSubscriptionRequest = async (req, res) => {
     const { id } = req.params;
-    const { status, adminNote } = req.body; // Lấy thêm adminNote
+    let { status, adminNote } = req.body; // Dùng let để có thể sửa đổi status
 
     try {
         const request = await SubscriptionRequest.findByPk(id, { include: User });
@@ -58,10 +57,19 @@ exports.handleSubscriptionRequest = async (req, res) => {
             return res.status(400).json({ message: 'This request has already been processed.' });
         }
 
-        // 1. CẬP NHẬT DB
+        // Frontend có thể gửi 'APPROVE' hoặc 'REJECT' (động từ), ta cần đổi thành tính từ
+        if (status === 'APPROVE') status = 'APPROVED';
+        if (status === 'REJECT') status = 'REJECTED';
+
+        // Kiểm tra hợp lệ lần cuối
+        if (!['APPROVED', 'REJECTED'].includes(status)) {
+            return res.status(400).json({ message: `Invalid status value: ${status}. Must be APPROVED or REJECTED.` });
+        }
+
+        // 1. CẬP NHẬT TRẠNG THÁI YÊU CẦU TRONG DB
         request.status = status;
-        request.adminNote = adminNote || null; // Lưu ghi chú vào DB
-        await request.save();
+        request.adminNote = adminNote || null;
+        await request.save(); // Bây giờ status đã chuẩn, save sẽ không lỗi nữa
 
         const user = request.User;
 
@@ -71,12 +79,16 @@ exports.handleSubscriptionRequest = async (req, res) => {
         let statusColor = '';
 
         if (status === 'APPROVED') {
-            // Logic Approve
+            // LOGIC CỘNG 30 NGÀY KHI DUYỆT ĐƠN (CHÍNH XÁC GIỜ PHÚT)
+            const now = new Date();
+            const expiryDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
             user.subscriptionTier = request.plan;
+            user.subscriptionExpiresAt = expiryDate;
             await user.save();
 
             if (!finalMessage) {
-                finalMessage = `Congratulations! Your request to upgrade to ${request.plan} has been APPROVED.`;
+                finalMessage = `Congratulations! Your request to upgrade to ${request.plan} has been APPROVED. Your plan is active for 30 days.`;
             }
             emailSubject = '🎉 CrisisAlert - Subscription Approved';
             statusColor = '#10B981'; // Màu xanh lá
@@ -85,12 +97,12 @@ exports.handleSubscriptionRequest = async (req, res) => {
             if (req.io) {
                 req.io.to(`user_${user.id}`).emit('subscription_updated', {
                     tier: request.plan,
-                    message: finalMessage
+                    message: finalMessage,
+                    expiresAt: expiryDate
                 });
             }
 
         } else if (status === 'REJECTED') {
-            // Logic Reject
             if (!finalMessage) {
                 finalMessage = `We are sorry, your request to upgrade to ${request.plan} was REJECTED. Please check your payment info.`;
             }
@@ -103,8 +115,6 @@ exports.handleSubscriptionRequest = async (req, res) => {
                     message: finalMessage
                 });
             }
-        } else {
-            return res.status(400).json({ message: 'Invalid status' });
         }
 
         // 3. GỬI EMAIL THÔNG BÁO
@@ -122,13 +132,17 @@ exports.handleSubscriptionRequest = async (req, res) => {
                         <span style="font-style: italic; color: #333;">"${finalMessage}"</span>
                     </div>
                     
+                    ${status === 'APPROVED' ? `
+                    <p style="font-size: 14px; color: #333;">
+                        <strong>New Expiration Date:</strong> ${user.subscriptionExpiresAt}
+                    </p>` : ''}
+
                     <p style="font-size: 14px; color: #666;">
                         Thank you for choosing CrisisAlert.<br>
                     </p>
                 </div>
             `;
 
-            // Gửi mail (không await để phản hồi nhanh cho Admin)
             sendEmail({
                 email: user.email,
                 subject: emailSubject,
@@ -154,7 +168,6 @@ exports.deleteSubscriptionRequest = async (req, res) => {
             return res.status(404).json({ message: 'Request not found' });
         }
 
-        // Logic an toàn: Không cho xóa đơn đang chờ (PENDING) để tránh lỡ tay
         if (request.status === 'PENDING') {
             return res.status(400).json({
                 message: 'Cannot delete a PENDING request. Please process (Approve/Reject) it first.'

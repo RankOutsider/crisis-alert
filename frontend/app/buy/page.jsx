@@ -3,10 +3,15 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Check, X, Loader2, Shield, Zap, Crown, ArrowLeft } from 'lucide-react';
+import {
+    Check, X, Loader2, Shield,
+    Zap, Crown, ArrowLeft,
+    Clock
+} from 'lucide-react';
 import { useAuth } from '@/app/providers.jsx';
 import { createSubRequest } from '@/utils/api';
-import { toast } from 'react-toastify'; // Dùng react-toastify vì GlobalToast.jsx đang sử dụng thư viện này
+import { toast } from 'react-toastify';
+import { format } from 'date-fns';
 
 // --- Payment Modal ---
 function PaymentModal({ plan, onClose }) {
@@ -196,18 +201,35 @@ export default function BuyPage() {
                 </p>
             </div>
 
-            {/* Hiển thị gói hiện tại */}
+            {/* Hiển thị gói hiện tại & ngày hết hạn */}
             {!isAuthLoading && user && (
-                <div className="w-full max-w-7xl text-center mb-8">
-                    <p className="text-lg text-slate-300">
-                        Your current plan is:
-                        <span className={`font-bold ml-2 ${user.subscriptionTier === 'Pro' ? 'text-yellow-400' :
-                            user.subscriptionTier === 'VIP' ? 'text-blue-400' :
-                                'text-slate-400'
-                            }`}>
-                            {user.subscriptionTier}
-                        </span>
-                    </p>
+                <div className="w-full max-w-7xl text-center mb-8 animate-fadeIn">
+                    <div className="inline-block bg-slate-800/80 border border-slate-700 rounded-xl p-4 shadow-lg backdrop-blur-sm">
+                        <p className="text-lg text-slate-300">
+                            Your current plan:
+                            <span className={`font-bold ml-2 text-xl ${user.subscriptionTier === 'Pro' ? 'text-yellow-400 drop-shadow-[0_0_8px_rgba(250,204,21,0.5)]' :
+                                user.subscriptionTier === 'VIP' ? 'text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]' :
+                                    'text-slate-400'
+                                }`}>
+                                {user.subscriptionTier}
+                            </span>
+                        </p>
+
+                        {/* Hiển thị ngày hết hạn (Local Time) */}
+                        {user.subscriptionExpiresAt ? (
+                            <p className="text-sm text-red-300 mt-2 flex items-center justify-center gap-2 bg-red-900/20 px-3 py-1 rounded-md border border-red-500/20">
+                                <Clock size={16} />
+                                Expires on: <strong>{format(new Date(user.subscriptionExpiresAt), 'PPP p')}</strong>
+                            </p>
+                        ) : (
+                            user.subscriptionTier !== 'Free' && (
+                                <p className="text-sm text-green-400 mt-2 flex items-center justify-center gap-2">
+                                    <Check size={16} />
+                                    No expiration date (Lifetime / Free)
+                                </p>
+                            )
+                        )}
+                    </div>
                 </div>
             )}
 
