@@ -3,16 +3,14 @@ const { Op } = require('sequelize');
 const User = require('../models/User');
 const Otp = require('../models/Otp');
 
-// Import hàm gửi mail mới vừa viết
+// Import hàm gửi mail
 const { sendSubscriptionExpiredEmail } = require('./emailService');
 
 const initCronJobs = () => {
     console.log('⏰ [Cron Manager] System automation initialized.');
 
-    // ============================================================
-    // JOB 1: CHECK HẾT HẠN GÓI (Chạy mỗi ngày lúc 00:00)
-    // ============================================================
-    cron.schedule('0 0 * * *', async () => {
+    // Cron 1: CHECK HẾT HẠN GÓI
+    cron.schedule('* * * * *', async () => {
         console.log('🔄 [Cron Job] Running subscription check...');
         try {
             const now = new Date();
@@ -36,7 +34,7 @@ const initCronJobs = () => {
                     user.subscriptionExpiresAt = null;
                     await user.save();
 
-                    // 2. Gửi email thông báo (Dùng hàm mới)
+                    // 2. Gửi email thông báo
                     await sendSubscriptionExpiredEmail(user.email, user.username, oldPlan);
 
                     console.log(`✅ Downgraded User: ${user.username} (${oldPlan} -> Free)`);
@@ -50,15 +48,16 @@ const initCronJobs = () => {
         }
     });
 
-    // ============================================================
-    // JOB 2: DỌN OTP RÁC (Chạy mỗi giờ ở phút 30)
-    // ============================================================
-    cron.schedule('30 * * * *', async () => {
+    // Cron 2: DỌN OTP RÁC
+    cron.schedule('* * * * *', async () => {
         try {
-            // Xóa OTP cũ hơn 15 phút
-            const fifteenMinutesAgo = new Date(Date.now() - 15 * 60000);
+            const now = new Date();
+
+            // Xoá OTP đã hết hạn
             const deletedCount = await Otp.destroy({
-                where: { createdAt: { [Op.lt]: fifteenMinutesAgo } }
+                where: {
+                    expires_at: { [Op.lt]: now }
+                }
             });
 
             if (deletedCount > 0) console.log(`🗑️ [Cron Job] Cleaned ${deletedCount} expired OTPs.`);
