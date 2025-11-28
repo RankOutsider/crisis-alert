@@ -12,7 +12,8 @@ const {
     verifyOtp,
     resendOtp,
     forgotPassword,
-    resetPassword
+    resetPassword,
+    createReactivationRequest
 } = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -69,6 +70,18 @@ router.post(
     ],
     handleValidationErrors,
     login
+);
+
+// === Route Gửi Yêu cầu Kích hoạt Lại Tài khoản ===
+router.post(
+    '/reactivation-request',
+    [ // --- Validation cho Yêu cầu Kích hoạt Lại ---
+        body('email', 'Invalid email address')
+            .isEmail()
+            .normalizeEmail()
+    ],
+    handleValidationErrors,
+    createReactivationRequest
 );
 
 // === Route Xác thực OTP ===
@@ -217,6 +230,10 @@ router.put(
     '/settings',
     protect,
     [ // --- Validation cho Cập nhật Cài đặt ---
+        body('is_active', 'is_active must be a boolean value')
+            .optional()
+            .isBoolean()
+            .toBoolean(),
         body('notificationsEnabled', 'notificationsEnabled must be a boolean value')
             .optional()
             .isBoolean()

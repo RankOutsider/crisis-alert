@@ -1,3 +1,4 @@
+// backend/utils/emailService.js
 const nodemailer = require('nodemailer');
 
 // ----- 1. CẤU HÌNH CHO MAILHOG (Gửi thông báo) -----
@@ -17,7 +18,6 @@ const gmailTransporter = nodemailer.createTransport({
 })
 
 // Dòng nhắc nhở tiêu chuẩn, đặt trong một block riêng để dễ định vị
-
 const NO_REPLY_NOTICE_BLOCK = `
     <div style="background-color: #fff3cd; padding: 12px; border-radius: 5px; margin-bottom: 20px; border: 1px solid #ffeeba;">
         <p style="font-size: 13px; color: #856404; text-align: center; margin: 0;">
@@ -28,6 +28,120 @@ const NO_REPLY_NOTICE_BLOCK = `
         </p>
     </div>
 `;
+
+/**
+ * @desc Gửi email thông báo đến Admin về yêu cầu kích hoạt lại tài khoản mới
+ * @param {string} username - Username của người dùng
+ */
+const sendReactivationRequestNotification = async (username) => {
+    try {
+        const adminEmail = process.env.ADMIN_EMAIL || 'admin@crisis-alert.com'; // Đảm bảo bạn có ADMIN_EMAIL trong .env
+
+        const mailOptions = {
+            // from: `"Crisis Alert Admin Bot" <${process.env.GMAIL_USER}>`, // Gmail sender
+
+            from: `"Crisis Alert Admin Bot" <${process.env.EMAIL_USER || 'bot@crisis-alert.com'}>`, // MailHog sender
+
+            to: adminEmail,
+            subject: `🔔 NEW ADMIN ACTION REQUIRED: Reactivation Request`,
+            html: `
+                ${NO_REPLY_NOTICE_BLOCK}
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+
+                    <h2 style="color: #007bff;">Account Reactivation Request</h2>
+
+                    <p>A user requires administrative action:</p>
+
+                    <hr style="border: none; border-top: 1px solid #eee;">
+
+                    <p style="font-size: 16px;">User <b>${username}</b> has submitted a request to reactivate their account, which was previously disabled by an administrator.</p>
+
+                    <p style="font-size: 16px;">Please log in to the Admin Dashboard to review and process this request.</p>
+
+                    <p style="margin-top: 20px;">
+                        <a href="${process.env.CLIENT_URL}/admin/reactivation" 
+                           style="background-color: #dc3545; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                            Go to Admin Requests
+                        </a>
+                    </p>
+
+                    <p style="font-size: 14px; color: #777; margin-top: 20px;">Thank you for your service.</p>
+                </div>
+            `,
+        };
+        // const info = await gmailTransporter.sendMail(mailOptions); // Gửi email bằng GMAIL transporter
+
+        const info = await mailhogTransporter.sendMail(mailOptions); // Dùng MailHog để test
+
+        console.log(`✅ Admin notification email sent for new reactivation request from ${username}. ID: ${info.messageId}`);
+        return info;
+
+    } catch (error) {
+        console.error('❌ Error sending admin reactivation request notification:', error);
+        // Không ném lỗi để tránh làm crash luồng chính
+        return null;
+    }
+};
+
+/**
+ * @desc Gửi kết quả xử lý yêu cầu kích hoạt lại cho người dùng
+ * @param {string} toEmail - Email người dùng
+ * @param {string} status - Trạng thái ('Approved' hoặc 'Rejected')
+ * @param {string} adminReason - Lý do Admin đưa ra (Optional)
+ */
+const sendReactivationResultEmail = async (toEmail, status, adminReason) => {
+    const isApproved = status === 'Approved';
+    const subject = isApproved ? '🎉 Account Reactivation Approved' : '🚫 Account Reactivation Rejected';
+    const color = isApproved ? '#28a745' : '#dc3545';
+
+    const defaultMessage = isApproved
+        ? 'Your request has been successfully reviewed and your account is now active.'
+        : 'Your request was reviewed, but your account reactivation was rejected.';
+
+    try {
+        const mailOptions = {
+            // from: `"Crisis Alert Admin" <${process.env.GMAIL_USER}>`, // Gmail sender
+
+            from: `"Crisis Alert Admin" <${process.env.EMAIL_USER || 'bot@crisis-alert.com'}>`, // MailHog sender
+
+            to: toEmail,
+            subject: subject,
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+
+                    ${NO_REPLY_NOTICE_BLOCK}
+
+                    <h1 style="color: ${color}; text-align: center;">${isApproved ? 'Success!' : 'Status Update'}</h1>
+
+                    <p style="font-size: 16px; text-align: center;">Your reactivation request status:</p>
+
+                    <h2 style="color: ${color}; font-size: 24px; text-align: center; margin: 20px 0;">${status}</h2>
+
+                    <p style="font-size: 16px;"><b>Admin Message:</b></p>
+
+                    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 3px solid ${color};">
+                        <p style="margin: 0; color: #333;">${adminReason || defaultMessage}</p>
+                    </div>
+
+                    ${isApproved ?
+                    '<p style="margin-top: 15px;">You can now log in to the Crisis Alert Dashboard.</p>' :
+                    '<p style="margin-top: 15px;">Please contact support for further clarification.</p>'}
+                    <p style="margin-top: 30px; font-size: 14px; color: #777;">- Crisis Alert Admin Team</p>
+                </div>
+            `,
+        };
+        // const info = await gmailTransporter.sendMail(mailOptions); // Gửi email bằng GMAIL transporter
+
+        const info = await mailhogTransporter.sendMail(mailOptions); // Dùng MailHog để test
+
+        console.log(`✅ Reactivation result email sent to ${toEmail} (${status}). ID: ${info.messageId}`);
+        return info;
+
+    } catch (error) {
+        console.error('❌ Error sending reactivation result email:', error);
+        return null;
+    }
+};
 
 /**
  * Hàm gửi email thông báo khi có bài đăng mới khớp với alert
@@ -64,10 +178,9 @@ const sendNotificationEmail = async (userEmail, alertTitle, post, ccRecipients =
                 <p><i>- The Crisis Alert Team</i></p>
             `,
         };
+        // const info = await gmailTransporter.sendMail(mailOptions); // Sử dụng Gmail cho mail test đơn lẻ và test CC mail
 
         const info = await mailhogTransporter.sendMail(mailOptions); // Sử dụng MailHog cho lúc gửi mail nhiều và hàng loạt không bị flag spam
-
-        // const info = await gmailTransporter.sendMail(mailOptions); // Sử dụng Gmail cho mail test đơn lẻ và test CC mail
 
         console.log(`✅ Notification email (MailHog) sent to ${userEmail} and CC: ${ccRecipients || 'None'}. ID: ${info.messageId}`);
         return info;
@@ -95,7 +208,7 @@ const sendVerificationEmail = async (toEmail, otp) => {
             html: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
                     ${NO_REPLY_NOTICE_BLOCK} 
-                    <h1 style="color: #333;">Crisis Alert System Password Verification</h1>
+                    <h1 style="color: #333;">Crisis Alert Account Verification</h1>
                     <p style="font-size: 16px;">Your OTP to verify your account is:</p>
                     <h2 style="color: #007bff; font-size: 32px; letter-spacing: 5px; text-align: center; margin: 20px 0;">
                         ${otp}
@@ -105,11 +218,10 @@ const sendVerificationEmail = async (toEmail, otp) => {
                 </div>
             `,
         };
+        // const info = await gmailTransporter.sendMail(mailOptions); // Gửi email bằng GMAIL transporter
 
         const info = await mailhogTransporter.sendMail(mailOptions); // Nếu muốn dùng MailHog để test
 
-        // const info = await gmailTransporter.sendMail(mailOptions); // Gửi email bằng GMAIL transporter
-        
         console.log('✅ Verification email (Gmail) sent:', info.messageId);
         return info;
 
@@ -147,10 +259,10 @@ const sendPasswordResetEmail = async (toEmail, otp) => {
                 </div>
             `,
         };
+        // const info = await gmailTransporter.sendMail(mailOptions); // Gửi email bằng GMAIL transporter
 
         const info = await mailhogTransporter.sendMail(mailOptions); // Nếu muốn dùng MailHog để test
-
-        // const info = await gmailTransporter.sendMail(mailOptions); // Gửi email bằng GMAIL transporter
+        
         console.log('✅ Password reset email (Gmail) sent:', info.messageId);
         return info;
 
@@ -160,7 +272,6 @@ const sendPasswordResetEmail = async (toEmail, otp) => {
     }
 };
 
-// ----- HÀM MỚI: Gửi email chung (dùng cho Subscription, System alert...) -----
 /**
  * Hàm gửi email tùy chỉnh
  * @param {object} options - { email, subject, message }
@@ -178,10 +289,9 @@ const sendEmail = async ({ email, subject, message }) => {
             subject: subject,
             html: finalMessage,
         };
+        // const info = await gmailTransporter.sendMail(mailOptions); // Gửi email bằng GMAIL transporter
 
         const info = await mailhogTransporter.sendMail(mailOptions); // Dùng MailHog để test
-
-        // const info = await gmailTransporter.sendMail(mailOptions); // Gửi email bằng GMAIL transporter
 
         console.log(`✅ Generic Email sent to ${email}. ID: ${info.messageId}`);
         return info;
@@ -197,4 +307,6 @@ module.exports = {
     sendVerificationEmail,
     sendPasswordResetEmail,
     sendEmail,
+    sendReactivationRequestNotification,
+    sendReactivationResultEmail
 };

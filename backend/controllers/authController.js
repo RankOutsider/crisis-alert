@@ -1,9 +1,11 @@
 // backend/controllers/authController.js
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const { Op } = require('sequelize');
+
 const User = require('../models/User');
 const Otp = require('../models/Otp');
-const { Op } = require('sequelize');
+const ReactivationRequest = require('../models/ReactivationRequest');
 
 const sequelize = User.sequelize;
 
@@ -91,7 +93,7 @@ exports.register = async (req, res) => {
     }
 };
 
-// @desc    Đăng nhập người dùng
+// @desc    Đăng nhập người dùng
 exports.login = async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) {
@@ -103,18 +105,40 @@ exports.login = async (req, res) => {
             return res.status(401).json({ message: 'Invalid username or password' });
         }
 
-        if (!user.is_verified) {
-            return res.status(403).json({
-                message: 'Account not verified. Please check your email.',
-                email: user.email
-            });
-        }
-
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(401).json({ message: 'Invalid username or password' });
         }
 
+        // KIỂM TRA TRẠNG THÁI XÁC THỰC EMAIL
+        if (!user.is_verified) {
+            return res.status(403).json({
+                message: 'Account not verified. Please check your email.',
+                code: 'EMAIL_UNVERIFIED', // Mã lỗi tùy chỉnh để Frontend xử lý
+                email: user.email
+            });
+        }
+
+        // KIỂM TRA TRẠNG THÁI ACTIVE
+        if (!user.is_active_admin) {
+            // Cả hai cột đều false (user không thể tự bật lại)
+            return res.status(403).json({
+                message: 'Your account has been disabled by the Administrator.',
+                code: 'ADMIN_DISABLED', // Mã lỗi cho Admin Lock
+                email: user.email
+            });
+        }
+
+        // Tài khoản bị User tự khóa (is_active: false nhưng is_active_admin: true)
+        if (!user.is_active) {
+            return res.status(403).json({
+                message: 'Your account is currently disabled. Please reactivate it through OTP verification or contact support.',
+                code: 'USER_DISABLED', // Mã lỗi cho User Lock
+                email: user.email
+            });
+        }
+
+        // Nếu Active -> Đăng nhập thành công
         const token = jwt.sign({
             id: user.id,
             username: user.username,
@@ -128,7 +152,54 @@ exports.login = async (req, res) => {
     }
 };
 
-// @desc    Lấy thông tin người dùng hiện tại (đã login)
+// @desc      Gửi yêu cầu kích hoạt lại tài khoản
+exports.createReactivationRequest = async (req, res) => {
+    const { email } = req.body;
+
+    try {
+        // Tìm user bằng email
+        const user = await User.findOne({ where: { email } });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+
+        // Kiểm tra nếu user không bị khóa bởi admin thì không cần gửi yêu cầu
+
+        if (user.is_active_admin) {
+            return res.status(400).json({ message: 'Account is currently active or locked by user.' });
+        }
+
+        // Kiểm tra yêu cầu Pending đã tồn tại chưa
+
+        const existingRequest = await ReactivationRequest.findOne({
+            where: {
+                userId: user.id,
+                status: 'Pending'
+            }
+        });
+
+        if (existingRequest) {
+            return res.status(400).json({ message: 'A pending reactivation request already exists for this account.' });
+        }
+
+        // Tạo yêu cầu mới
+        await ReactivationRequest.create({
+            userId: user.id,
+            username: user.username,
+        });
+
+        // Gửi email thông báo cho Admin (TẠM THỜI BỎ QUA BƯỚC NÀY, SẼ THỰC HIỆN SAU)
+        // await sendEmailToAdminNotification(`New Reactivation Request from ${user.username}`);
+
+        res.status(201).json({ message: 'Reactivation request sent successfully to the administrator.' });
+    } catch (error) {
+        console.error("Error creating reactivation request:", error);
+        res.status(500).json({ message: 'Internal server error. Could not send request.' });
+    }
+};
+
+// @desc    Lấy thông tin người dùng hiện tại
 exports.getMe = async (req, res) => {
     try {
         const user = await User.findByPk(req.user.id, {
@@ -146,7 +217,9 @@ exports.getMe = async (req, res) => {
                 'address',
                 'cc_emails',
                 'subscriptionTier',
-                'role'
+                'role',
+                'is_active',
+                'is_active_admin'
             ]
         });
         if (!user) { return res.status(404).json({ message: 'User not found' }); }
@@ -214,10 +287,16 @@ exports.updatePassword = async (req, res) => {
     }
 };
 
-// @desc    Cập nhật cài đặt
+// @desc 	Cập nhật cài đặt
 exports.updateSettings = async (req, res) => {
     try {
-        const { notificationsEnabled, cc_emails } = req.body;
+        const { notificationsEnabled, cc_emails, is_active } = req.body;
+
+        // Validation cho is_active
+        if (is_active !== undefined && typeof is_active !== 'boolean') {
+            return res.status(400).json({ message: 'Invalid value for is_active' });
+        }
+        // Validation cho notificationsEnabled
         if (notificationsEnabled !== undefined && typeof notificationsEnabled !== 'boolean') {
             return res.status(400).json({ message: 'Invalid value for notificationsEnabled' });
         }
@@ -227,6 +306,11 @@ exports.updateSettings = async (req, res) => {
             return res.status(404).json({ message: 'User not found' });
         }
 
+        // Kiểm tra logic: Chỉ cho phép tự bật lại (is_active = true) nếu không bị Admin khóa
+        if (is_active === true && user.is_active_admin === false) {
+            return res.status(403).json({ message: 'Cannot reactivate. Account is currently locked by admin.' });
+        }
+
         if (notificationsEnabled !== undefined) {
             user.notificationsEnabled = notificationsEnabled;
         }
@@ -234,8 +318,19 @@ exports.updateSettings = async (req, res) => {
             user.cc_emails = cc_emails;
         }
 
+        // LOGIC CẬP NHẬT is_active (Self-disable/Reactivate)
+        if (is_active !== undefined) {
+            // Khi người dùng gửi is_active=false hoặc is_active=true (chỉ khi is_active_admin=true)
+            user.is_active = is_active;
+        }
+
         await user.save();
-        res.status(200).json({ message: 'Settings updated successfully' });
+        // Trả về cả trạng thái mới (quan trọng cho Frontend)
+        res.status(200).json({
+            message: 'Settings updated successfully',
+            is_active: user.is_active,
+            is_active_admin: user.is_active_admin
+        });
     } catch (error) {
         console.error("UpdateSettings Error:", error);
         res.status(500).json({ message: 'Server error' });
@@ -271,7 +366,7 @@ exports.deleteAccount = async (req, res) => {
     }
 };
 
-// @desc    Xác thực tài khoản bằng OTP
+// @desc    Xác thực tài khoản bằng OTP (cả verify tài khoản mới và tái kích hoạt tài khoản đã tồn tại)
 exports.verifyOtp = async (req, res) => {
     const { email, otp } = req.body;
 
@@ -299,10 +394,39 @@ exports.verifyOtp = async (req, res) => {
             return res.status(404).json({ message: 'User not found.' });
         }
 
-        user.is_verified = true;
+        // Xác thực email nếu chưa xác thực
+        if (!user.is_verified) {
+            user.is_verified = true;
+        }
+
+        // Kích hoạt lại tài khoản nếu đang bị tự khóa (is_active = false)
+        if (user.is_active === false) {
+            if (user.is_active_admin === true) {
+                user.is_active = true; // Bật lại is_active
+            } else {
+                return res.status(403).json({ message: 'Account verification successful, but your account is locked by Administrator.' });
+            }
+        }
+
         await user.save();
         await Otp.destroy({ where: { email } });
-        res.status(200).json({ message: 'Account verified successfully!' });
+
+        const token = jwt.sign({
+            id: user.id,
+            username: user.username,
+            role: user.role
+        }, SECRET, { expiresIn: '8h' });
+
+        res.status(200).json({
+            message: 'Account verified and activated successfully!',
+            token, // Frontend sẽ lưu token này và redirect vào Dashboard
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                role: user.role
+            }
+        });
 
     } catch (error) {
         console.error('Error verifying OTP:', error);
@@ -322,12 +446,22 @@ exports.resendOtp = async (req, res) => {
         const user = await User.findOne({
             where: {
                 email,
-                is_verified: false
+                [Op.or]: [
+                    // Trường hợp 1: Chưa verified
+                    { is_verified: false },
+
+                    // Trường hợp 2: Đã verified nhưng bị TỰ KHÓA (active=false, active_admin=true)
+                    {
+                        is_verified: true,
+                        is_active: false,
+                        is_active_admin: true
+                    }
+                ]
             }
         });
 
         if (!user) {
-            return res.status(404).json({ message: 'Account not found or is already verified.' });
+            return res.status(400).json({ message: 'Unable to send OTP. Account may be active or permanently locked.' });
         }
 
         await Otp.destroy({ where: { email } });
@@ -427,7 +561,12 @@ exports.resetPassword = async (req, res) => {
 
         // 4. Cập nhật user
         user.password = hashedPassword;
-        user.is_verified = true; // Tự động xác thực tài khoản
+        user.is_verified = true;
+
+        if (user.is_active === false && user.is_active_admin === true){
+            user.is_active = true;
+        }
+
         await user.save();
 
         // 5. Xóa OTP đã sử dụng

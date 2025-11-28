@@ -100,6 +100,12 @@ User.init({
         type: DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: true
+    },
+    // Trạng thái hoạt động của người dùng với quyền admin
+    is_active_admin: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true
     }
 }, {
     sequelize,

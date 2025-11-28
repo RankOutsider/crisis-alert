@@ -2,9 +2,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import useSWR, { mutate } from 'swr'; // 1. Import SWR
-import { swrFetcher, deleteAdminCaseStudy, deleteAdminCaseStudiesBulk } from '@/utils/api'; // 2. Import fetcher
-import { Search, Trash2, ChevronLeft, ChevronRight, Loader2, User, CheckSquare, Square, FileText } from 'lucide-react';
+import useSWR, { mutate } from 'swr';
+import { swrFetcher, deleteAdminCaseStudy, deleteAdminCaseStudiesBulk } from '@/utils/api';
+import {
+    Search, Trash2, ChevronLeft, ChevronRight,
+    Loader2, User, CheckSquare, Square, FileText,
+    BookOpen, Calendar, CheckCircle, AlertCircle
+} from 'lucide-react';
+import { toast } from 'react-toastify';
+import { format } from 'date-fns';
 
 export default function AdminCaseStudies() {
     // State UI
@@ -42,7 +48,7 @@ export default function AdminCaseStudies() {
             : setSelectedIds(caseStudies.map(cs => cs.id));
     };
 
-    // --- ACTION HANDLERS (Dùng mutate) ---
+    // --- ACTION HANDLERS ---
 
     // 1. Xóa đơn lẻ
     const handleDelete = async (id) => {
@@ -51,16 +57,17 @@ export default function AdminCaseStudies() {
         try {
             await deleteAdminCaseStudy(id);
 
-            // Optimistic Update: Xóa ngay trên UI
+            // Optimistic Update
             mutate(endpoint, {
                 ...data,
                 caseStudies: caseStudies.filter(c => c.id !== id)
             }, false);
 
-            mutate(endpoint); // Refresh lại data thật
-            alert('Case Study deleted');
+            toast.success('Case Study deleted successfully');
+            mutate(endpoint);
         } catch (error) {
-            alert('Failed to delete');
+            console.error(error);
+            toast.error('Failed to delete case study');
         }
     };
 
@@ -71,14 +78,12 @@ export default function AdminCaseStudies() {
         if (window.confirm(`Delete ${selectedIds.length} Case Studies?`)) {
             try {
                 await deleteAdminCaseStudiesBulk(selectedIds);
-
-                mutate(endpoint); // Refresh data
-                setSelectedIds([]); // Reset chọn
-
-                alert(`Deleted ${selectedIds.length} items.`);
+                mutate(endpoint);
+                toast.success(`Deleted ${selectedIds.length} items successfully.`);
+                setSelectedIds([]);
             } catch (error) {
                 console.error(error);
-                alert('Failed to delete selected items.');
+                toast.error('Failed to delete selected items.');
             }
         }
     };
@@ -93,8 +98,8 @@ export default function AdminCaseStudies() {
         <div className="flex items-center gap-4">
             <span className="text-sm text-gray-400 hidden md:inline">Page {page} of {totalPages}</span>
             <div className="flex space-x-2">
-                <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="p-2 rounded bg-gray-800 border border-gray-700 hover:bg-gray-700 disabled:opacity-50"><ChevronLeft size={20} /></button>
-                <button disabled={page === totalPages} onClick={() => setPage(p => p + 1)} className="p-2 rounded bg-gray-800 border border-gray-700 hover:bg-gray-700 disabled:opacity-50"><ChevronRight size={20} /></button>
+                <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="p-2 rounded bg-gray-800 border border-gray-700 hover:bg-gray-700 disabled:opacity-50 transition-colors"><ChevronLeft size={20} /></button>
+                <button disabled={page === totalPages} onClick={() => setPage(p => p + 1)} className="p-2 rounded bg-gray-800 border border-gray-700 hover:bg-gray-700 disabled:opacity-50 transition-colors"><ChevronRight size={20} /></button>
             </div>
         </div>
     );
@@ -106,16 +111,19 @@ export default function AdminCaseStudies() {
             {/* Header */}
             <div className="flex flex-col gap-4">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <h1 className="text-2xl font-bold">Case Study Management ({totalItems})</h1>
+                    <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+                        <BookOpen className="text-blue-500" />
+                        Case Studies <span className="text-gray-500 text-lg font-normal">({totalItems})</span>
+                    </h1>
 
                     <div className="flex flex-col-reverse md:flex-row gap-4 w-full md:w-auto items-end md:items-center">
                         <Pagination />
                         <div className="relative w-full md:w-auto">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                             <input
                                 type="text"
                                 placeholder="Search title..."
-                                className="bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none w-full md:w-64"
+                                className="bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none w-full md:w-64 text-sm transition-all"
                                 value={search}
                                 onChange={(e) => { setSearch(e.target.value); setPage(1); }}
                             />
@@ -125,102 +133,145 @@ export default function AdminCaseStudies() {
 
                 {/* Bulk Actions */}
                 {selectedIds.length > 0 && (
-                    <div className="bg-blue-600/20 border border-blue-500/50 p-3 rounded-lg flex items-center justify-between animate-in fade-in slide-in-from-top-2">
-                        <span className="text-blue-400 font-medium flex items-center gap-2">
-                            <CheckSquare size={20} /> Selected {selectedIds.length} items
+                    <div className="bg-blue-600/10 border border-blue-500/30 p-3 rounded-lg flex items-center justify-between animate-fadeIn">
+                        <span className="text-blue-400 font-medium flex items-center gap-2 text-sm">
+                            <CheckSquare size={18} /> Selected {selectedIds.length} items
                         </span>
-                        <button onClick={handleBulkDelete} className="bg-red-500 hover:bg-red-600 text-white px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-colors shadow-lg shadow-red-900/20">
+                        <button
+                            onClick={handleBulkDelete}
+                            className="bg-red-500/90 hover:bg-red-600 text-white px-4 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-colors shadow-lg shadow-red-900/20"
+                        >
                             <Trash2 size={16} /> Delete Selected
                         </button>
                     </div>
                 )}
             </div>
 
-            {/* Loading */}
+            {/* Loading & Empty */}
             {isLoading ? (
-                <div className="flex justify-center py-8 text-gray-400"><Loader2 className="animate-spin mr-2" /> Loading...</div>
+                <div className="flex justify-center py-10 text-gray-400"><Loader2 className="animate-spin mr-2" /> Loading...</div>
             ) : caseStudies.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 bg-gray-800 rounded-xl border border-gray-700">No Case Studies found.</div>
+                <div className="text-center py-12 text-gray-400 bg-gray-800/50 rounded-xl border border-gray-700/50 border-dashed">
+                    No Case Studies found.
+                </div>
             ) : (
                 /* --- DATA CONTENT --- */
                 <>
-                    {/* MOBILE VIEW */}
-                    <div className="md:hidden flex flex-col gap-3">
-                        <div className="flex items-center gap-3 px-2 mb-1">
-                            <button onClick={toggleSelectAll} className="text-gray-400 hover:text-white flex items-center gap-2">
-                                {selectedIds.length === caseStudies.length ? <CheckSquare className="text-blue-500" size={22} /> : <Square size={22} />}
-                                <span className="text-sm font-medium text-gray-300">Select All</span>
+                    {/* MOBILE VIEW (Cards) */}
+                    <div className="md:hidden flex flex-col gap-4">
+                        <div className="flex items-center gap-3 px-1 mb-1">
+                            <button onClick={toggleSelectAll} className="text-gray-400 hover:text-white flex items-center gap-2 transition-colors">
+                                {selectedIds.length === caseStudies.length ? <CheckSquare className="text-blue-500" size={20} /> : <Square size={20} />}
+                                <span className="text-sm font-medium">Select All</span>
                             </button>
                         </div>
 
-                        <div className="grid grid-cols-1 gap-4">
-                            {caseStudies.map((cs) => {
-                                const isSelected = selectedIds.includes(cs.id);
-                                return (
-                                    <div key={cs.id} className={`bg-gray-800 p-4 rounded-xl border shadow-sm flex flex-col gap-3 transition-all ${isSelected ? 'border-blue-500 ring-1 ring-blue-500/50 bg-blue-900/10' : 'border-gray-700'}`}>
-                                        <div className="flex justify-between items-start gap-3">
-                                            <div className="flex items-start gap-3 min-w-0 flex-1">
-                                                <button onClick={() => toggleSelect(cs.id)} className="mt-1 text-gray-400 hover:text-white shrink-0">
-                                                    {isSelected ? <CheckSquare className="text-blue-500" size={22} /> : <Square size={22} />}
-                                                </button>
-                                                <div className="min-w-0 flex-1">
-                                                    <h3 className="font-bold text-white text-base cursor-pointer truncate" onClick={() => toggleSelect(cs.id)}>{cs.title}</h3>
-                                                    <div className="text-xs text-gray-500 flex items-center gap-1 mt-1 break-all">
-                                                        <User size={12} className="shrink-0" />
-                                                        {cs.User?.email || 'Unknown User'}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <button onClick={() => handleDelete(cs.id)} className="text-red-400 hover:text-red-300 p-1 shrink-0 ml-2"><Trash2 size={18} /></button>
-                                        </div>
+                        {caseStudies.map((cs) => {
+                            const isSelected = selectedIds.includes(cs.id);
+                            return (
+                                <div key={cs.id} className={`bg-slate-800 p-5 rounded-xl border shadow-sm flex flex-col gap-4 transition-all ${isSelected ? 'border-blue-500/50 bg-blue-900/10' : 'border-slate-700 hover:border-slate-600'}`}>
 
-                                        <div className="pl-9 space-y-2">
-                                            <p className="text-sm text-gray-400 line-clamp-2">{cs.summary || 'No summary provided.'}</p>
-                                            <div className="flex items-center justify-between text-sm pt-2 border-t border-gray-700/50">
-                                                <div className="flex items-center gap-2 text-gray-400">
-                                                    <FileText size={14} /> {cs.postCount} posts
+                                    {/* Header */}
+                                    <div className="flex justify-between items-start gap-3">
+                                        <div className="flex items-start gap-3 min-w-0 flex-1">
+                                            <button onClick={() => toggleSelect(cs.id)} className="mt-1 text-gray-400 hover:text-white shrink-0">
+                                                {isSelected ? <CheckSquare className="text-blue-500" size={20} /> : <Square size={20} />}
+                                            </button>
+                                            <div className="min-w-0 flex-1">
+                                                <h3
+                                                    className="font-bold text-white text-base leading-snug cursor-pointer hover:text-blue-400 transition-colors truncate"
+                                                    onClick={() => toggleSelect(cs.id)}
+                                                >
+                                                    {cs.title}
+                                                </h3>
+                                                <div className="flex items-center gap-1.5 mt-1.5 text-xs text-gray-400">
+                                                    <User size={12} className="shrink-0" />
+                                                    <span className="truncate max-w-[150px]">{cs.User?.email || 'Unknown User'}</span>
                                                 </div>
-                                                <span className={`px-2 py-0.5 rounded text-xs font-bold border ${getStatusColor(cs.status)}`}>{cs.status}</span>
                                             </div>
+                                        </div>
+                                        <button onClick={() => handleDelete(cs.id)} className="text-slate-500 hover:text-red-400 p-2 -mr-2 -mt-2 transition-colors">
+                                            <Trash2 size={18} />
+                                        </button>
+                                    </div>
+
+                                    {/* Summary */}
+                                    <div className="pl-8">
+                                        <p className="text-sm text-slate-300 line-clamp-2 leading-relaxed bg-slate-900/30 p-2 rounded border border-slate-700/50">
+                                            {cs.summary || 'No summary provided.'}
+                                        </p>
+                                    </div>
+
+                                    {/* Footer */}
+                                    <div className="pl-8 pt-2 flex items-center justify-between text-xs">
+                                        <div className="flex items-center gap-3">
+                                            <span className={`px-2 py-0.5 rounded font-medium border ${getStatusColor(cs.status)}`}>
+                                                {cs.status}
+                                            </span>
+                                            <span className="flex items-center gap-1 text-slate-400">
+                                                <FileText size={12} /> {cs.postCount}
+                                            </span>
+                                        </div>
+                                        <div className="text-gray-500 flex items-center gap-1">
+                                            <Calendar size={12} />
+                                            {cs.createdAt ? format(new Date(cs.createdAt), 'MMM dd') : '-'}
                                         </div>
                                     </div>
-                                );
-                            })}
-                        </div>
+                                </div>
+                            );
+                        })}
                     </div>
 
-                    {/* DESKTOP VIEW */}
-                    <div className="hidden md:block bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
+                    {/* DESKTOP VIEW (Table) */}
+                    <div className="hidden md:block bg-slate-800 rounded-xl border border-slate-700 overflow-hidden shadow-sm">
                         <table className="w-full text-left border-collapse table-fixed">
                             <thead>
-                                <tr className="bg-gray-700/50 text-gray-300 border-b border-gray-700">
-                                    <th className="p-4 w-12"><button onClick={toggleSelectAll}>{caseStudies.length > 0 && selectedIds.length === caseStudies.length ? <CheckSquare className="text-blue-500" size={20} /> : <Square size={20} />}</button></th>
-                                    <th className="p-4 font-medium w-[20%]">Title & Summary</th>
-                                    <th className="p-4 font-medium w-[20%]">Owner</th>
-                                    <th className="p-4 font-medium w-[10%]">Posts</th>
-                                    <th className="p-4 font-medium w-[15%]">Date Range</th>
-                                    <th className="p-4 font-medium w-[15%]">Status</th>
-                                    <th className="p-4 font-medium w-[10%] text-right">Actions</th>
+                                <tr className="bg-slate-900/50 text-slate-300 border-b border-slate-700 text-xs uppercase font-semibold">
+                                    <th className="p-4 w-12 text-center"><button onClick={toggleSelectAll} className="hover:text-white">{caseStudies.length > 0 && selectedIds.length === caseStudies.length ? <CheckSquare className="text-blue-500" size={18} /> : <Square size={18} />}</button></th>
+                                    <th className="p-4 w-[25%]">Title & Summary</th>
+                                    <th className="p-4 w-[20%]">Owner</th>
+                                    <th className="p-4 w-[10%] text-center">Posts</th>
+                                    <th className="p-4 w-[15%]">Date Created</th>
+                                    <th className="p-4 w-[15%]">Status</th>
+                                    <th className="p-4 w-[10%] text-right">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-700">
+                            <tbody className="divide-y divide-slate-700/50">
                                 {caseStudies.map((cs) => {
                                     const isSelected = selectedIds.includes(cs.id);
                                     return (
-                                        <tr key={cs.id} className={`transition-colors ${isSelected ? 'bg-blue-900/20 hover:bg-blue-900/30' : 'hover:bg-gray-700/30'}`}>
-                                            <td className="p-4"><button onClick={() => toggleSelect(cs.id)} className="text-gray-400 hover:text-white flex items-center">{isSelected ? <CheckSquare className="text-blue-500" size={20} /> : <Square size={20} />}</button></td>
-                                            <td className="p-4 cursor-pointer" onClick={() => toggleSelect(cs.id)}>
-                                                <div className="font-semibold text-white truncate" title={cs.title}>{cs.title}</div>
-                                                <div className="text-sm text-gray-500 truncate" title={cs.summary}>{cs.summary}</div>
+                                        <tr key={cs.id} className={`transition-colors ${isSelected ? 'bg-blue-900/10 hover:bg-blue-900/20' : 'hover:bg-slate-700/30'}`}>
+                                            <td className="p-4 text-center"><button onClick={() => toggleSelect(cs.id)} className="text-slate-400 hover:text-white transition-colors">{isSelected ? <CheckSquare className="text-blue-500" size={18} /> : <Square size={18} />}</button></td>
+                                            <td className="p-4">
+                                                <div className="font-semibold text-white truncate cursor-pointer hover:text-blue-400 transition-colors" title={cs.title} onClick={() => toggleSelect(cs.id)}>{cs.title}</div>
+                                                <div className="text-xs text-slate-500 mt-1 truncate" title={cs.summary}>{cs.summary || 'No summary'}</div>
                                             </td>
-                                            <td className="p-4 overflow-hidden">
-                                                <div className="text-sm text-white font-medium truncate">{cs.User?.username}</div>
-                                                <div className="text-xs text-gray-500 truncate" title={cs.User?.email}>{cs.User?.email}</div>
+                                            <td className="p-4">
+                                                <div className="text-sm text-slate-300 font-medium truncate">{cs.User?.username || 'N/A'}</div>
+                                                <div className="text-xs text-slate-500 truncate">{cs.User?.email}</div>
                                             </td>
-                                            <td className="p-4 text-gray-400">{cs.postCount}</td>
-                                            <td className="p-4 text-xs text-gray-500 truncate">{cs.dateRange}</td>
-                                            <td className="p-4"><span className={`px-2 py-1 rounded text-xs font-bold border whitespace-nowrap ${getStatusColor(cs.status)}`}>{cs.status}</span></td>
-                                            <td className="p-4 text-right"><button onClick={() => handleDelete(cs.id)} className="p-2 bg-red-500/10 text-red-400 hover:bg-red-600 hover:text-white rounded transition-colors"><Trash2 size={16} /></button></td>
+                                            <td className="p-4 text-center">
+                                                <span className="bg-slate-700 px-2 py-0.5 rounded text-xs text-slate-300 border border-slate-600">
+                                                    {cs.postCount}
+                                                </span>
+                                            </td>
+                                            <td className="p-4 text-sm text-slate-400">
+                                                {cs.createdAt ? format(new Date(cs.createdAt), 'MMM dd, yyyy') : '-'}
+                                            </td>
+                                            <td className="p-4">
+                                                <span className={`px-2 py-1 rounded text-[10px] font-bold border tracking-wide whitespace-nowrap ${getStatusColor(cs.status)}`}>
+                                                    {cs.status}
+                                                </span>
+                                            </td>
+                                            <td className="p-4 text-right">
+                                                <button
+                                                    onClick={() => handleDelete(cs.id)}
+                                                    className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-lg transition-all shadow-sm"
+                                                    title="Delete Case Study"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </td>
                                         </tr>
                                     );
                                 })}
@@ -230,7 +281,7 @@ export default function AdminCaseStudies() {
                 </>
             )}
 
-            <div className="flex justify-end"><Pagination /></div>
+            <div className="flex justify-end pt-4"><Pagination /></div>
         </div>
     );
 }

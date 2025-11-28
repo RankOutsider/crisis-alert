@@ -2,12 +2,14 @@
 const express = require('express');
 const router = express.Router();
 const { protect, admin } = require('../middleware/authMiddleware');
-// Import thêm getPosts, deletePost
+
 const {
     getUsers, updateUserByAdmin, deleteUsersBulk,
+    toggleUserAdminStatus,
     getPosts, deletePost, deletePostsBulk,
     getAlerts, deleteAlert, deleteAlertsBulk,
-    getCaseStudies, deleteCaseStudy, deleteCaseStudiesBulk
+    getCaseStudies, deleteCaseStudy, deleteCaseStudiesBulk,
+    getReactivationRequests, approveReactivationRequest, rejectReactivationRequest
 } = require('../controllers/adminController');
 
 router.use(protect);
@@ -17,6 +19,14 @@ router.use(admin);
 router.route('/users').get(getUsers);
 router.route('/users/bulk').delete(deleteUsersBulk);
 router.route('/users/:id').put(updateUserByAdmin);
+
+// Toggle Admin Status
+router.put('/users/:id/admin-lock', toggleUserAdminStatus);
+
+// --- Reactivation Request Routes ---
+router.get('/reactivation-requests', getReactivationRequests);
+router.put('/reactivation-requests/:requestId/approve', approveReactivationRequest);
+router.put('/reactivation-requests/:requestId/reject', rejectReactivationRequest);
 
 // --- Post Routes ---
 router.route('/posts').get(getPosts);
