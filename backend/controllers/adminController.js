@@ -26,8 +26,12 @@ const getUsers = async (req, res) => {
 
         const { count, rows } = await User.findAndCountAll({
             where: searchCondition,
-            // CHỈ lấy những cột cần thiết, KHÔNG lấy password
-            attributes: ['id', 'username', 'email', 'role', 'subscriptionTier', 'createdAt', 'is_active', 'is_active_admin'],
+            attributes: [
+                'id', 'username', 'email',
+                'role', 'subscriptionTier',
+                'subscriptionExpiresAt', 'createdAt',
+                'is_active', 'is_active_admin'
+            ],
             limit: limit,
             offset: offset,
             order: [['createdAt', 'DESC']], // User mới nhất lên đầu
@@ -97,7 +101,7 @@ const toggleUserAdminStatus = async (req, res) => {
     }
 };
 
-// @desc    Cập nhật thông tin user (Role, Plan, Active/Inactive)
+// @desc    Cập nhật thông tin user (Role, Plan, Active/Inactive, Expiration)
 // @route   PUT /api/admin/users/:id
 const updateUserByAdmin = async (req, res) => {
     try {
@@ -121,7 +125,31 @@ const updateUserByAdmin = async (req, res) => {
             user.subscriptionTier = req.body.subscriptionTier;
         }
 
-        // 3. CẬP NHẬT TRẠNG THÁI ACTIVE/INACTIVE
+        // 3. XỬ LÝ NGÀY HẾT HẠN (Logic thông minh hơn)
+        if (req.body.subscriptionExpiresAt !== undefined) {
+            const inputDate = req.body.subscriptionExpiresAt;
+
+            if (user.subscriptionTier === 'Free') {
+                user.subscriptionExpiresAt = null;
+            }
+            else if (inputDate) {
+                // Nếu không phải Free và có nhập ngày -> Lưu ngày đó
+                user.subscriptionExpiresAt = inputDate;
+            }
+            else {
+                // Nếu không phải Free và KHÔNG nhập ngày -> Tự động +30 ngày (cho VIP/Pro)
+                if (['VIP', 'Pro'].includes(user.subscriptionTier)) {
+                    const now = new Date();
+                    const expiryDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+                    user.subscriptionExpiresAt = expiryDate;
+                } else {
+                    // Fallback an toàn
+                    user.subscriptionExpiresAt = null;
+                }
+            }
+        }
+
+        // 4. CẬP NHẬT TRẠNG THÁI ACTIVE/INACTIVE
         if (typeof req.body.is_active !== 'undefined') {
             if (req.user && req.user.id == user.id && req.body.is_active === false) {
                 return res.status(400).json({ message: 'You cannot deactivate the current logged in account' });
@@ -251,7 +279,7 @@ const approveReactivationRequest = async (req, res) => {
             request.status = 'Approved';
             request.processedAt = new Date();
 
-            request.adminReason = adminReason || 'Yêu cầu được chấp thuận, tài khoản đã được kích hoạt lại.';
+            request.adminReason = adminReason || 'Your account has been reactivated by admin.';
 
             await request.save({ transaction: t });
         });

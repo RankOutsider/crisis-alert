@@ -301,6 +301,65 @@ const sendEmail = async ({ email, subject, message }) => {
     }
 };
 
+/**
+ * Hàm gửi email thông báo hết hạn gói dịch vụ
+ * @param {string} toEmail - Email người nhận
+ * @param {string} username - Tên người dùng
+ * @param {string} oldPlan - Tên gói vừa hết hạn (VIP/Pro)
+ */
+const sendSubscriptionExpiredEmail = async (toEmail, username, oldPlan) => {
+    try {
+        const mailOptions = {
+            // from: `"Crisis Alert System" <${process.env.GMAIL_USER}>`, // Gmail sender
+            from: `"Crisis Alert System" <${process.env.EMAIL_USER || 'bot@crisis-alert.com'}>`, // MailHog sender
+
+            to: toEmail,
+            subject: '📉 Your Subscription has Expired',
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+                    ${NO_REPLY_NOTICE_BLOCK}
+                    
+                    <h2 style="color: #dc3545; text-align: center;">Subscription Expired</h2>
+                    
+                    <p>Hello <b>${username}</b>,</p>
+                    
+                    <p style="font-size: 16px;">
+                        This is a notification that your <b>${oldPlan}</b> subscription plan has expired as of today.
+                    </p>
+                    
+                    <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 4px solid #dc3545; margin: 20px 0;">
+                        <p style="margin: 0;">Your account has been automatically reverted to the <b>Free Plan</b>.</p>
+                    </div>
+
+                    <p>To continue enjoying premium features and remove limitations, please renew your subscription.</p>
+
+                    <div style="text-align: center; margin-top: 30px;">
+                        <a href="${process.env.CLIENT_URL || 'http://localhost:3000'}/buy" 
+                           style="background-color: #007bff; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                           Renew Subscription Now
+                        </a>
+                    </div>
+                    
+                    <p style="font-size: 14px; color: #777; margin-top: 30px; text-align: center;">
+                        Thank you for using Crisis Alert.
+                    </p>
+                </div>
+            `,
+        };
+
+        // const info = await gmailTransporter.sendMail(mailOptions); // Gửi email bằng GMAIL transporter
+
+        const info = await mailhogTransporter.sendMail(mailOptions); // Dùng MailHog để test
+
+        console.log(`✅ Expiration email sent to ${toEmail}. ID: ${info.messageId}`);
+        return info;
+
+    } catch (error) {
+        console.error('❌ Error sending expiration email:', error);
+        return null;
+    }
+};
+
 // ----- EXPORTS -----
 module.exports = {
     sendNotificationEmail,
@@ -308,5 +367,6 @@ module.exports = {
     sendPasswordResetEmail,
     sendEmail,
     sendReactivationRequestNotification,
-    sendReactivationResultEmail
+    sendReactivationResultEmail,
+    sendSubscriptionExpiredEmail
 };

@@ -114,10 +114,10 @@ const runScanJob = async (io) => {
                         try {
                             await sendNotificationEmail(user.email, alert.title, post, ccEmails);
                             console.log(`... Sent email for Post ID ${post.id} to ${user.email}`);
-                            await sleep(1000); // Thêm delay cho gửi GMAIL
+                            // await sleep(1000); // Thêm delay cho gửi GMAIL
                         } catch (emailError) {
                             console.error(`❌ Error sending email (Post ID: ${post.id}):`, emailError.message);
-                            await sleep(2000); // Thêm delay cho gửi GMAIL nếu lỗi
+                            // await sleep(2000); // Thêm delay cho gửi GMAIL nếu lỗi
                         }
                     }
                 }

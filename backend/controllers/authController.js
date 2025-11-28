@@ -217,6 +217,7 @@ exports.getMe = async (req, res) => {
                 'address',
                 'cc_emails',
                 'subscriptionTier',
+                'subscriptionExpiresAt',
                 'role',
                 'is_active',
                 'is_active_admin'
