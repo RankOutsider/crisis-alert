@@ -85,8 +85,9 @@ const startServer = async () => {
         await connectDB();
 
         // console.log("🔄 Syncing database models...");
-        // await sequelize.sync({});
-        console.log("✅ Database connected successfully!");
+        
+        // await sequelize.sync({ alter: true });
+        console.log("✅ Database synced and connected successfully!");
 
         // Khởi động Server
         httpServer.listen(PORT, () => {

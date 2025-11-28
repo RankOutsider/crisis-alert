@@ -14,9 +14,9 @@ export default function VerifyOtpPage() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
-    // --- 1: Đổi tên state ---
-    const [verifySuccess, setVerifySuccess] = useState(''); // Chỉ dùng khi xác thực thành công
-    const [resendSuccess, setResendSuccess] = useState(''); // Chỉ dùng khi gửi lại thành công
+    // --- State thông báo ---
+    const [verifySuccess, setVerifySuccess] = useState('');
+    const [resendSuccess, setResendSuccess] = useState('');
 
     const [resendLoading, setResendLoading] = useState(false);
     const [cooldown, setCooldown] = useState(0);
@@ -43,7 +43,7 @@ export default function VerifyOtpPage() {
 
     const handleVerify = async (e) => {
         e.preventDefault();
-        // Xóa tất cả thông báo
+        // Xóa tất cả thông báo cũ
         setError('');
         setVerifySuccess('');
         setResendSuccess('');
@@ -61,8 +61,7 @@ export default function VerifyOtpPage() {
                 body: JSON.stringify({ email, otp }),
             });
 
-            // --- 2: Dùng đúng state ---
-            setVerifySuccess("Account verified successfully! Redirecting to login...");
+            setVerifySuccess("Account verified & activated! Redirecting to login...");
             setTimeout(() => {
                 router.push('/login');
             }, 2000);
@@ -99,7 +98,6 @@ export default function VerifyOtpPage() {
                 body: JSON.stringify({ email }),
             });
 
-            // --- 3: Dùng đúng state ---
             setResendSuccess("A new OTP has been sent to your email.");
             setCooldown(30);
 
@@ -132,14 +130,13 @@ export default function VerifyOtpPage() {
                     Please check your email (and spam folder).
                 </p>
 
-                {/* Lỗi (giữ nguyên) */}
+                {/* Lỗi */}
                 {error && (
                     <div className="bg-red-900/50 border border-red-700 text-red-300 p-3 rounded-lg mb-4 text-center text-sm sm:text-base">
                         {error}
                     </div>
                 )}
 
-                {/* --- 4: Hiển thị 1 trong 2 (hoặc cả 2) thông báo thành công --- */}
                 {/* Thông báo gửi lại OTP */}
                 {resendSuccess && (
                     <div className="bg-green-900/50 border border-green-700 text-green-300 p-3 rounded-lg mb-4 text-center text-sm sm:text-base">

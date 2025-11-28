@@ -1,11 +1,11 @@
 // frontend/app/page.jsx
 'use client';
 
-import { useState, useEffect } from 'react'; // Cần import useEffect
+import { useState, useEffect } from 'react';
 import {
     Search, Zap, Send, FileText, Lock, DollarSign,
     Check, X, Shield, Crown, BookOpen, Menu, LogOut,
-    User as UserIcon, Settings, AlertCircle // Icons mới cho MobileMenu
+    User as UserIcon, Settings, AlertCircle, Home
 } from 'lucide-react';
 
 // --- CÁC COMPONENT PHỤ ---
@@ -44,6 +44,7 @@ const MobileMenu = ({ isOpen, onClose, activeSection, onLinkClick }) => {
 
     // Dữ liệu menu cho Landing Page
     const menuItems = [
+        { name: 'Home', href: 'hero' },
         { name: 'Features', href: 'features' },
         { name: 'AI Technology', href: 'ai' },
         { name: 'Pricing', href: 'pricing' },
@@ -146,7 +147,7 @@ const MobileMenu = ({ isOpen, onClose, activeSection, onLinkClick }) => {
 export default function HomePage() {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     // Mặc định là features, sẽ thay đổi khi người dùng click vào menu
-    const [activeSection, setActiveSection] = useState('features');
+    const [activeSection, setActiveSection] = useState('hero');
 
     // Hàm XỬ LÝ KHI BẤM VÀO LINK MENU (Đã sửa lại logic)
     const handleLinkClick = (sectionId) => {
@@ -180,9 +181,10 @@ export default function HomePage() {
                     {/* Desktop Navigation */}
                     <nav className="hidden lg:flex space-x-6 text-sm font-medium">
                         {/* Cập nhật logic active cho Desktop nếu cần thiết, tạm thời giữ nguyên hover */}
-                        <a href="#features" className="hover:text-cyan-300 transition-colors">Features</a>
-                        <a href="#ai" className="hover:text-cyan-300 transition-colors">AI Technology</a>
-                        <a href="#pricing" className="hover:text-cyan-300 transition-colors">Pricing</a>
+                        <a href="#hero" className="hover:text-cyan-300 transition-colors" onClick={(e) => handleLinkClick('hero')}>Home</a>
+                        <a href="#features" className="hover:text-cyan-300 transition-colors" onClick={(e) => handleLinkClick('features')}>Features</a>
+                        <a href="#ai" className="hover:text-cyan-300 transition-colors" onClick={(e) => handleLinkClick('ai')}>AI Technology</a>
+                        <a href="#pricing" className="hover:text-cyan-300 transition-colors" onClick={(e) => handleLinkClick('pricing')}>Pricing</a>
                     </nav>
 
                     <div className="flex items-center space-x-4">
@@ -217,7 +219,7 @@ export default function HomePage() {
 
             <main>
                 {/* --- Hero Section --- */}
-                <section id="features" className="py-20 md:py-32 bg-gradient-to-br from-gray-900 via-slate-900 to-gray-900">
+                <section id="hero" className="py-20 md:py-32 bg-gradient-to-br from-gray-900 via-slate-900 to-gray-900">
                     <div className="max-w-7xl mx-auto px-4 text-center">
                         <h1 className="text-5xl md:text-7xl font-extrabold mb-6 leading-tight">
                             Protect Your Brand with <br className="hidden md:inline" />

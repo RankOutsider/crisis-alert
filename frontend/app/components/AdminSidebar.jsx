@@ -1,11 +1,10 @@
-// frontend/app/components/AdminSidebar.jsx
 'use client';
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
     LayoutDashboard, Users, FileText, Bell,
-    BookOpen, LogOut, X, CreditCard
+    BookOpen, LogOut, X, CreditCard, RotateCcw
 } from 'lucide-react';
 
 const AdminSidebar = ({ isOpen, onClose }) => {
@@ -14,6 +13,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
     const menuItems = [
         { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
         { name: 'Users', href: '/admin/users', icon: Users },
+        { name: 'Reactivations', href: '/admin/reactivations', icon: RotateCcw },
         { name: 'Posts', href: '/admin/posts', icon: FileText },
         { name: 'Alerts', href: '/admin/alerts', icon: Bell },
         { name: 'Case Studies', href: '/admin/casestudies', icon: BookOpen },
@@ -56,10 +56,10 @@ const AdminSidebar = ({ isOpen, onClose }) => {
                             <Link
                                 key={item.href}
                                 href={item.href}
-                                onClick={() => onClose()} // Tự đóng khi click menu trên mobile
+                                onClick={() => onClose()}
                                 className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${isActive
-                                        ? 'bg-blue-600 text-white'
-                                        : 'text-gray-400 hover:bg-gray-700 hover:text-white'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'text-gray-400 hover:bg-gray-700 hover:text-white'
                                     }`}
                             >
                                 <Icon size={20} />

@@ -1,5 +1,5 @@
 // frontend/utils/api.js
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 // Lưu Token sau khi đăng nhập thành công
 export const setToken = (token) => {
@@ -19,7 +19,7 @@ export const getToken = () => {
     return token;
 };
 
-//Xóa Token khi đăng xuất hoặc token hết hạn
+// Xóa Token khi đăng xuất hoặc token hết hạn
 export const clearToken = () => {
     if (typeof window !== 'undefined') {
         localStorage.removeItem('crisisAlertToken');
@@ -39,7 +39,10 @@ export const api = async (endpoint, options = {}) => {
         headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}/${endpoint}`, {
+    // Xử lý endpoint để tránh double slash nếu endpoint bắt đầu bằng /
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
+
+    const response = await fetch(`${API_BASE_URL}/${cleanEndpoint}`, {
         ...options,
         headers,
         body: options.body ? options.body : undefined,
@@ -57,6 +60,7 @@ export const api = async (endpoint, options = {}) => {
         }
 
         if (typeof window !== 'undefined') {
+            // Chỉ redirect nếu không phải đang ở trang login để tránh loop
             if (window.location.pathname !== '/login') {
                 window.location.replace('/login');
             }
@@ -82,8 +86,16 @@ export const api = async (endpoint, options = {}) => {
     }
 
     if (!response.ok) {
+        // Ưu tiên lấy message từ server trả về, nếu không thì lấy stringify của cả data
         const errorMessage = data.message || JSON.stringify(data);
-        throw new Error(errorMessage);
+
+        const error = new Error(errorMessage);
+
+        // Gán thêm các thuộc tính khác cho việc debug
+        if (data.code) error.code = data.code;
+        if (data.email) error.email = data.email;
+
+        throw error;
     }
     return data;
 };
@@ -218,17 +230,8 @@ export const handleAdminSubRequest = async (id, status, adminNote = '') => {
 
 // Admin xóa yêu cầu
 export const deleteAdminSubRequest = async (id) => {
-    const res = await fetch(`${API_BASE_URL}/subscription/admin/${id}`, {
-        method: 'DELETE',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('crisisAlertToken')}`, // Lấy token từ storage
-        },
+    // Sử dụng hàm api chung thay vì fetch thủ công để tận dụng logic xử lý lỗi/token
+    return api(`subscription/admin/${id}`, {
+        method: 'DELETE'
     });
-
-    if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || 'Failed to delete request');
-    }
-    return await res.json();
 };
