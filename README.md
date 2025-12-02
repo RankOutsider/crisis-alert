@@ -61,7 +61,7 @@ Before running the project, create a .env file in the backend/ directory.
 Example backend/.env:
 
 Code snippet
-
+```text
 # Database Configuration
 DB_HOST=localhost
 DB_USER=root
@@ -75,6 +75,8 @@ JWT_SECRET=your_jwt_secret_here
 EMAIL_USER=your_email_here
 EMAIL_PASS=your_email_password_here
 EMAIL_HOST=smtp.gmail.com
+```
+
 🚀 Installation & Setup
 You can choose to run via Docker (Recommended) or Manually (For development).
 
@@ -82,13 +84,14 @@ Option 1: Using Docker (Recommended)
 Prerequisites: Docker Desktop installed.
 
 Clone repository:
-
+```text
 Bash
 
 git clone [https://github.com/RankOutsider/crisis-alert.git](https://github.com/RankOutsider/crisis-alert.git)
 cd crisis-alert
+```
 Start the application:
-
+```text
 Bash
 
 docker-compose up --build
@@ -97,39 +100,46 @@ Frontend: http://localhost:3000
 Backend: http://localhost:5000
 
 Database: Automatically initialized within the container.
-
+```
 Option 2: Manual Setup (Development)
 Prerequisites: Node.js >= 18, MySQL installed and running.
 
 1. Backend Setup:
-
+```text
 Bash
 
 cd backend
 npm install
 # Ensure .env is correctly configured with your local MySQL credentials
 npm run dev
+```
 2. Frontend Setup:
-
+```text
 Bash
 
 cd ../frontend
 npm install --legacy-peer-deps
 # Note: Use --legacy-peer-deps if you encounter React version conflicts
 npm run dev
+```
 📝 Git Workflow (Development)
 Common commands for managing the source code:
 
 Commit Changes
+```text
 Bash
 
 git add .
 git commit -m "Description: Details of changes"
+```
 Push to Development Branch
+```text
 Bash
 
 git push origin development
+```
 Merge to Master (Release)
+```text
 Bash
 
 git checkout master
@@ -137,5 +147,6 @@ git pull origin master  # Pull latest master
 git merge development   # Merge changes from dev
 git push origin master
 git checkout development # Switch back to dev
+```
 📞 Contact
 If you encounter issues running the project or need configuration changes, please contact the developer directly.
