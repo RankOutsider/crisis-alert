@@ -14,13 +14,15 @@ This system manages and alerts on negative/positive content, allowing users to m
 
 * **🔐 User Authentication:** Secure registration and login using JSON Web Tokens (JWT).
 * **🔔 Alert Management:** Customizable "Alerts" with specific keywords and platforms to monitor.
-* **📊 Professional Reporting (New):** Supports exporting data to Excel (`.xlsx`) with corporate-standard formatting (Headers, borders, styling) using `exceljs`.
+* **📄 Multi-format Exporting:** Supports generating professional reports in both **Excel (`.xlsx`)** and **PDF** formats with corporate-standard styling.
+* **📈 Interactive Dashboard:** Provides a visual overview of mentions, sentiment analysis, and alert trends.
 * **🤖 Automatic Linking:** Dedicated endpoint (`POST /api/posts`) for external crawlers/scanners. The system automatically scans content and links incoming Posts to matching Alerts.
 * **⚡ Efficient Data Fetching:** Utilizes `useSWR` across all 6 main pages for real-time caching, fetching, and data revalidation.
-* **fil Flexible Filtering:**
+* **🔍 Flexible Filtering:**
     * Real-time filtering by keyword (debounce).
     * Multi-select filters for Platform, Sentiment, Status, and Severity.
     * Filter states are preserved in the URL for easy sharing.
+* **📱 Responsive Design:** Fully responsive interface built with Tailwind CSS, optimized for both desktop and mobile devices.
 * **📁 Case Study Management:** Group related posts into a "Case Study" for in-depth analysis.
 * **🛡️ Backend Security:** Strict input validation using `express-validator` for all API routes.
 
