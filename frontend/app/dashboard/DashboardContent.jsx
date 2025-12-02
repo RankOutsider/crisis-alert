@@ -7,7 +7,9 @@ import useSWR from 'swr';
 import StatCard from '@/app/components/StatCard';
 import Modal from '@/app/components/Modal';
 import { fetcher, api, getToken } from '@/utils/api';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
+
 
 import MultiSelectDropdown from '../components/MultiSelectDropdown';
 
@@ -133,6 +135,7 @@ export default function DashboardContent() {
         setIsExporting(true);
 
         try {
+            // --- LOGIC GỌI API ---
             const params = new URLSearchParams({
                 startDate: exportStartDate,
                 endDate: exportEndDate,
@@ -142,7 +145,6 @@ export default function DashboardContent() {
                 format: 'json'
             });
             const endpoint = `posts/export?${params.toString()}`;
-
             const data = await api(endpoint, { method: 'GET' });
 
             if (!data || data.length === 0) {
@@ -151,31 +153,97 @@ export default function DashboardContent() {
                 return;
             }
 
-            const filteredData = data.map(row => {
-                const filteredRow = {};
-                EXPORT_COLUMN_OPTIONS.forEach(columnkey => {
-                    if (selectedColumns.includes(columnkey) && row.hasOwnProperty(columnkey)) {
-                        filteredRow[columnkey] = row[columnkey];
-                    }
-                })
-                return filteredRow;
+            // --- TẠO FILE EXCEL VỚI EXCELJS ---
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet('Mentions');
+
+            // Định nghĩa các cột (Mapping từ selectedColumns của bạn)
+            // Bạn có thể chỉnh độ rộng (width) cho phù hợp
+            const columnsConfig = selectedColumns.map(colKey => ({
+                key: colKey,
+                width: colKey === 'content' ? 50 : 20 // Content rộng hơn, các cột khác nhỏ hơn
+            }));
+            worksheet.columns = columnsConfig;
+
+            // Tính tổng số cột để Merge cell cho đẹp
+            const totalCols = selectedColumns.length;
+            // Chuyển số cột thành chữ cái (ví dụ 5 cột -> 'E', 6 cột -> 'F') để merge
+            const lastColLetter = String.fromCharCode(64 + (totalCols > 0 ? totalCols : 1));
+            const mergeRange = `A1:${lastColLetter}`;
+
+            // --- HEADER CÔNG TY ---
+
+            // Dòng 1: Tên Công Ty
+            worksheet.mergeCells(`A1:${lastColLetter}1`);
+            const companyName = worksheet.getCell('A1');
+            companyName.value = 'CÔNG TY CỔ PHẦN ROM MU'; // Thay tên công ty bạn
+            companyName.font = { name: 'Arial', size: 14, bold: true };
+            companyName.alignment = { vertical: 'middle', horizontal: 'center' };
+
+            // Dòng 2: Địa chỉ (Demo)
+            worksheet.mergeCells(`A2:${lastColLetter}2`);
+            const companyAddr = worksheet.getCell('A2');
+            companyAddr.value = 'Địa chỉ: Tầng 12, Tòa nhà Software, TP.HCM';
+            companyAddr.font = { name: 'Arial', size: 10 };
+            companyAddr.alignment = { vertical: 'middle', horizontal: 'center' };
+
+            // Dòng 4: Tiêu đề báo cáo to
+            worksheet.mergeCells(`A4:${lastColLetter}4`);
+            const reportTitle = worksheet.getCell('A4');
+            reportTitle.value = 'BÁO CÁO MENTIONS EXPORT';
+            reportTitle.font = { name: 'Arial', size: 16, bold: true, color: { argb: '000000' } };
+            reportTitle.alignment = { vertical: 'middle', horizontal: 'center' };
+
+            // Dòng 5: Thời gian xuất
+            worksheet.mergeCells(`A5:${lastColLetter}5`);
+            const dateRangeRow = worksheet.getCell('A5');
+            dateRangeRow.value = `Từ ngày: ${exportStartDate} - Đến ngày: ${exportEndDate}`;
+            dateRangeRow.font = { name: 'Arial', size: 11, italic: true };
+            dateRangeRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+            // --- TẠO HEADER BẢNG DỮ LIỆU (Dòng 7) ---
+            const headerRow = worksheet.getRow(7);
+            // Lấy tên cột từ selectedColumns (hoặc bạn có thể map sang tiếng Việt nếu muốn)
+            headerRow.values = selectedColumns.map(col => col.toUpperCase());
+
+            // Style cho Header Bảng: Nền xám, Chữ đậm, Viền
+            headerRow.eachCell((cell) => {
+                cell.font = { bold: true, color: { argb: '000000' } };
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'E0E0E0' } // Màu xám nhạt
+                };
+                cell.border = {
+                    top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' }
+                };
+                cell.alignment = { vertical: 'middle', horizontal: 'center' };
             });
 
-            const titleRow = ["Crisis Alert Mentions Export"];
-            const dateRangeRow = [`Date Range: ${exportStartDate} to ${exportEndDate}`];
-            const blankRow = [];
-            const headerAOA = [titleRow, dateRangeRow, blankRow];
-            const worksheet = XLSX.utils.aoa_to_sheet(headerAOA);
+            // --- ĐỔ DỮ LIỆU VÀO ---
+            data.forEach(item => {
+                const rowData = [];
+                selectedColumns.forEach(colKey => {
+                    // Kiểm tra data có tồn tại không
+                    rowData.push(item[colKey] !== undefined ? item[colKey] : '');
+                });
+                const row = worksheet.addRow(rowData);
 
-            XLSX.utils.sheet_add_json(worksheet, filteredData, {
-                origin: "A4",
-                skipHeader: false
+                // Kẻ viền cho từng ô dữ liệu
+                row.eachCell({ includeEmpty: true }, (cell) => {
+                    cell.border = {
+                        top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' }
+                    };
+                    cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true }; // Tự động xuống dòng
+                });
             });
 
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Mentions");
-            XLSX.writeFile(workbook, `CrisisAlert_Mentions_${exportStartDate}_to_${exportEndDate}.xlsx`);
+            // --- XUẤT FILE ---
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            saveAs(blob, `CrisisAlert_Mentions_${exportStartDate}_to_${exportEndDate}.xlsx`);
 
+            // Reset state
             setIsModalOpen(false);
             setExportStartDate('');
             setExportEndDate('');
@@ -185,8 +253,6 @@ export default function DashboardContent() {
             let errorMsg = error.message || 'Unknown error occurred during export.';
             if (errorMsg.includes('Unauthorized') || errorMsg.includes('401')) {
                 alert('Your session has expired. You will be returned to the login page.');
-            } else if (errorMsg.includes('403') || errorMsg.includes('Access denied')) {
-                alert('Access Denied: Excel export is a Pro feature. Please upgrade your plan.');
             } else {
                 alert(`Error occured: ${errorMsg}`);
             }
