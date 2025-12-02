@@ -54,6 +54,7 @@ crisis-alert/
 │   └── public/         # Static assets
 ├── docker-compose.yml  # Docker Configuration
 └── README.md           # Documentation
+```
 ⚙️ Environment Configuration (.env)
 Before running the project, create a .env file in the backend/ directory.
 
