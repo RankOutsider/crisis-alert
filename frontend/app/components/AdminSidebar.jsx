@@ -1,3 +1,4 @@
+// components/AdminSidebar.jsx
 'use client';
 
 import Link from 'next/link';
@@ -33,11 +34,11 @@ const AdminSidebar = ({ isOpen, onClose }) => {
             {/* Sidebar chính */}
             <aside
                 className={`
-          fixed top-0 left-0 z-50 h-full w-64 bg-gray-800 border-r border-gray-700 
-          transition-transform duration-300 ease-in-out
-          ${isOpen ? 'translate-x-0' : '-translate-x-full'} 
-          lg:translate-x-0 lg:static lg:block
-        `}
+                    fixed top-0 right-0 z-50 h-full w-64 bg-gray-800 border-l border-gray-700 
+                    transition-transform duration-300 ease-in-out
+                    ${isOpen ? 'translate-x-0' : 'translate-x-full'} 
+                    lg:translate-x-0 lg:static lg:block
+                `}
             >
                 <div className="p-6 flex items-center justify-between border-b border-gray-700">
                     <h1 className="text-xl font-bold text-blue-500">Admin Panel</h1>

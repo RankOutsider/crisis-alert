@@ -65,7 +65,7 @@ const MobileMenu = ({ isOpen, onClose, activeSection, onLinkClick }) => {
                 onClick={onClose}
             />
 
-            {/* 2. Thanh Sidebar chính (Glassmorphism) */}
+            {/* 2. Thanh Sidebar chính */}
             <aside
                 className={`
                     fixed inset-y-0 right-0 z-50 w-72 h-full 
@@ -87,7 +87,7 @@ const MobileMenu = ({ isOpen, onClose, activeSection, onLinkClick }) => {
                     {/* Nút X chỉ hiện trên Mobile */}
                     <button
                         onClick={onClose}
-                        className="p-2 md:hidden text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-700"
+                        className="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-700"
                     >
                         <X size={24} />
                     </button>
