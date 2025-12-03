@@ -12,7 +12,7 @@ export default function AdminLayout({ children }) {
 
   return (
     <AuthGuard>
-      <div className="flex min-h-screen bg-gray-900 text-white">
+      <div className="flex min-h-screen bg-gray-900 text-white flex-row-reverse">
 
         {/* Sidebar Component */}
         <AdminSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
@@ -21,14 +21,14 @@ export default function AdminLayout({ children }) {
         <div className="flex-1 flex flex-col min-w-0">
 
           {/* --- MOBILE HEADER --- */}
-          <div className="lg:hidden p-4 bg-gray-800 border-b border-gray-700 flex items-center">
+          <div className="lg:hidden p-4 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
+            <span className="font-bold text-lg">Admin Dashboard</span>
             <button
               onClick={() => setSidebarOpen(true)}
               className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-700"
             >
               <Menu size={24} />
             </button>
-            <span className="ml-4 font-bold text-lg">Admin Dashboard</span>
           </div>
 
           {/* Nội dung chính */}
