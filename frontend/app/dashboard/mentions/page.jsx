@@ -4,98 +4,21 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
-import Select from 'react-select';
-import {
-    FileSearch, ExternalLink, AlertCircle, Globe,
-    ChevronLeft, ChevronRight, RefreshCw, Lock, Zap
-} from 'lucide-react';
+import { AlertCircle, RefreshCw, Lock, Zap, FileSearch, ChevronLeft, ChevronRight } from 'lucide-react';
 import { fetcher } from '@/utils/api';
-import FilterBar from '@/app/components/FilterBar';
 import { useAuth } from '@/app/providers.jsx';
 
-// --- Hằng số ---
+// --- COMPONENTS ---
+import FilterBar from '@/app/components/FilterBar';
+import SearchableSelect from '@/app/components/SearchableSelect'; // Component mới
+import MentionCard from '@/app/components/MentionCard'; // Component mới
+import useDebounce from '@/hooks/useDebounce'; // Hook mới
+
+// --- HẰNG SỐ ---
 const POST_SEARCH_FIELDS = ['Title', 'Content', 'Source'];
 const PLATFORM_OPTIONS = ['Facebook', 'X', 'Instagram', 'News', 'Tiktok', 'Forum', 'Threads', 'Youtube', 'Blog'];
 const SENTIMENT_OPTIONS = ['POSITIVE', 'NEUTRAL', 'NEGATIVE'];
 const ITEMS_PER_PAGE = 5;
-
-// --- useDebounce Hook ---
-function useDebounce(value, delay) {
-    const [debouncedValue, setDebouncedValue] = useState(value);
-    useEffect(() => {
-        const handler = setTimeout(() => setDebouncedValue(value), delay);
-        return () => clearTimeout(handler);
-    }, [value, delay]);
-    return debouncedValue;
-}
-
-// --- STYLE MỚI CHO REACT-SELECT ---
-const darkSelectStyles = {
-    control: (styles, { isFocused }) => ({
-        ...styles,
-        backgroundColor: '#1f2937',
-        borderColor: isFocused ? '#3b82f6' : '#374151',
-        color: '#f3f4f6',
-        boxShadow: isFocused ? '0 0 0 1px #3b82f6' : 'none',
-        '&:hover': {
-            borderColor: '#4b5563',
-        },
-    }),
-
-    menu: (styles) => ({
-        ...styles,
-        backgroundColor: '#1f2937',
-        borderColor: '#374151',
-        zIndex: 50
-    }),
-
-    option: (styles, { isDisabled, isFocused, isSelected }) => ({
-        ...styles,
-        backgroundColor: isSelected
-            ? '#3b82f6'
-            : isFocused
-                ? '#374151'
-                : 'transparent',
-        color: isSelected ? 'white' : '#f3f4f6',
-        cursor: isDisabled ? 'not-allowed' : 'default',
-        '&:active': {
-            backgroundColor: '#2563eb',
-        },
-    }),
-    singleValue: (styles) => ({ ...styles, color: '#f3f4f6' }),
-    input: (styles) => ({ ...styles, color: '#f3f4f6' }),
-    placeholder: (styles) => ({ ...styles, color: '#6b7280' }),
-    multiValue: (styles) => ({
-        ...styles,
-        backgroundColor: '#374151',
-    }),
-    multiValueLabel: (styles) => ({
-        ...styles,
-        color: '#f3f4f6',
-    }),
-    multiValueRemove: (styles) => ({
-        ...styles,
-        color: '#9ca3af',
-        '&:hover': {
-            backgroundColor: '#ef4444',
-            color: 'white',
-        },
-    }),
-    clearIndicator: (styles) => ({
-        ...styles,
-        color: '#9ca3af',
-        '&:hover': {
-            color: '#f3f4f6',
-        },
-    }),
-    dropdownIndicator: (styles) => ({
-        ...styles,
-        color: '#9ca3af',
-        '&:hover': {
-            color: '#f3f4f6',
-        },
-    }),
-};
 
 export default function MentionsExplorerPage() {
     // --- LẤY THÔNG TIN USER ---
@@ -123,57 +46,32 @@ export default function MentionsExplorerPage() {
             params.append('search', debouncedSearchTerm);
             params.append('fields', activeFields.join(','));
         }
-        if (selectedSentiments.length > 0) {
-            params.append('sentiments', selectedSentiments.join(','));
-        }
-        if (selectedPlatforms.length > 0) {
-            params.append('platforms', selectedPlatforms.join(','));
-        }
-        if (selectedAlerts) {
-            params.append('alertId', selectedAlerts.value);
-        }
+        if (selectedSentiments.length > 0) params.append('sentiments', selectedSentiments.join(','));
+        if (selectedPlatforms.length > 0) params.append('platforms', selectedPlatforms.join(','));
+        if (selectedAlerts) params.append('alertId', selectedAlerts.value);
+
         return `/api/posts/all?${params.toString()}`;
     }, [currentPage, debouncedSearchTerm, searchFields, selectedSentiments, selectedPlatforms, selectedAlerts]);
 
-    // --- Data Fetching ---
-    const { data, error, isLoading: isSWRLoading, mutate } = useSWR(apiUrl, fetcher, {
-        keepPreviousData: true,
-    });
-
-    // --- GỌI API LẤY DANH SÁCH ALERTS ---
+    // --- DATA FETCHING ---
+    const { data, error, isLoading: isSWRLoading, mutate } = useSWR(apiUrl, fetcher, { keepPreviousData: true });
     const { data: alertsData } = useSWR('/api/alerts', fetcher);
 
-    // --- FORMAT DỮ LIỆU CHO DROPDOWN ---
     const alertOptions = useMemo(() => {
-        if (!alertsData?.alerts) return [];
-        return alertsData.alerts.map(alert => ({
-            value: alert.id,
-            label: alert.title
-        }));
+        return alertsData?.alerts?.map(alert => ({ value: alert.id, label: alert.title })) || [];
     }, [alertsData]);
 
-    // --- Process SWR Data ---
     const posts = data?.posts || [];
     const totalPages = data?.totalPages || 1;
-
     const isLoading = (isSWRLoading && !data) || isAuthLoading;
 
-    // --- useEffect Reset Trang ---
+    // --- EFFECTS & HANDLERS ---
     useEffect(() => {
-        if (currentPage !== 1) {
-            setCurrentPage(1);
-        }
+        if (currentPage !== 1) setCurrentPage(1);
     }, [debouncedSearchTerm, searchFields, selectedSentiments, selectedPlatforms, selectedAlerts]);
 
-    // --- HANDLERS ---
     const handleSearchFieldChange = (field) => {
         setSearchFields((prev) => ({ ...prev, [field.toLowerCase()]: !prev[field.toLowerCase()] }));
-    };
-
-    const handlePageChange = (newPage) => {
-        if (newPage >= 1 && newPage <= totalPages) {
-            setCurrentPage(newPage);
-        }
     };
 
     const resetAllFilters = () => {
@@ -185,30 +83,23 @@ export default function MentionsExplorerPage() {
     };
 
     return (
-        // FIX: Giảm padding trên mobile, tăng trên desktop (Mobile First)
         <div className="p-3 sm:p-4 md:p-6 lg:p-8 overflow-x-hidden min-h-screen">
             <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Mentions Explorer</h1>
             <p className="text-gray-400 mb-6 text-sm sm:text-base">A centralized view of all posts matching your alerts.</p>
 
-            {/* --- DROPDOWN LỌC THEO ALERT --- */}
+            {/* --- FILTER THEO ALERT --- */}
             <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-300 mb-1">
-                    Filter by Alert
-                </label>
-                <Select
-                    instanceId="alert-select"
+                <label className="block text-sm font-medium text-gray-300 mb-1">Filter by Alert</label>
+                <SearchableSelect
                     options={alertOptions}
                     value={selectedAlerts}
-                    onChange={(option) => setSelectedAlerts(option)}
-                    isClearable
-                    isSearchable
+                    onChange={setSelectedAlerts}
                     placeholder="Search and select an alert..."
                     isLoading={!alertsData}
-                    styles={darkSelectStyles}
                 />
             </div>
 
-            {/* --- THANH LỌC CHÍNH --- */}
+            {/* --- THANH LỌC CHÍNH (FilterBar) --- */}
             <FilterBar
                 searchTerm={searchTerm}
                 onSearchChange={(e) => setSearchTerm(e.target.value)}
@@ -219,201 +110,96 @@ export default function MentionsExplorerPage() {
                 platformOptions={PLATFORM_OPTIONS}
                 selectedPlatforms={selectedPlatforms}
                 onPlatformChange={setSelectedPlatforms}
-
-                // --- Khóa Sentiment Filter ---
                 sentimentOptions={!isFreeTier ? SENTIMENT_OPTIONS : undefined}
                 selectedSentiments={!isFreeTier ? selectedSentiments : undefined}
                 onSentimentChange={!isFreeTier ? setSelectedSentiments : undefined}
             />
 
-            {/* --- Thông báo khóa Sentiment --- */}
+            {/* --- VIP/PRO FEATURE ALERT --- */}
             {isFreeTier && (
-                <div
-                    className="mt-4 mb-6 p-4 rounded-lg bg-yellow-900/50 border border-yellow-700/60 text-yellow-300 text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                    role="alert"
-                >
-                    {/* Phần Text (Icon + Chữ) */}
+                <div className="mt-4 mb-6 p-4 rounded-lg bg-yellow-900/50 border border-yellow-700/60 text-yellow-300 text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-start gap-3">
                         <Lock size={18} className="flex-shrink-0 mt-0.5" />
                         <span>Sentiment analysis is a VIP/Pro feature. Upgrade to view sentiments.</span>
                     </div>
-
-                    <Link
-                        href="/buy"
-                        className="flex-shrink-0 w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-all text-xs sm:text-sm"
-                    >
+                    <Link href="/buy" className="flex-shrink-0 w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-all text-xs sm:text-sm">
                         <Zap size={16} />
                         Unlock Feature
                     </Link>
                 </div>
             )}
 
-            {/* --- HIỂN THỊ KẾT QUẢ --- */}
-            <div className="mt-6"> {/* Thêm 1 khoảng cách */}
+            {/* --- KẾT QUẢ --- */}
+            <div className="mt-6">
                 {isLoading ? (
                     <div className="space-y-4 py-10">
-                        {[...Array(ITEMS_PER_PAGE)].map((_, index) => (
-                            <MentionCardSkeleton key={index} />
-                        ))}
+                        {[...Array(ITEMS_PER_PAGE)].map((_, i) => <MentionCardSkeleton key={i} />)}
                     </div>
                 ) : error ? (
                     <div className="text-center py-10 px-4 border-2 border-dashed border-red-900/50 rounded-lg bg-red-900/10">
                         <AlertCircle className="mx-auto h-12 w-12 text-red-400" />
                         <h3 className="mt-2 text-lg font-semibold text-white">Error Loading Data</h3>
                         <p className="mt-1 text-sm text-red-300">{error.message || 'Could not load mentions list.'}</p>
-                        <div className="mt-6">
-                            <button
-                                type="button"
-                                onClick={() => mutate()}
-                                className="inline-flex items-center rounded-md bg-slate-700 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-                            >
-                                <RefreshCw className="w-4 h-4 mr-2" />
-                                Retry
-                            </button>
-                        </div>
+                        <button onClick={() => mutate()} className="mt-6 inline-flex items-center rounded-md bg-slate-700 px-3.5 py-2 text-sm font-semibold text-white hover:bg-slate-600">
+                            <RefreshCw className="w-4 h-4 mr-2" /> Retry
+                        </button>
+                    </div>
+                ) : posts.length > 0 ? (
+                    <div className="space-y-4">
+                        {posts.map((post) => (
+                            <MentionCard key={post.id} post={post} isFreeTier={isFreeTier} />
+                        ))}
                     </div>
                 ) : (
-                    <>
-                        {posts.length > 0 ? (
-                            <div className="space-y-4">
-                                {posts.map((post) => (
-                                    <div key={post.id} className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 hover:border-slate-600 transition-colors duration-150">
+                    <EmptyState
+                        hasFilter={searchTerm || selectedSentiments.length > 0 || selectedPlatforms.length > 0 || selectedAlerts}
+                        onReset={resetAllFilters}
+                    />
+                )}
 
-                                        {/* Header: Title + View Source */}
-                                        <div className="flex justify-between items-start gap-3 mb-2">
-                                            <div className="flex-1 min-w-0">
-                                                <h3 className="font-semibold text-base sm:text-lg text-white truncate" title={post.title}>{post.title}</h3>
-                                            </div>
-                                            <a
-                                                href={post.sourceUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="flex-shrink-0 flex items-center gap-1.5 text-xs sm:text-sm text-blue-400 hover:text-blue-300"
-                                            >
-                                                <ExternalLink size={14} />
-                                                <span className="hidden sm:inline">View Source</span>
-                                            </a>
-                                        </div>
-
-                                        {/* Sub-Header: Alert */}
-                                        {post.Alert && (
-                                            <Link
-                                                href={`/dashboard/alerts/${post.Alert.id}`}
-                                                className="text-xs text-blue-400 hover:underline flex items-center gap-1 mb-2.5"
-                                            >
-                                                <AlertCircle size={14} />
-                                                <span className="truncate">Related to: {post.Alert.title}</span>
-                                            </Link>
-                                        )}
-
-                                        {/* Meta: Source + Platform */}
-                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs sm:text-sm text-gray-400 mb-2.5">
-                                            <span>
-                                                From: <span className="font-medium text-gray-300">{post.source}</span>
-                                            </span>
-                                            <span className="flex items-center gap-1.5">
-                                                <Globe size={14} />
-                                                Platform: <span className="font-medium text-gray-300">{post.platform || 'N/A'}</span>
-                                            </span>
-                                        </div>
-
-                                        {/* Content */}
-                                        <p className="text-gray-300 text-sm sm:text-base line-clamp-3">{post.content}</p>
-
-                                        {/* Footer: Sentiment */}
-                                        {!isFreeTier && (
-                                            <div className="mt-3">
-                                                <span
-                                                    className={`text-xs font-semibold px-2 py-1 rounded-full ${post.sentiment === 'NEGATIVE' && 'bg-red-500/30 text-red-300'} ${post.sentiment === 'POSITIVE' && 'bg-green-500/30 text-green-300'} ${post.sentiment === 'NEUTRAL' && 'bg-gray-500/30 text-gray-300'}`}
-                                                >
-                                                    {post.sentiment}
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="flex flex-col items-center justify-center text-center text-gray-400 h-60 sm:h-80 border-2 border-dashed border-slate-700 rounded-lg p-4">
-                                <FileSearch size={40} className="mb-4 text-slate-500" />
-                                <h3 className="text-lg sm:text-xl font-semibold text-white mb-2">
-                                    {(searchTerm || selectedSentiments.length > 0 || selectedPlatforms.length > 0 || selectedAlerts)
-                                        ? "No Mentions Found"
-                                        : "No Mentions Yet"
-                                    }
-                                </h3>
-                                <p className="text-sm">
-                                    {(searchTerm || selectedSentiments.length > 0 || selectedPlatforms.length > 0 || selectedAlerts)
-                                        ? "Try adjusting your search terms or filters."
-                                        : "When the crawler runs, new posts will appear here."
-                                    }
-                                </p>
-                                {(searchTerm || selectedSentiments.length > 0 || selectedPlatforms.length > 0 || selectedAlerts) && (
-                                    <button
-                                        onClick={resetAllFilters}
-                                        className="mt-4 inline-flex items-center rounded-md bg-slate-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-600"
-                                    >
-                                        Clear Filters
-                                    </button>
-                                )}
-                            </div>
-                        )}
-
-                        {/* Phân trang */}
-                        {totalPages > 1 && (
-                            <div className="flex justify-between sm:justify-center items-center gap-4 mt-8">
-                                <button
-                                    onClick={() => handlePageChange(currentPage - 1)}
-                                    disabled={currentPage === 1}
-                                    className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-sm font-medium text-white bg-slate-700 rounded-md hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <ChevronLeft size={16} />
-                                    <span className="hidden sm:inline">Previous</span>
-                                </button>
-                                <span className="text-sm text-gray-400">
-                                    Page {currentPage} / {totalPages}
-                                </span>
-                                <button
-                                    onClick={() => handlePageChange(currentPage + 1)}
-                                    disabled={currentPage === totalPages}
-                                    className="flex items-center gap-1.5 px-3 sm:px-4 py-2 text-sm font-medium text-white bg-slate-700 rounded-md hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <span className="hidden sm:inline">Next</span>
-                                    <ChevronRight size={16} />
-                                </button>
-                            </div>
-                        )}
-                    </>
+                {/* --- PHÂN TRANG ĐƠN GIẢN --- */}
+                {!isLoading && !error && posts.length > 0 && totalPages > 1 && (
+                    <div className="flex justify-between sm:justify-center items-center gap-4 mt-8">
+                        <button onClick={() => setCurrentPage(c => Math.max(c - 1, 1))} disabled={currentPage === 1} className="px-3 py-2 bg-slate-700 rounded-md disabled:opacity-50 text-white flex items-center gap-2">
+                            <ChevronLeft size={16} /> Prev
+                        </button>
+                        <span className="text-gray-400 text-sm">Page {currentPage} / {totalPages}</span>
+                        <button onClick={() => setCurrentPage(c => Math.min(c + 1, totalPages))} disabled={currentPage === totalPages} className="px-3 py-2 bg-slate-700 rounded-md disabled:opacity-50 text-white flex items-center gap-2">
+                            Next <ChevronRight size={16} />
+                        </button>
+                    </div>
                 )}
             </div>
         </div>
     );
 }
 
-// --- Skeleton Component cho Mention Card ---
+// Component phụ trợ nhỏ để hiển thị trạng thái trống
+function EmptyState({ hasFilter, onReset }) {
+    return (
+        <div className="flex flex-col items-center justify-center text-center text-gray-400 h-60 sm:h-80 border-2 border-dashed border-slate-700 rounded-lg p-4">
+            <FileSearch size={40} className="mb-4 text-slate-500" />
+            <h3 className="text-lg sm:text-xl font-semibold text-white mb-2">
+                {hasFilter ? "No Mentions Found" : "No Mentions Yet"}
+            </h3>
+            <p className="text-sm">
+                {hasFilter ? "Try adjusting your search terms or filters." : "When the crawler runs, new posts will appear here."}
+            </p>
+            {hasFilter && (
+                <button onClick={onReset} className="mt-4 inline-flex items-center rounded-md bg-slate-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-slate-600">
+                    Clear Filters
+                </button>
+            )}
+        </div>
+    );
+}
+
 function MentionCardSkeleton() {
     return (
-        <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 animate-pulse">
-            {/* Skeleton for Header (Title + Link) */}
-            <div className="flex justify-between items-start gap-4 mb-2">
-                <div className="h-5 sm:h-6 bg-slate-700 rounded w-3/5"></div> {/* Title Skeleton */}
-                <div className="h-4 bg-slate-700 rounded w-1/5"></div> {/* Link Skeleton */}
-            </div>
-            {/* Skeleton for Meta (Source + Platform) */}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm mb-2.5">
-                <div className="h-4 bg-slate-700 rounded w-1/4"></div> {/* Source Skeleton */}
-                <div className="h-4 bg-slate-700 rounded w-1/3"></div> {/* Platform Skeleton */}
-            </div>
-            {/* Skeleton for Content */}
-            <div className="space-y-2">
-                <div className="h-4 bg-slate-700 rounded w-full"></div>
-                <div className="h-4 bg-slate-700 rounded w-full"></div>
-                <div className="h-4 bg-slate-700 rounded w-4/5"></div>
-            </div>
-            {/* Skeleton for Sentiment Tag */}
-            <div className="mt-3">
-                <div className="h-5 bg-slate-700 rounded-full w-20"></div>
-            </div>
+        <div className="bg-slate-800/50 p-4 rounded-lg border border-slate-700 animate-pulse space-y-3">
+            <div className="flex justify-between gap-4"><div className="h-6 bg-slate-700 rounded w-3/5"></div><div className="h-4 bg-slate-700 rounded w-1/5"></div></div>
+            <div className="flex gap-4"><div className="h-4 bg-slate-700 rounded w-1/4"></div><div className="h-4 bg-slate-700 rounded w-1/3"></div></div>
+            <div className="space-y-2"><div className="h-4 bg-slate-700 rounded w-full"></div><div className="h-4 bg-slate-700 rounded w-4/5"></div></div>
         </div>
     );
 }
