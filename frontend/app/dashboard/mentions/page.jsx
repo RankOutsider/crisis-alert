@@ -120,7 +120,7 @@ export default function MentionsExplorerPage() {
                 <div className="mt-4 mb-6 p-4 rounded-lg bg-yellow-900/50 border border-yellow-700/60 text-yellow-300 text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-start gap-3">
                         <Lock size={18} className="flex-shrink-0 mt-0.5" />
-                        <span>Sentiment analysis is a VIP/Pro feature. Upgrade to view sentiments.</span>
+                        <span> Basic Sentiment analysis is one of VIP/Pro subscription features. Upgrade to view the analysis of the posts.</span>
                     </div>
                     <Link href="/buy" className="flex-shrink-0 w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-2.5 font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-all text-xs sm:text-sm">
                         <Zap size={16} />

@@ -7,6 +7,7 @@ import {
     PlusCircle, Trash2, Search, CheckCircle, AlertCircle as AlertIcon,
     ChevronLeft, ChevronRight, FilePlus, RefreshCw, X, Loader2, Lock
 } from 'lucide-react';
+import Link from 'next/link';
 import { api, fetcher } from '@/utils/api';
 import { useAuth } from '@/app/providers.jsx';
 import { TIER_PLANS } from '@/utils/subscriptionPlans';
@@ -16,7 +17,6 @@ import FilterBar from '@/app/components/FilterBar';
 import AlertCard, { AlertCardSkeleton } from '@/app/components/AlertCard';
 import AlertModal from '@/app/components/AlertModal';
 import useDebounce from '@/hooks/useDebounce';
-import { modal } from '@heroui/react';
 
 const PLATFORM_OPTIONS = ['Facebook', 'Instagram', 'News', 'Forum', 'Threads', 'Tiktok', 'X', 'Youtube', 'Blog'];
 const ALERT_SEARCH_FIELDS = ['Title', 'Description', 'Keywords'];
@@ -30,15 +30,17 @@ export default function AlertsPage() {
     const { mutate: globalMutate } = useSWRConfig();
     const { data: statsData, isLoading: isStatsLoading } = useSWR(user ? '/api/alerts/stats' : null, fetcher);
 
-    // ... (Giữ nguyên phần useMemo limits)
+    // Tính toán giới hạn
     const { alertLimit, keywordLimit, currentAlertCount, hasReachedAlertLimit } = useMemo(() => {
         if (!user) return { hasReachedAlertLimit: true };
         const plan = TIER_PLANS[user.subscriptionTier] || {};
+        const limit = plan.limits?.alerts || 0;
+        const current = statsData?.totalAlerts || 0;
         return {
-            alertLimit: plan.limits?.alerts || 0,
+            alertLimit: limit,
             keywordLimit: plan.limits?.keywords || 0,
-            currentAlertCount: statsData?.totalAlerts || 0,
-            hasReachedAlertLimit: (statsData?.totalAlerts || 0) >= (plan.limits?.alerts || 0)
+            currentAlertCount: current,
+            hasReachedAlertLimit: current >= limit
         };
     }, [user, statsData]);
 
@@ -52,17 +54,17 @@ export default function AlertsPage() {
     const [isScanning, setIsScanning] = useState(false);
     const [statusMessage, setStatusMessage] = useState({ type: '', text: '' });
 
-    // States cho Modal & Form (Cha quản lý hết)
+    // States cho Modal & Form
     const [modalState, setModalState] = useState({ isOpen: false, type: 'create', data: null });
-    const [isModalLoading, setIsModalLoading] = useState(false); // Loading của form
-    const [modalErrors, setModalErrors] = useState({}); // Lỗi server trả về của form
+    const [isModalLoading, setIsModalLoading] = useState(false);
+    const [modalErrors, setModalErrors] = useState({});
 
     const [selectedAlerts, setSelectedAlerts] = useState([]);
     const [confirmDeleteId, setConfirmDeleteId] = useState(null);
     const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    // API Query (Giữ nguyên)
+    // API Query
     const apiUrl = useMemo(() => {
         const params = new URLSearchParams({ page: currentPage.toString(), limit: ITEMS_PER_PAGE.toString() });
         const activeFields = Object.keys(searchFields).filter(f => searchFields[f]);
@@ -83,20 +85,18 @@ export default function AlertsPage() {
 
     useEffect(() => { if (currentPage !== 1) setCurrentPage(1); }, [debouncedSearchTerm, searchFields, filters]);
 
-    // Helper: Hiện thông báo
     const showMessage = (type, text) => {
         setStatusMessage({ type, text });
-        setTimeout(() => setStatusMessage({ type: '', text: '' }), 5000); // Tự tắt sau 5s
+        setTimeout(() => setStatusMessage({ type: '', text: '' }), 5000);
     };
 
     const handleOpenModal = (type, data = null) => {
-        setModalErrors({}); // Reset lỗi cũ
-        setIsModalLoading(false); // Reset loading
+        setModalErrors({});
+        setIsModalLoading(false);
         setModalState({ isOpen: true, type, data });
     };
     const handleCloseModal = () => setModalState({ isOpen: false, type: 'create', data: null });
 
-    // --- LOGIC GỬI FORM CHÍNH ---
     const handleModalSubmit = async (formData) => {
         setIsModalLoading(true);
         setModalErrors({});
@@ -119,7 +119,6 @@ export default function AlertsPage() {
                 message = `Alert "${formData.title}" updated successfully!`;
             }
 
-            // THÀNH CÔNG: Đóng modal -> Refresh data -> Hiện thông báo
             handleCloseModal();
             showMessage('success', message);
             mutate();
@@ -127,7 +126,6 @@ export default function AlertsPage() {
 
         } catch (err) {
             console.error("Submit Failed:", err);
-            // THẤT BẠI: Giữ modal mở -> Hiện lỗi
             const msg = err.message || "Operation failed";
             try {
                 const parsed = JSON.parse(msg);
@@ -146,7 +144,6 @@ export default function AlertsPage() {
         }
     };
 
-    // ... (Các hàm handleDelete, handleBulkAction, handleScanAll giữ nguyên như cũ)
     const handleDelete = async () => {
         if (!confirmDeleteId || isProcessing) return;
         setIsProcessing(true);
@@ -159,7 +156,9 @@ export default function AlertsPage() {
         } catch (err) { console.error(err); showMessage('error', 'Failed to delete alert.'); }
         finally { setIsProcessing(false); setConfirmDeleteId(null); }
     };
+
     const handleSelectAlert = (id) => setSelectedAlerts(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
+
     const handleBulkAction = async (action) => {
         if (!selectedAlerts.length || isProcessing) return;
         setIsProcessing(true);
@@ -179,6 +178,7 @@ export default function AlertsPage() {
         } catch (err) { showMessage('error', err.message || 'Action failed'); }
         finally { setIsProcessing(false); setConfirmBulkDelete(false); }
     };
+
     const handleScanAll = async () => {
         setIsScanning(true);
         try {
@@ -191,20 +191,60 @@ export default function AlertsPage() {
 
     return (
         <div className="container mx-auto p-3 sm:p-6 lg:p-8 py-6 overflow-x-hidden min-h-screen">
-            {/* ... Header & Bulk Actions giống hệt code trước ... */}
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+            {/* Header & Main Actions */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
                 <h1 className="text-2xl sm:text-3xl font-bold text-white">Manage Alerts</h1>
                 <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                    <button onClick={() => handleOpenModal('create')} disabled={hasReachedAlertLimit || isLoading} className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 h-12 rounded-lg text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 font-semibold transition-all">
-                        {hasReachedAlertLimit ? <Lock size={18} /> : <PlusCircle size={20} />} Create New Alert
+                    {/* Create Button */}
+                    <button
+                        onClick={() => handleOpenModal('create')}
+                        disabled={hasReachedAlertLimit || isLoading}
+                        className={`w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 h-12 rounded-lg text-white font-semibold transition-all ${hasReachedAlertLimit
+                            ? 'bg-slate-700 opacity-70 cursor-not-allowed'
+                            : 'bg-blue-600 hover:bg-blue-700'
+                            }`}
+                    >
+                        {hasReachedAlertLimit ? <Lock size={20} /> : <PlusCircle size={20} />}
+                        Create New Alert
                     </button>
+
+                    {/* Scan Button */}
                     <button onClick={handleScanAll} disabled={isScanning} className="w-full sm:w-auto flex items-center justify-center gap-2 px-5 py-3 h-12 rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 font-semibold transition-all">
                         {isScanning ? <Loader2 size={20} className="animate-spin" /> : <Search size={20} />} {isScanning ? 'Scanning...' : 'Scan All Posts'}
                     </button>
                 </div>
             </div>
 
-            {/* --- NOTIFICATION AREA (Sẽ hiện khi statusMessage có text) --- */}
+            {/* --- ALERT LIMIT WARNING --- */}
+            {hasReachedAlertLimit && !isLoading && (
+                <div className="mb-6 animate-fade-in-down">
+                    <div className="bg-red-900/10 border border-red-500/30 rounded-lg p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div className="flex items-start gap-3">
+                            <div className="bg-red-500/20 p-2 rounded-full flex-shrink-0">
+                                <Lock size={18} className="text-red-400" />
+                            </div>
+                            <div>
+                                <h4 className="text-red-200 font-semibold text-sm">Limit Reached</h4>
+                                <p className="text-red-300/80 text-xs sm:text-sm mt-0.5">
+                                    You have used{" "}
+                                    <strong>
+                                        {currentAlertCount}/{alertLimit}
+                                    </strong>
+                                    {" "}Alerts allowed in your current plan.
+                                </p>
+                            </div>
+                        </div>
+                        <Link
+                            href="/buy"
+                            className="w-full sm:w-auto text-center px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold rounded-md transition-colors whitespace-nowrap"
+                        >
+                            Upgrade Plan
+                        </Link>
+                    </div>
+                </div>
+            )}
+
+            {/* Notification Area */}
             {statusMessage.text && (
                 <div className={`fixed top-4 right-4 z-[9999] shadow-2xl min-w-[300px] p-4 rounded-lg flex items-center gap-3 text-sm animate-fade-in-down ${statusMessage.type === 'success' ? 'bg-green-800 text-green-100 border border-green-600' : statusMessage.type === 'error' ? 'bg-red-800 text-red-100 border border-red-600' : 'bg-blue-800 text-blue-100'}`}>
                     {statusMessage.type === 'success' ? <CheckCircle size={20} /> : <AlertIcon size={20} />}
@@ -215,10 +255,33 @@ export default function AlertsPage() {
             {/* Bulk Actions Banner */}
             {selectedAlerts.length > 0 && (
                 <div className="mb-6 flex flex-col sm:flex-row justify-between items-center bg-slate-700/50 p-4 rounded-lg sticky top-4 z-10 backdrop-blur-sm border border-slate-600 gap-4">
-                    <div className="flex items-center gap-4 text-white font-semibold"><span>{selectedAlerts.length} alert(s) selected</span><button onClick={() => setSelectedAlerts([])} className="text-sm text-slate-400 hover:text-white flex items-center gap-1"><X size={16} /> Clear</button></div>
+                    <div className="flex items-center gap-4 text-white font-semibold">
+                        <span>
+                            {selectedAlerts.length} alert(s) selected
+                        </span>
+                        <button
+                            onClick={() => setSelectedAlerts([])}
+                            className="text-sm text-slate-400 hover:text-white flex items-center gap-1">
+                            <X size={16} />
+                            Clear
+                        </button>
+                    </div>
                     <div className="flex gap-3 w-full sm:w-auto">
-                        <button onClick={() => handleBulkAction('create_case_study')} disabled={isProcessing || isFreeTier} className={`flex items-center justify-center gap-2 px-4 py-2 text-white rounded-lg w-full sm:w-auto font-semibold ${isFreeTier ? 'bg-slate-700 text-slate-400 opacity-50 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}>{isFreeTier ? <Lock size={18} /> : <FilePlus size={20} />} Create Case Studies</button>
-                        <button onClick={() => setConfirmBulkDelete(true)} disabled={isProcessing} className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-50 w-full sm:w-auto font-semibold"><Trash2 size={20} /> Delete Selected</button>
+                        <button
+                            onClick={() => handleBulkAction('create_case_study')}
+                            disabled={isProcessing || isFreeTier}
+                            className={`flex items-center justify-center gap-2 px-4 py-2 text-white rounded-lg w-full sm:w-auto font-semibold ${isFreeTier ? 'bg-slate-700 text-slate-400 opacity-50 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                            {isFreeTier ? <Lock size={18} /> : <FilePlus size={20} />}
+                            Create Case Studies
+                        </button>
+
+                        <button
+                            onClick={() => setConfirmBulkDelete(true)}
+                            disabled={isProcessing}
+                            className="flex items-center justify-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg disabled:opacity-50 w-full sm:w-auto font-semibold">
+                            <Trash2 size={20} />
+                            Delete Selected
+                        </button>
                     </div>
                 </div>
             )}
@@ -232,7 +295,7 @@ export default function AlertsPage() {
                 {!isLoading && totalPages > 1 && <div className="flex justify-center items-center gap-4 mt-8"><button onClick={() => setCurrentPage(c => c - 1)} disabled={currentPage === 1} className="px-4 py-2 bg-slate-700 rounded text-white disabled:opacity-50">Prev</button><span className="text-sm text-gray-400">Page {currentPage} / {totalPages}</span><button onClick={() => setCurrentPage(c => c + 1)} disabled={currentPage === totalPages} className="px-4 py-2 bg-slate-700 rounded text-white disabled:opacity-50">Next</button></div>}
             </div>
 
-            {/* --- MODAL (Truyền isLoading, serverErrors vào) --- */}
+            {/* Modal & Dialogs */}
             {modalState.isOpen && (
                 <AlertModal
                     isOpen={modalState.isOpen}

@@ -1,3 +1,4 @@
+// frontend/app/dashboard/casestudies/page.jsx
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
@@ -162,15 +163,8 @@ export default function CaseStudiesPage() {
                 availableFields={CASE_STUDY_SEARCH_FIELDS}
                 activeFields={activeFields}
                 onFieldChange={handleFieldChange}
-                // CẬP NHẬT: Vô hiệu hoá thanh search nếu bị khoá
                 disabled={isFreeTier}
             />
-
-            {/* --- 
-            CẬP NHẬT LOGIC RENDER CHÍNH 
-            Hiển thị 1 trong 4 trạng thái: Loading, Locked, Error, Data
-            --- 
-            */}
 
             {/* --- 1. Loading State (Skeleton) --- */}
             {isLoading ? (
