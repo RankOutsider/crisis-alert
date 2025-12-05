@@ -40,7 +40,7 @@ export default function Sidebar({ isOpen, onClose }) {
             return;
         }
 
-        console.log("🧠 Socket test starting...");
+        console.log("🧠 Socket connecting for user: ", userId);
         socket.connect();
 
         function onConnect() {
@@ -62,7 +62,7 @@ export default function Sidebar({ isOpen, onClose }) {
             // Gọi hàm 'mutate' toàn cục của SWR
             mutate('/api/alerts/stats');
 
-            mutate((key) => key.startsWith('/api/posts/over-time'));
+            mutate((key) => typeof key === 'string' && key.startsWith('/api/posts/over-time'));
         }
 
         socket.on("connect", onConnect);
@@ -135,8 +135,8 @@ export default function Sidebar({ isOpen, onClose }) {
                             href="/admin"
                             onClick={onClose}
                             className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 mb-2 group border border-purple-500/30 ${pathname.startsWith('/admin')
-                                    ? 'bg-purple-600/20 text-purple-300 shadow-md shadow-purple-900/20'
-                                    : 'text-purple-400 hover:bg-purple-600/10'
+                                ? 'bg-purple-600/20 text-purple-300 shadow-md shadow-purple-900/20'
+                                : 'text-purple-400 hover:bg-purple-600/10'
                                 }`}
                         >
                             <Shield size={20} />
@@ -158,7 +158,7 @@ export default function Sidebar({ isOpen, onClose }) {
                                 <div key={item.name} className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-500 cursor-not-allowed opacity-70">
                                     <item.icon size={20} />
                                     <span className="text-sm font-medium">{item.name}</span>
-                                    <span className="ml-auto text-[10px] border border-slate-600 px-1 rounded text-slate-500">PRO</span>
+                                    <span className="ml-auto text-[10px] border border-slate-600 px-1 rounded text-slate-500">VIP/Pro</span>
                                 </div>
                             );
                         }
@@ -188,7 +188,7 @@ export default function Sidebar({ isOpen, onClose }) {
                         onClick={onClose}
                         className="flex items-center justify-center gap-3 px-4 py-2.5 rounded-lg transition-colors mb-4 bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-semibold text-sm sm:text-base shadow-lg"
                     >
-                        <Zap size={18}/>
+                        <Zap size={18} />
                         <span>Subscription Plan</span>
                     </Link>
 

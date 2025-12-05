@@ -1,9 +1,21 @@
 // backend/controllers/alertController.js
 const { Op } = require('sequelize');
+const { validationResult } = require('express-validator');
 const { Alert, Post, User, sequelize } = require('../models/associations');
 const { sendNotificationEmail } = require('../utils/emailService');
 
 const { TIER_PLANS } = require('../config/subscriptionPlans');
+
+const formatValidationErrors = (req) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return errors.array().map(err => ({
+            path: err.path || err.param,
+            msg: err.msg
+        }));
+    }
+    return null;
+};
 
 // hàm sleep
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
@@ -24,7 +36,7 @@ async function _runScanTask(userId, specificAlertId = null, io = null) {
         alertWhere.id = specificAlertId;
     }
 
-    // 1. LẤY ALERTS (Đã include User)
+    // 1. LẤY ALERTS
     const activeAlerts = await Alert.findAll({
         where: alertWhere,
         include: [{ model: User, attributes: ['id', 'email', 'notificationsEnabled'] }]
@@ -206,9 +218,8 @@ exports.getAlerts = async (req, res) => {
     }
 };
 
-// @desc    Lấy chi tiết một Alert (KHÔNG KÈM POSTS)
+// @desc    Lấy chi tiết một Alert
 exports.getAlertById = async (req, res) => {
-    // ... (Giữ nguyên code getAlertById của bạn) ...
     try {
         const { id: alertId } = req.params;
         const alert = await Alert.findOne({ where: { id: alertId, userId: req.user.id } });
@@ -222,14 +233,22 @@ exports.getAlertById = async (req, res) => {
 
 // @desc    Tạo một Alert mới
 exports.createAlert = async (req, res) => {
+    const validationErrors = formatValidationErrors(req);
+    if (validationErrors) {
+        return res.status(400).json({ errors: validationErrors });
+    }
     const { title, description, severity, keywords, platforms } = req.body;
 
     // 1. Lấy thông tin user và gói
     const userId = req.user.id;
-    // === SỬA LỖI ===
-    const userTier = req.user.subscriptionTier; // Sửa từ req.user.tier
+    const userTier = req.user.subscriptionTier;
 
     try {
+        const duplicate = await Alert.findOne({ where: { userId, title } });
+        if (duplicate) {
+            return res.status(400).json({ message: 'You already have an alert with this title. Please choose a different title.' });
+        }
+
         // 2. Lấy thông tin gói từ file config
         const plan = TIER_PLANS[userTier];
         if (!plan) {
@@ -239,29 +258,27 @@ exports.createAlert = async (req, res) => {
         }
 
         // 3. Kiểm tra giới hạn keywords
-        // (Giữ nguyên logic kiểm tra...)
         const keywordLimitPerAlert = plan.limits.keywords;
         if (!Array.isArray(keywords)) {
-            return res.status(400).json({ message: 'Keywords phải là một mảng (array).' });
+            return res.status(400).json({ message: 'Keywords must be an array.' });
         }
         if (keywords.length > keywordLimitPerAlert) {
             return res.status(400).json({
-                message: `Your ${userTier} subscription only allow ${keywordLimitPerAlert} keywords for each alert.`
+                errors: [{ path: 'keywords', msg: ` Your ${userTier} subscription only allow up to ${keywordLimitPerAlert} keywords for each alert.` }],
             });
         }
 
         // 4. Kiểm tra giới hạn tổng số alerts
-        // (Giữ nguyên logic kiểm tra...)
         const alertLimit = plan.limits.alerts;
         const existingAlertCount = await Alert.count({ where: { userId: userId } });
 
         if (existingAlertCount >= alertLimit) {
             return res.status(403).json({
-                message: `You have reach the limit of ${alertLimit} alerts for the ${userTier} subscription. Please upgrade expand your limits.`
+                message: `You have reach the limit of ${alertLimit} alerts for the ${userTier} subscription. Please upgrade to expand your limits.`
             });
         }
 
-        // 5. Nếu qua, tạo alert
+        // 5. Tạo alert
         const newAlert = await Alert.create({
             title, description, severity, keywords, platforms,
             userId, postCount: 0, status: 'ACTIVE'
@@ -277,33 +294,40 @@ exports.createAlert = async (req, res) => {
 
 // @desc    Cập nhật thông tin một Alert
 exports.updateAlert = async (req, res) => {
+    const validationErrors = formatValidationErrors(req);
+    if (validationErrors) {
+        return res.status(400).json({ errors: validationErrors });
+    }
+
     const { title, description, severity, status, keywords, platforms } = req.body;
     const alertId = req.params.id;
     const userId = req.user.id;
 
-    // === SỬA LỖI ===
-    const userTier = req.user.subscriptionTier; // Sửa từ req.user.tier
+    const userTier = req.user.subscriptionTier;
 
     try {
         const alert = await Alert.findByPk(alertId);
         if (!alert) { return res.status(404).json({ message: 'Alert not found' }); }
         if (alert.userId !== userId) { return res.status(403).json({ message: 'Not authorized' }); }
 
+        if (title && title !== alert.title) {
+            const duplicate = await Alert.findOne({ where: { userId, title } });
+            if (duplicate) {
+                return res.status(400).json({ message: 'You already have an alert with this title. Please choose a different title.' });
+            }
+        }
+
         // === START SUBSCRIPTION CHECK ===
         if (keywords !== undefined) {
             const plan = TIER_PLANS[userTier];
-            if (!plan) {
-                return res.status(400).json({ message: 'Cannot find the subscription.' });
-            }
-
-            const keywordLimitPerAlert = plan.limits.keywords;
-            if (!Array.isArray(keywords)) {
-                return res.status(400).json({ message: 'Keywords has to be an array.' });
-            }
-            if (keywords.length > keywordLimitPerAlert) {
-                return res.status(400).json({
-                    message: `Your ${userTier} subscription only allow ${keywordLimitPerAlert} keywords for each alert.`
-                });
+            if (plan) {
+                const keywordLimitPerAlert = plan.limits.keywords;
+                if (!Array.isArray(keywords)) return res.status(400).json({ message: 'Keywords must be an array.' });
+                if (keywords.length > keywordLimitPerAlert) {
+                    return res.status(400).json({
+                        errors: [{ path: 'keywords', msg: `Max ${keywordLimitPerAlert} keywords allowed.` }]
+                    });
+                }
             }
         }
         // === END SUBSCRIPTION CHECK ===
@@ -337,7 +361,7 @@ exports.deleteAlert = async (req, res) => {
     }
 };
 
-// @desc    (ĐÃ ĐỔI TÊN) Quét Posts thủ công cho Alert HIỆN TẠI
+// @desc    Quét Posts thủ công cho Alert HIỆN TẠI
 exports.scanForCurrentAlert = async (req, res) => {
     try {
         const { id: alertId } = req.params;
@@ -350,7 +374,7 @@ exports.scanForCurrentAlert = async (req, res) => {
     }
 };
 
-// @desc    (ĐÃ CẬP NHẬT) Quét TẤT CẢ Posts cho TẤT CẢ Alerts (của user)
+// @desc    Quét TẤT CẢ Posts cho TẤT CẢ Alerts (của user)
 exports.scanAllActiveAlerts = async (req, res) => {
     try {
         // (THAY ĐỔI) Truyền req.io vào
@@ -423,7 +447,7 @@ exports.getStats = async (req, res) => {
             chartData
         });
     } catch (error) {
-        console.error("Error fetching dashboard stats:", error.message, error.stack);
+        console.error("Error fetching dashboard stats:", error);
         res.status(500).json({ message: "Server error while fetching stats" });
     }
 };
