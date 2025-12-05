@@ -24,7 +24,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Định nghĩa CLIENT_URL
-const CLIENT_URL = "http://localhost:3000";
+const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
 
 // Tạo HTTP server từ Express app
 const httpServer = http.createServer(app);
