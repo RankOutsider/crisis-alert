@@ -1,23 +1,17 @@
-# backend/Dockerfile (ĐÃ SỬA)
-
-# Sử dụng base image Node.js Slim (dễ cài đặt thư viện hơn Alpine)
-FROM node:18-slim 
+FROM node:18-slim
 
 # Đặt thư mục làm việc bên trong container
 WORKDIR /app
 
 # Copy file package.json và package-lock.json trước
 COPY package*.json ./
+RUN npm install
 
-# Cài đặt dependencies Node.js
-RUN npm ci
-
-# 1. CÀI ĐẶT CÁC THƯ VIỆN HỆ THỐNG CẦN THIẾT CHO CHROMIUM/PUPPETEER
-# Bao gồm các font cơ bản và thư viện liên quan đến X-server/GUI
+# Cài thư viện cho Puppeteer
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     fonts-liberation \
-    fonts-noto \ 
+    fonts-noto \
     libasound2 \
     libatk-bridge2.0-0 \
     libatk1.0-0 \
@@ -61,5 +55,4 @@ COPY . .
 # Thông báo cho Docker biết container sẽ lắng nghe ở cổng 5000
 EXPOSE 5000
 
-# Lệnh để chạy ứng dụng của bạn (file server.js)
-CMD [ "node", "server.js" ]
+CMD ["node", "server.js"]
