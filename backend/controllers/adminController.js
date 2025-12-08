@@ -311,10 +311,10 @@ const approveReactivationRequest = async (req, res) => {
 const rejectReactivationRequest = async (req, res) => {
     const { requestId } = req.params;
 
-    const { adminReason } = req.body;
+    let { adminReason } = req.body;
 
-    if (!adminReason || adminReason.trim().length < 10) {
-        return res.status(400).json({ message: 'Admin reason for rejection must be provided and be at least 10 characters long.' });
+    if (!adminReason || !adminReason.trim()) {
+        adminReason = 'Your request has been rejected by the administrator.';
     }
 
     try {
@@ -352,8 +352,7 @@ const rejectReactivationRequest = async (req, res) => {
             console.error(`🔴 Lỗi gửi email cho user ${user.email}:`, emailError);
         }
         res.status(200).json({ message: 'Request rejected successfully.', request });
-    } catch (error) {
-        console.error("Error rejecting reactivation request:", error);
+    } catch (error) {        console.error("Error rejecting reactivation request:", error);
         res.status(500).json({ message: 'Server Error during rejection' });
     }
 };

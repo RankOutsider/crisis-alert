@@ -11,7 +11,8 @@ const sequelize = User.sequelize;
 
 const {
     sendVerificationEmail,
-    sendPasswordResetEmail
+    sendPasswordResetEmail,
+    sendReactivationRequestNotification
 } = require('../utils/emailService');
 
 const SECRET = process.env.JWT_SECRET;
@@ -190,7 +191,7 @@ exports.createReactivationRequest = async (req, res) => {
         });
 
         // Gửi email thông báo cho Admin (TẠM THỜI BỎ QUA BƯỚC NÀY, SẼ THỰC HIỆN SAU)
-        // await sendEmailToAdminNotification(`New Reactivation Request from ${user.username}`);
+        await sendReactivationRequestNotification(`New Reactivation Request from ${user.username}`);
 
         res.status(201).json({ message: 'Reactivation request sent successfully to the administrator.' });
     } catch (error) {
