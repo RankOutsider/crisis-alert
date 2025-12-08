@@ -8,67 +8,105 @@ const cors = require('cors');
 const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 
-// Import sequelize từ config/db để dùng lệnh sync
 const { connectDB, sequelize } = require('./config/db');
 const { runScanJob } = require('./utils/scan_job');
-
 const { initCronJobs } = require('./utils/cron_job');
 
-// === LOAD CÁC MODEL VÀ MỐI QUAN HỆ ===
-// Dòng này rất quan trọng để Sequelize biết về các models trước khi sync
 require('./models/associations');
 
-// === CONFIG ===
 dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Định nghĩa CLIENT_URL
-const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
+// ============================================================
+// 🔒 CẤU HÌNH BẢO MẬT CORS (LINH HOẠT & AN TOÀN)
+// ============================================================
 
-// Tạo HTTP server từ Express app
+// 1. Danh sách các domain CỐ ĐỊNH (Localhost, Domain chính)
+const fixedOrigins = [
+    "http://localhost:3000",
+    "https://crisis-alert.vercel.app", // (Ví dụ nếu bạn có domain ngắn này)
+];
+
+// 2. Biểu thức chính quy (Regex) cho các domain ĐỘNG
+// Ý nghĩa: Chấp nhận mọi domain bắt đầu bằng "https://crisis-alert" và kết thúc bằng ".vercel.app"
+// Ví dụ khớp: https://crisis-alert-12345.vercel.app, https://crisis-alert-git-main.vercel.app
+const vercelPreviewPattern = /^https:\/\/crisis-alert.*\.vercel\.app$/;
+
+// 3. Hàm kiểm tra xem Origin có hợp lệ không
+const isOriginAllowed = (origin) => {
+    // Cho phép request không có origin (như Postman, Server-to-Server)
+    if (!origin) return true;
+
+    // Kiểm tra trong danh sách cố định
+    if (fixedOrigins.includes(origin)) return true;
+
+    // Kiểm tra theo mẫu (Regex) cho Vercel Preview
+    if (vercelPreviewPattern.test(origin)) return true;
+
+    return false;
+};
+
+// Cấu hình cho Express
+const corsOptions = {
+    origin: function (origin, callback) {
+        if (isOriginAllowed(origin)) {
+            callback(null, true);
+        } else {
+            console.log("🚫 CORS Blocked:", origin);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
+};
+
 const httpServer = http.createServer(app);
 
-// Khởi tạo Socket.IO server
+// ============================================================
+// 🔌 CẤU HÌNH SOCKET.IO (DÙNG CHUNG LOGIC TRÊN)
+// ============================================================
 const io = new Server(httpServer, {
     cors: {
-        origin: CLIENT_URL,
+        origin: function (origin, callback) {
+            // Socket.io đôi khi gửi origin là "null" hoặc undefined trong một số trường hợp handshake
+            if (isOriginAllowed(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        },
         methods: ["GET", "POST"],
         credentials: true
     }
 });
 
-// === MIDDLEWARES ===
-app.use(cors({
-    origin: CLIENT_URL,
-    credentials: true
-}));
+// Áp dụng CORS cho Express
+app.use(cors(corsOptions));
+
+// Middlewares
 app.use(express.json());
 app.use(morgan('dev'));
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
 
-// Middleware chèn io vào req để dùng ở Controller
 app.use((req, res, next) => {
     req.io = io;
     next();
 });
 
-// === SOCKET.IO CONNECTION LOGIC ===
+// Socket logic
 io.on('connection', (socket) => {
-    console.log(`🔌 [Socket.IO] A client has connected: ${socket.id}`);
+    console.log(`🔌 [Socket.IO] Connected: ${socket.id}`);
     socket.on('join_user_room', (userId) => {
         if (userId) {
-            console.log(`🚪 [Socket.IO] Client ${socket.id} entered user_${userId}'s room`);
             socket.join(`user_${userId}`);
         }
     });
-    socket.on('disconnect', () => {
-        console.log(`🔌 [Socket.IO] Client has disconnected: ${socket.id}`);
-    });
 });
 
-// === KÍCH HOẠT CÁC ROUTES ===
+// Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/alerts', require('./routes/alerts'));
 app.use('/api/posts', require('./routes/posts'));
@@ -77,37 +115,24 @@ app.use('/api/subscription', require('./routes/subscription'));
 app.use('/api/admin', require('./routes/admin'));
 
 app.get('/', (req, res) => {
-    res.send('API for CrisisAlert is running!');
+    res.send('CrisisAlert API is Running with Dynamic CORS!');
 });
 
-// === KHỞI ĐỘNG SERVER ===
+// Start Server
 const startServer = async () => {
     try {
-        // Kết nối DB
         await connectDB();
-
-        // Đồng bộ các model với database (nếu cần)
-        // console.log("🔄 Syncing database models...");
-        // await sequelize.sync({ alter: true });
-
-        console.log("✅ Database synced and connected successfully!");
-
-        // Khởi động Server
+        console.log("✅ Database connected.");
         httpServer.listen(PORT, () => {
-            console.log(`🚀 Backend (with Socket.IO) is running at: http://localhost:${PORT}`);
-
+            console.log(`🚀 Backend running at: http://localhost:${PORT}`);
             initCronJobs();
-
-            console.log("⏰ [node-cron] Scheduled to run once every minute.");
+            console.log("⏰ Cron jobs started.");
             cron.schedule('*/1 * * * *', () => {
-                runScanJob(io).catch(err => {
-                    console.error("❌ Lỗi nghiêm trọng khi chạy cronjob:", err);
-                });
+                runScanJob(io).catch(err => console.error("❌ Cron error:", err));
             });
         });
-
     } catch (error) {
-        console.error("❌ Could not start server:", error);
+        console.error("❌ Startup error:", error);
         process.exit(1);
     }
 }
