@@ -9,6 +9,13 @@ const sequelize = new Sequelize(
     {
         host: process.env.DB_HOST,
         dialect: 'mysql',
+        port: process.env.DB_PORT || 4000,
+        dialectOptions: {
+            ssl: {
+                require: true,
+                rejectUnauthorized: false // Chấp nhận chứng chỉ bảo mật của TiDB
+            }
+        },
 
         // --- Cấu hình Connection Pool (Tăng ổn định và hiệu suất) ---
         pool: {
