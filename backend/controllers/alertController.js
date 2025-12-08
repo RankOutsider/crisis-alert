@@ -140,10 +140,10 @@ async function _runScanTask(userId, specificAlertId = null, io = null) {
                     try {
                         await sendNotificationEmail(user.email, alert.title, post);
                         console.log(`... Sent email for Post ID ${post.id} to ${user.email}`);
-                        // await sleep(1000);
+                        await sleep(1000);
                     } catch (emailError) {
                         console.error(`❌ Error sending email (Post ID: ${post.id}):`, emailError.message);
-                        // await sleep(2000);
+                        await sleep(2000);
                     }
                 }
             }
