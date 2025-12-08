@@ -74,9 +74,14 @@ DB_NAME=crisis_alert_db
 JWT_SECRET=your_jwt_secret_here
 
 # Email Configuration (If applicable)
-EMAIL_USER=your_email_here
-EMAIL_PASS=your_email_password_here
-EMAIL_HOST=smtp.gmail.com
+GMAIL_USER=your_email_here
+GMAIL_PASS=your_email_password_here
+
+# MailHog Configuration (For easy testing)
+MAILHOG_HOST=mailhog
+MAILHOG_PORT=1025
+MAILHOG_USER=
+MAILHOG_PASS=
 ```
 
 🚀 Installation & Setup

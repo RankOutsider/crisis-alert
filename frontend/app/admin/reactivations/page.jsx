@@ -47,12 +47,6 @@ export default function ReactivationRequestsPage() {
     const handleSubmit = async () => {
         if (!selectedRequest || !actionType) return;
 
-        // Validation đơn giản
-        if (actionType === 'reject' && adminReason.trim().length < 5) {
-            toast.warning("Please provide a reason for rejection.");
-            return;
-        }
-
         setIsProcessing(true);
         try {
             const apiEndpoint = `admin/reactivation-requests/${selectedRequest.id}/${actionType}`;
@@ -181,12 +175,12 @@ export default function ReactivationRequestsPage() {
                         <div>
                             <label className="block text-sm font-medium text-gray-400 mb-1 flex items-center gap-2">
                                 <MessageSquare size={16} />
-                                {actionType === 'approve' ? 'Admin Note (Optional)' : 'Reason for Rejection (Required)'}
+                                {actionType === 'approve' ? 'Admin Note (Optional)' : 'Reason for Rejection (Optional)'}
                             </label>
                             <textarea
                                 value={adminReason}
                                 onChange={(e) => setAdminReason(e.target.value)}
-                                placeholder={actionType === 'approve' ? "Welcome back! Your account is active." : "Your request was rejected because..."}
+                                placeholder={actionType === 'approve' ? "Welcome back! Your account is active." : "Optional: Enter reason (e.g. Violation of terms)."}
                                 className="w-full h-24 bg-slate-900 border border-slate-700 rounded-lg p-3 text-white focus:border-blue-500 outline-none resize-none text-sm placeholder-gray-600"
                             />
                         </div>

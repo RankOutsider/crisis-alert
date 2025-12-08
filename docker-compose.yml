@@ -32,18 +32,22 @@ services:
     ports:
       - '5000:5000'
     environment:
+      # --- Database ---
       DB_HOST: db
-      DB_USER: ${DB_USER}
+      DB_USER: root
       DB_PASSWORD: ${DB_ROOT_PASSWORD}
       DB_NAME: crisis_alert_db
       PORT: 5000
       JWT_SECRET: ${JWT_SECRET}
-      EMAIL_HOST: ${EMAIL_HOST}
-      EMAIL_PORT: ${EMAIL_PORT}
-      EMAIL_USER: ${EMAIL_USER}
-      EMAIL_PASS: ${EMAIL_PASS}
+      
+      # --- MailHog (Updated name) ---
+      MAILHOG_HOST: mailhog
+      MAILHOG_PORT: ${MAILHOG_PORT}
+      
+      # --- Gmail (Updated name) ---
       GMAIL_USER: ${GMAIL_USER}
       GMAIL_PASS: ${GMAIL_PASS}
+      
       CHOKIDAR_USEPOLLING: 'true'
     volumes:
       - ./backend:/app
@@ -80,6 +84,7 @@ services:
     depends_on:
       - backend
   
+  # 4. Dịch vụ MailHog (Giả lập email server)
   mailhog:
     image: mailhog/mailhog
     container_name: crisis-alert-mailhog
