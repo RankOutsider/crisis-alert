@@ -272,7 +272,9 @@ export default function DashboardContent() {
                 sortOrder: sortOrder,
                 columns: selectedColumns.join(',')
             });
-            const apiUrl = `/api/posts/export-pdf?${params.toString()}`;
+
+            const baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+            const apiUrl = `${baseUrl}/posts/export-pdf?${params.toString()}`;
             console.log("Calling API:", apiUrl);
 
             const token = getToken();
