@@ -1,37 +1,49 @@
 // backend/utils/emailService.js
 const nodemailer = require('nodemailer');
 
-// ----- 1. CẤU HÌNH CHO MAILHOG -----
+// --- A. MAILHOG (Cho Local Dev) ---
 const mailhogTransporter = nodemailer.createTransport({
     host: process.env.MAILHOG_HOST || 'mailhog',
     port: process.env.MAILHOG_PORT || 1025,
     secure: false,
 });
 
-// ----- 2. CẤU HÌNH CHO GMAIL -----
+// --- B. GMAIL (Cho Production - Backup) ---
 const gmailTransporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
     port: 465,
     secure: true,
-
-    family: 4,
-
     pool: true,
     maxConnections: 3,
-
-    // Timeout
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
-
     auth: {
         user: process.env.GMAIL_USER,
         pass: process.env.GMAIL_PASS,
     },
 });
 
-console.log("🔥 CHECK CONFIG: Port:", gmailTransporter.options.port, "| Force IPv4: YES");
-console.log("🔥 SERVICE ĐANG DÙNG LÀ:", gmailTransporter.options.service);
+// --- C. BREVO (CHÍNH THỨC CHO PRODUCTION) ---
+const brevoTransporter = nodemailer.createTransport({
+    host: 'smtp-relay.brevo.com', // Host chuẩn của Brevo
+    port: 587,                    // Cổng 587 chạy cực mượt trên Render
+    secure: false,                // Bắt buộc False khi dùng 587
+    auth: {
+        user: process.env.BREVO_USER, // Email bạn dùng đăng nhập Brevo
+        pass: process.env.BREVO_PASS, // Key SMTP bạn vừa tạo
+    },
+});
+
+// 👉 CHỌN TRANSPORTER ĐANG DÙNG (Thay đổi biến này)
+const ACTIVE_TRANSPORTER = brevoTransporter;
+// Các lựa chọn: mailhogTransporter | gmailTransporter | brevoTransporter
+
+// 👉 CHỌN EMAIL GỬI ĐI (SENDER ADDRESS)
+// Lưu ý: Nếu dùng Resend gói Free chưa có domain, BẮT BUỘC dùng 'onboarding@resend.dev'
+const ACTIVE_SENDER = process.env.BREVO_USER;
+// Nếu dùng Gmail: process.env.GMAIL_USER
+// Nếu dùng Mailhog: process.env.MAILHOG_USER
+// Nếu dùng Brevo: process.env.BREVO_USER
+
+console.log(`📧 Email Service Active Sender: ${ACTIVE_SENDER}`);
 
 const NO_REPLY_NOTICE_BLOCK = `
     <div style="background-color: #fff3cd; padding: 12px; border-radius: 5px; margin-bottom: 20px; border: 1px solid #ffeeba;">
@@ -49,14 +61,8 @@ const sendReactivationRequestNotification = async (username) => {
     try {
         const adminEmail = process.env.ADMIN_EMAIL || 'admin@crisis-alert.com';
 
-        const MAILHOG_sender = `"Crisis Alert Admin Bot" <${process.env.MAILHOG_USER}>`;
-        const GMAIL_sender = `"Crisis Alert Admin Bot" <${process.env.GMAIL_USER}>`;
-
-        // --- CHỌN SENDER Ở ĐÂY (Comment/Uncomment để đổi) ---
-        const activeSender = GMAIL_sender; // MAILHOG_sender;
-
         const mailOptions = {
-            from: activeSender,
+            from: ACTIVE_SENDER, // Sử dụng biến chung
             to: adminEmail,
             subject: `🔔 NEW ADMIN ACTION REQUIRED: Reactivation Request`,
             html: `
@@ -68,14 +74,9 @@ const sendReactivationRequestNotification = async (username) => {
             `,
         };
 
-        let info;
-        if (activeSender === GMAIL_sender) {
-            info = await gmailTransporter.sendMail(mailOptions);
-        } else {
-            info = await mailhogTransporter.sendMail(mailOptions);
-        }
-
-        console.log(`✅ Admin notification email sent. USER: ${username}. messageID: ${info.messageId}`);
+        // Sử dụng Transporter chung
+        const info = await ACTIVE_TRANSPORTER.sendMail(mailOptions);
+        console.log(`✅ Admin notification sent. ID: ${info.messageId}`);
         return info;
 
     } catch (error) {
@@ -90,15 +91,9 @@ const sendReactivationResultEmail = async (toEmail, status, adminReason) => {
     const subject = isApproved ? '🎉 Account Reactivation Approved' : '🚫 Account Reactivation Rejected';
     const statusColor = isApproved ? '#28a745' : '#dc3545';
 
-    const MAILHOG_sender = `"Crisis Alert Admin" <${process.env.MAILHOG_USER}>`;
-    const GMAIL_sender = `"Crisis Alert Admin" <${process.env.GMAIL_USER}>`;
-
-    // --- CHỌN SENDER Ở ĐÂY ---
-    const activeSender = GMAIL_sender; // MAILHOG_sender;
-
     try {
         const mailOptions = {
-            from: activeSender,
+            from: ACTIVE_SENDER,
             to: toEmail,
             subject: subject,
             html: `
@@ -116,13 +111,7 @@ const sendReactivationResultEmail = async (toEmail, status, adminReason) => {
             `,
         };
 
-        let info;
-        if (activeSender === GMAIL_sender) {
-            info = await gmailTransporter.sendMail(mailOptions);
-        } else {
-            info = await mailhogTransporter.sendMail(mailOptions);
-        }
-
+        const info = await ACTIVE_TRANSPORTER.sendMail(mailOptions);
         console.log(`✅ Reactivation result sent to ${toEmail}. ID: ${info.messageId}`);
         return info;
 
@@ -134,15 +123,9 @@ const sendReactivationResultEmail = async (toEmail, status, adminReason) => {
 
 // Hàm gửi email thông báo khi có bài đăng mới khớp với alert
 const sendNotificationEmail = async (userEmail, alertTitle, post, ccRecipients = '') => {
-    const MAILHOG_sender = `"Crisis Alert" <${process.env.MAILHOG_USER}>`;
-    const GMAIL_sender = `"Crisis Alert" <${process.env.GMAIL_USER}>`;
-
-    // --- CHỌN SENDER Ở ĐÂY ---
-    const activeSender = GMAIL_sender; // MAILHOG_sender;
-
     try {
         const mailOptions = {
-            from: activeSender,
+            from: ACTIVE_SENDER,
             to: userEmail,
             cc: ccRecipients,
             subject: `🚨 New Mention for Alert: "${alertTitle}"`,
@@ -161,13 +144,7 @@ const sendNotificationEmail = async (userEmail, alertTitle, post, ccRecipients =
             `,
         };
 
-        let info;
-        if (activeSender === GMAIL_sender) {
-            info = await gmailTransporter.sendMail(mailOptions);
-        } else {
-            info = await mailhogTransporter.sendMail(mailOptions);
-        }
-
+        const info = await ACTIVE_TRANSPORTER.sendMail(mailOptions);
         console.log(`✅ Notification sent to ${userEmail}. ID: ${info.messageId}`);
         return info;
 
@@ -179,21 +156,9 @@ const sendNotificationEmail = async (userEmail, alertTitle, post, ccRecipients =
 
 // Hàm gửi email xác thực OTP
 const sendVerificationEmail = async (toEmail, otp) => {
-    const MAILHOG_sender = `"Crisis Alert" <${process.env.MAILHOG_USER}>`;
-    const GMAIL_sender = `"Crisis Alert" <${process.env.GMAIL_USER}>`;
-
-    console.log("---------------- EMAIL DEBUG ----------------");
-    console.log("1. Đang gửi từ:", process.env.GMAIL_USER);
-    console.log("2. Gửi đến:", toEmail);
-    console.log("3. Mật khẩu có tồn tại không?:", process.env.GMAIL_PASS ? "CÓ (Đã ẩn)" : "KHÔNG (Rỗng!)");
-    console.log("---------------------------------------------");
-
-    // --- CHỌN SENDER Ở ĐÂY ---
-    const activeSender = GMAIL_sender; // MAILHOG_sender;
-
     try {
         const mailOptions = {
-            from: activeSender,
+            from: ACTIVE_SENDER,
             to: toEmail,
             subject: 'OTP For Verifying Crisis Alert Account',
             html: ` 
@@ -207,33 +172,21 @@ const sendVerificationEmail = async (toEmail, otp) => {
             `,
         };
 
-        let info;
-        if (activeSender === GMAIL_sender) {
-            info = await gmailTransporter.sendMail(mailOptions);
-        } else {
-            info = await mailhogTransporter.sendMail(mailOptions);
-        }
-
+        const info = await ACTIVE_TRANSPORTER.sendMail(mailOptions);
         console.log('✅ Verification email sent:', info.messageId);
         return info;
 
     } catch (error) {
         console.error('❌ Error sending verification email:', error);
-        throw new Error('Could not send verification email.');
+        // Không throw lỗi để tránh crash
     }
 };
 
 // Hàm gửi OTP reset mật khẩu
 const sendPasswordResetEmail = async (toEmail, otp) => {
-    const MAILHOG_sender = `"Crisis Alert" <${process.env.MAILHOG_USER}>`;
-    const GMAIL_sender = `"Crisis Alert" <${process.env.GMAIL_USER}>`;
-
-    // --- CHỌN SENDER Ở ĐÂY ---
-    const activeSender = GMAIL_sender; // MAILHOG_sender;
-
     try {
         const mailOptions = {
-            from: activeSender,
+            from: ACTIVE_SENDER,
             to: toEmail,
             subject: 'Password Resetting Request',
             html: `
@@ -247,45 +200,26 @@ const sendPasswordResetEmail = async (toEmail, otp) => {
             `,
         };
 
-        let info;
-        if (activeSender === GMAIL_sender) {
-            info = await gmailTransporter.sendMail(mailOptions);
-        } else {
-            info = await mailhogTransporter.sendMail(mailOptions);
-        }
-
+        const info = await ACTIVE_TRANSPORTER.sendMail(mailOptions);
         console.log('✅ Password reset email sent:', info.messageId);
         return info;
 
     } catch (error) {
         console.error('❌ Error sending password reset email:', error);
-        throw new Error('Could not send password reset email.');
     }
 };
 
 // Hàm gửi email tùy chỉnh
 const sendEmail = async ({ email, subject, message }) => {
-    const MAILHOG_sender = `"Crisis Alert Support" <${process.env.MAILHOG_USER}>`;
-    const GMAIL_sender = `"Crisis Alert Support" <${process.env.GMAIL_USER}>`;
-
-    // --- CHỌN SENDER Ở ĐÂY ---
-    const activeSender = GMAIL_sender; // MAILHOG_sender;
-
     try {
         const mailOptions = {
-            from: activeSender,
+            from: ACTIVE_SENDER,
             to: email,
             subject: subject,
             html: NO_REPLY_NOTICE_BLOCK + message,
         };
 
-        let info;
-        if (activeSender === GMAIL_sender) {
-            info = await gmailTransporter.sendMail(mailOptions);
-        } else {
-            info = await mailhogTransporter.sendMail(mailOptions);
-        }
-
+        const info = await ACTIVE_TRANSPORTER.sendMail(mailOptions);
         console.log(`✅ Generic Email sent to ${email}. ID: ${info.messageId}`);
         return info;
     } catch (error) {
@@ -296,15 +230,9 @@ const sendEmail = async ({ email, subject, message }) => {
 
 // Hàm gửi email thông báo hết hạn gói dịch vụ
 const sendSubscriptionExpiredEmail = async (toEmail, username, oldPlan) => {
-    const MAILHOG_sender = `"Crisis Alert System" <${process.env.MAILHOG_USER}>`;
-    const GMAIL_sender = `"Crisis Alert System" <${process.env.GMAIL_USER}>`;
-
-    // --- CHỌN SENDER Ở ĐÂY ---
-    const activeSender = GMAIL_sender; // MAILHOG_sender;
-
     try {
         const mailOptions = {
-            from: activeSender,
+            from: ACTIVE_SENDER,
             to: toEmail,
             subject: '📉 Your Subscription has Expired',
             html: `
@@ -326,13 +254,7 @@ const sendSubscriptionExpiredEmail = async (toEmail, username, oldPlan) => {
             `,
         };
 
-        let info;
-        if (activeSender === GMAIL_sender) {
-            info = await gmailTransporter.sendMail(mailOptions);
-        } else {
-            info = await mailhogTransporter.sendMail(mailOptions);
-        }
-
+        const info = await ACTIVE_TRANSPORTER.sendMail(mailOptions);
         console.log(`✅ Expiration email sent to ${toEmail}. ID: ${info.messageId}`);
         return info;
 
