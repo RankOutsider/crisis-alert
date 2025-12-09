@@ -157,62 +157,73 @@ export default function DashboardContent() {
             const workbook = new ExcelJS.Workbook();
             const worksheet = workbook.addWorksheet('Mentions');
 
-            // Định nghĩa các cột (Mapping từ selectedColumns của bạn)
-            // Bạn có thể chỉnh độ rộng (width) cho phù hợp
+            // Định nghĩa các cột
             const columnsConfig = selectedColumns.map(colKey => ({
                 key: colKey,
-                width: colKey === 'content' ? 50 : 20 // Content rộng hơn, các cột khác nhỏ hơn
+                width: colKey === 'content' ? 50 : 25 // Chỉnh độ rộng mặc định lớn hơn xíu
             }));
             worksheet.columns = columnsConfig;
 
-            // Tính tổng số cột để Merge cell cho đẹp
+            // Tính toán Merge cell
             const totalCols = selectedColumns.length;
-            // Chuyển số cột thành chữ cái (ví dụ 5 cột -> 'E', 6 cột -> 'F') để merge
             const lastColLetter = String.fromCharCode(64 + (totalCols > 0 ? totalCols : 1));
-            const mergeRange = `A1:${lastColLetter}`;
 
-            // --- HEADER CÔNG TY ---
+            // --- HEADER CÔNG TY (ENGLISH) ---
 
             // Dòng 1: Tên Công Ty
             worksheet.mergeCells(`A1:${lastColLetter}1`);
             const companyName = worksheet.getCell('A1');
-            companyName.value = 'CÔNG TY CỔ PHẦN ROM MU'; // Thay tên công ty bạn
+            companyName.value = 'YouNet Media JOINT STOCK COMPANY';
             companyName.font = { name: 'Arial', size: 14, bold: true };
             companyName.alignment = { vertical: 'middle', horizontal: 'center' };
 
-            // Dòng 2: Địa chỉ (Demo)
+            // Dòng 2: Địa chỉ
             worksheet.mergeCells(`A2:${lastColLetter}2`);
             const companyAddr = worksheet.getCell('A2');
-            companyAddr.value = 'Địa chỉ: Tầng 12, Tòa nhà Software, TP.HCM';
+            companyAddr.value = '2nd Floor, Lữ Gia Plaza, 70 Lữ Gia Street, Phú Thọ Ward, Ho Chi Minh City';
             companyAddr.font = { name: 'Arial', size: 10 };
             companyAddr.alignment = { vertical: 'middle', horizontal: 'center' };
 
-            // Dòng 4: Tiêu đề báo cáo to
+            // Dòng 4: Tiêu đề báo cáo
             worksheet.mergeCells(`A4:${lastColLetter}4`);
             const reportTitle = worksheet.getCell('A4');
-            reportTitle.value = 'BÁO CÁO MENTIONS EXPORT';
+            reportTitle.value = 'PDF EXPORT REPORT'; // Tiêu đề tiếng Anh
             reportTitle.font = { name: 'Arial', size: 16, bold: true, color: { argb: '000000' } };
             reportTitle.alignment = { vertical: 'middle', horizontal: 'center' };
 
             // Dòng 5: Thời gian xuất
             worksheet.mergeCells(`A5:${lastColLetter}5`);
             const dateRangeRow = worksheet.getCell('A5');
-            dateRangeRow.value = `Từ ngày: ${exportStartDate} - Đến ngày: ${exportEndDate}`;
+            // Định dạng lại ngày tháng tiếng Anh
+            dateRangeRow.value = `From: ${exportStartDate} - To: ${exportEndDate}`;
             dateRangeRow.font = { name: 'Arial', size: 11, italic: true };
             dateRangeRow.alignment = { vertical: 'middle', horizontal: 'center' };
 
             // --- TẠO HEADER BẢNG DỮ LIỆU (Dòng 7) ---
             const headerRow = worksheet.getRow(7);
-            // Lấy tên cột từ selectedColumns (hoặc bạn có thể map sang tiếng Việt nếu muốn)
-            headerRow.values = selectedColumns.map(col => col.toUpperCase());
 
-            // Style cho Header Bảng: Nền xám, Chữ đậm, Viền
+            // MAPPING: Chuyển tên biến thành tên hiển thị đẹp trong Excel
+            const columnLabels = {
+                id: 'ID',
+                title: 'Title',
+                content: 'Content',
+                source: 'Source',
+                sourceUrl: 'Source URL',
+                platform: 'Platform',
+                sentiment: 'Sentiment',
+                publishedAt: 'Published Date' // Đổi publishedAt thành Published Date
+            };
+
+            // Map tên cột sang tiếng Anh đẹp
+            headerRow.values = selectedColumns.map(col => columnLabels[col] || col.toUpperCase());
+
+            // Style cho Header Bảng
             headerRow.eachCell((cell) => {
                 cell.font = { bold: true, color: { argb: '000000' } };
                 cell.fill = {
                     type: 'pattern',
                     pattern: 'solid',
-                    fgColor: { argb: 'E0E0E0' } // Màu xám nhạt
+                    fgColor: { argb: 'E0E0E0' }
                 };
                 cell.border = {
                     top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' }
@@ -224,17 +235,16 @@ export default function DashboardContent() {
             data.forEach(item => {
                 const rowData = [];
                 selectedColumns.forEach(colKey => {
-                    // Kiểm tra data có tồn tại không
                     rowData.push(item[colKey] !== undefined ? item[colKey] : '');
                 });
                 const row = worksheet.addRow(rowData);
 
-                // Kẻ viền cho từng ô dữ liệu
+                // Kẻ viền và căn chỉnh
                 row.eachCell({ includeEmpty: true }, (cell) => {
                     cell.border = {
                         top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' }
                     };
-                    cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true }; // Tự động xuống dòng
+                    cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
                 });
             });
 
@@ -261,7 +271,7 @@ export default function DashboardContent() {
         }
     };
 
-    // --- HÀM EXPORT PDF ---
+    // --- HÀM EXPORT re ---
     const handleExportPdf = async () => {
         setIsExporting(true);
         try {

@@ -641,7 +641,6 @@ exports.exportUserPosts = async (req, res) => {
 exports.exportPdf = async (req, res) => {
 
     // --- KIỂM TRA GÓI (TIER) ---
-    // Gói 'Free' không được export PDF
     if (req.user.subscriptionTier === 'Free') {
         return res.status(403).json({ message: 'Access denied. PDF export is available for VIP and Pro users.' });
     }
@@ -658,8 +657,6 @@ exports.exportPdf = async (req, res) => {
     endOfDay.setHours(23, 59, 59, 999);
 
     // --- Xử lý tham số ---
-    // 1. Chọn cột
-    // Nếu frontend gửi 'columns', dùng nó. Nếu không, dùng tất cả các cột.
     const selectedColumns = columns ? columns.split(',') : ALL_EXPORT_COLUMNS;
     const order = (sortField && sortOrder)
         ? [[sortField, sortOrder.toUpperCase()]]
@@ -686,46 +683,132 @@ exports.exportPdf = async (req, res) => {
         });
 
         if (!data || data.length === 0) {
-            return res.status(404).json({ message: 'Không tìm thấy dữ liệu trong khoảng thời gian này.' });
+            return res.status(404).json({ message: 'No data found for the selected range.' });
         }
 
-        // 2. CHUẨN BỊ HTML CHO PUPPETEER
-        const keys = Object.keys(data[0]);
-        const headerRow = keys.map(key => `<th>${key.toUpperCase().replace(/_/g, ' ')}</th>`).join('');
-        const bodyRows = data.map(row =>
-            `<tr>${keys.map(key => `<td>${row[key] ?? ''}</td>`).join('')}</tr>`
-        ).join('');
+        // 2. CHUẨN BỊ MAPPING CỘT (Để hiển thị tên đẹp hơn)
+        const columnLabels = {
+            id: 'ID',
+            title: 'Title',
+            content: 'Content',
+            source: 'Source',
+            sourceUrl: 'Source URL',
+            platform: 'Platform',
+            sentiment: 'Sentiment',
+            publishedAt: 'Published Date'
+        };
 
+        // Tạo Header cho Table
+        // keys là mảng các cột có trong data (dựa trên selectedColumns)
+        const keys = Object.keys(data[0]);
+
+        const headerRow = keys.map(key => {
+            // Lấy tên đẹp từ map, nếu không có thì uppercase tên gốc
+            const label = columnLabels[key] || key.toUpperCase();
+            return `<th>${label}</th>`;
+        }).join('');
+
+        // Tạo Body cho Table
+        const bodyRows = data.map(row => {
+            return `<tr>${keys.map(key => {
+                let cellValue = row[key];
+
+                // Format lại ngày tháng cho đẹp nếu là cột publishedAt
+                if (key === 'publishedAt' && cellValue) {
+                    cellValue = new Date(cellValue).toLocaleDateString('en-GB'); // DD/MM/YYYY
+                }
+
+                return `<td>${cellValue ?? ''}</td>`;
+            }).join('')}</tr>`;
+        }).join('');
+
+        // 3. TẠO HTML VỚI STYLE TIẾNG ANH CHUYÊN NGHIỆP
         const htmlContent = `
         <!DOCTYPE html>
         <html>
             <head>
             <meta charset="UTF-8">
             <style>
-                body { font-family: 'Noto Sans', Arial, sans-serif; font-size: 10px; margin: 0; padding: 0;}
-                h1 { color: #364057; font-size: 18px; margin-bottom: 5px; }
-                p { font-size: 12px; margin-bottom: 20px; }
-                table { width: 100%; border-collapse: collapse; table-layout: fixed;}
-                th, td { border: 1px solid #ddd; padding: 8px; text-align: left; word-wrap: break-word; }
-                th { background-color: #343a40; color: white; font-weight: bold; }
+                body { 
+                    font-family: 'Helvetica', 'Arial', sans-serif; 
+                    font-size: 10px; 
+                    color: #333;
+                    padding: 20px;
+                }
+                .header-container {
+                    text-align: center;
+                    margin-bottom: 30px;
+                }
+                .company-name {
+                    font-size: 18px;
+                    font-weight: bold;
+                    text-transform: uppercase;
+                    margin-bottom: 5px;
+                }
+                .company-address {
+                    font-size: 10px;
+                    color: #666;
+                    margin-bottom: 15px;
+                }
+                .report-title {
+                    font-size: 20px;
+                    font-weight: bold;
+                    color: #000;
+                    margin-bottom: 5px;
+                    text-transform: uppercase;
+                }
+                .date-range {
+                    font-size: 12px;
+                    font-style: italic;
+                    color: #444;
+                }
+                table { 
+                    width: 100%; 
+                    border-collapse: collapse; 
+                    margin-top: 10px;
+                    table-layout: fixed; /* Giúp bảng không bị tràn */
+                }
+                th, td { 
+                    border: 1px solid #ddd; 
+                    padding: 8px; 
+                    text-align: left; 
+                    word-wrap: break-word; /* Tự xuống dòng nếu text quá dài */
+                    vertical-align: top;
+                }
+                th { 
+                    background-color: #f2f2f2; 
+                    color: #333; 
+                    font-weight: bold; 
+                    text-transform: uppercase;
+                    font-size: 9px;
+                }
+                tr:nth-child(even) {
+                    background-color: #f9f9f9;
+                }
             </style>
             </head>
             <body>
-                <h1>Báo Cáo Xuất Dữ Liệu Crisis Alert Mentions</h1>
-                <p>Từ: ${startDate} đến: ${endDate}</p>
-            <table>
-                <thead>
-                    <tr>${headerRow}</tr>
-                </thead>
-            <tbody>
-                ${bodyRows}
-            </tbody>
-            </table>
+                <div class="header-container">
+                    <div class="company-name">ROM MU JOINT STOCK COMPANY</div>
+                    <div class="company-address">Address: 12th Floor, Software Building, Ho Chi Minh City</div>
+                    <br/>
+                    <div class="report-title">MENTIONS EXPORT REPORT</div>
+                    <div class="date-range">From: ${startDate} - To: ${endDate}</div>
+                </div>
+
+                <table>
+                    <thead>
+                        <tr>${headerRow}</tr>
+                    </thead>
+                    <tbody>
+                        ${bodyRows}
+                    </tbody>
+                </table>
             </body>
         </html>
         `;
 
-        // 3. KHỞI CHẠY PUPPETEER VÀ TẠO PDF
+        // 4. KHỞI CHẠY PUPPETEER VÀ TẠO PDF
         browser = await puppeteer.launch({
             args: [
                 '--no-sandbox',
@@ -737,23 +820,25 @@ exports.exportPdf = async (req, res) => {
         });
         const page = await browser.newPage();
 
+        // Set nội dung
         await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
 
+        // Tạo PDF
         const pdfBuffer = await page.pdf({
             format: 'A4',
-            landscape: true,
+            landscape: true, // Khổ ngang để chứa nhiều cột
             printBackground: true,
-            margin: { top: '1in', right: '0.5in', bottom: '0.5in', left: '0.5in' },
+            margin: { top: '0.5in', right: '0.5in', bottom: '0.5in', left: '0.5in' },
         });
 
-        // 4. GỬI FILE PDF VỀ CHO FRONTEND
+        // 5. TRẢ VỀ FILE
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="CrisisAlert_Mentions_${startDate}_to_${endDate}.pdf"`);
         res.send(pdfBuffer);
 
     } catch (error) {
         console.error('Puppeteer/PDF Generation Error:', error);
-        res.status(500).send('Lỗi máy chủ khi tạo PDF. Vui lòng kiểm tra logs server.');
+        res.status(500).send('Server error generating PDF. Please check server logs.');
     } finally {
         if (browser) {
             await browser.close();
