@@ -170,6 +170,12 @@ const sendVerificationEmail = async (toEmail, otp) => {
     const MAILHOG_sender = `"Crisis Alert" <${process.env.MAILHOG_USER}>`;
     const GMAIL_sender = `"Crisis Alert" <${process.env.GMAIL_USER}>`;
 
+    console.log("---------------- EMAIL DEBUG ----------------");
+    console.log("1. Đang gửi từ:", process.env.GMAIL_USER);
+    console.log("2. Gửi đến:", toEmail);
+    console.log("3. Mật khẩu có tồn tại không?:", process.env.GMAIL_PASS ? "CÓ (Đã ẩn)" : "KHÔNG (Rỗng!)");
+    console.log("---------------------------------------------");
+
     // --- CHỌN SENDER Ở ĐÂY ---
     const activeSender = GMAIL_sender; // MAILHOG_sender;
 
