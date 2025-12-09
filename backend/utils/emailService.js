@@ -42,7 +42,7 @@ const ACTIVE_TRANSPORTER = brevoTransporter;
 
 // 👉 CHỌN EMAIL GỬI ĐI (SENDER ADDRESS)
 // Lưu ý: Nếu dùng Resend gói Free chưa có domain, BẮT BUỘC dùng 'onboarding@resend.dev'
-const ACTIVE_SENDER = process.env.BREVO_USER;
+const ACTIVE_SENDER = 'andyhuynh1110@gmail.com';
 // Nếu dùng Gmail: process.env.GMAIL_USER
 // Nếu dùng Mailhog: process.env.MAILHOG_USER
 // Nếu dùng Brevo: process.env.BREVO_USER
