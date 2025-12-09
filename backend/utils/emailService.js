@@ -32,6 +32,10 @@ const brevoTransporter = nodemailer.createTransport({
     },
 });
 
+console.log("--- DEBUG EMAIL CONFIG ---");
+console.log("Brevo User:", process.env.BREVO_USER ? "Đã nhận" : "MISSING!!");
+console.log("Brevo Pass:", process.env.BREVO_PASS ? "Đã nhận" : "MISSING!!");
+
 // 👉 CHỌN TRANSPORTER ĐANG DÙNG (Thay đổi biến này)
 const ACTIVE_TRANSPORTER = brevoTransporter;
 // Các lựa chọn: mailhogTransporter | gmailTransporter | brevoTransporter
