@@ -24,8 +24,8 @@ const gmailTransporter = nodemailer.createTransport({
 // --- C. BREVO (CHÍNH THỨC CHO PRODUCTION) ---
 const brevoTransporter = nodemailer.createTransport({
     host: 'smtp-relay.brevo.com', // Host chuẩn của Brevo
-    port: 587,                    // Cổng 587 chạy cực mượt trên Render
-    secure: false,                // Bắt buộc False khi dùng 587
+    port: 465,
+    secure: true,
     auth: {
         user: process.env.BREVO_USER, // Email bạn dùng đăng nhập Brevo
         pass: process.env.BREVO_PASS, // Key SMTP bạn vừa tạo
