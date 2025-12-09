@@ -75,21 +75,25 @@ exports.register = async (req, res) => {
             expires_at: expiresAt,
         }, { transaction: t });
 
-        // 9. Gửi email xác thực (dùng hàm Gmail)
-        await sendVerificationEmail(newUser.email, otpCode);
+        // 9. Cam kết giao dịch (dùng hàm Gmail)
         await t.commit();
 
-        // 10. Trả về thông báo thành công (bằng tiếng Anh)
+        // 10. Trả về thông báo thành công
         res.status(201).json({
             message: 'Registration successful! Please check your email to verify your account.'
         });
 
+        sendVerificationEmail(newUser.email, otpCode).catch(err => {
+            console.error(`⚠️ Background email sending error (Register) for ${newUser.email}:`, err.message);
+        });
+
+
     } catch (error) {
-        await t.rollback();
-        console.error("Error during registration (has been rollback):", error);
-        if (error.responseCode === 535){
-            return res.status(500).json({ message: 'Email service error: Unable to send verification email. Please contact support.' });
+        // Chỉ rollback nếu transaction chưa hoàn tất
+        if (!t.finished) {
+            await t.rollback();
         }
+        console.error("Error during registration:", error);
         res.status(500).json({ message: 'Internal server error, please try again' });
     }
 };
@@ -190,10 +194,11 @@ exports.createReactivationRequest = async (req, res) => {
             username: user.username,
         });
 
-        // Gửi email thông báo cho Admin (TẠM THỜI BỎ QUA BƯỚC NÀY, SẼ THỰC HIỆN SAU)
-        await sendReactivationRequestNotification(`New Reactivation Request from ${user.username}`);
-
+        // Gửi email thông báo cho Admin
         res.status(201).json({ message: 'Reactivation request sent successfully to the administrator.' });
+        sendReactivationRequestNotification(user.username).catch(err => {
+            console.error(`⚠️ Background email sending error (Reactivation Request) for ${user.username}:`, err.message);
+        });
     } catch (error) {
         console.error("Error creating reactivation request:", error);
         res.status(500).json({ message: 'Internal server error. Could not send request.' });
@@ -404,7 +409,7 @@ exports.verifyOtp = async (req, res) => {
         // Kích hoạt lại tài khoản nếu đang bị tự khóa (is_active = false)
         if (user.is_active === false) {
             if (user.is_active_admin === true) {
-                user.is_active = true; // Bật lại is_active
+                user.is_active = true;
             } else {
                 return res.status(403).json({ message: 'Account verification successful, but your account is locked by Administrator.' });
             }
@@ -475,9 +480,10 @@ exports.resendOtp = async (req, res) => {
             otp_code: otpCode,
             expires_at: expiresAt,
         });
-        await sendVerificationEmail(user.email, otpCode);
-        res.status(200).json({ message: 'A new OTP has been sent to your email.' });
-
+        res.status(200).json({ message: 'A new OTP is being sent to your email.' });
+        sendVerificationEmail(user.email, otpCode).catch(err => {
+            console.error(`⚠️ Background Mail Error (ResendOTP) for ${user.email}:`, err.message);
+        });
     } catch (error) {
         console.error('Error resending OTP:', error);
         res.status(500).json({ message: 'Internal server error' });
@@ -515,12 +521,14 @@ exports.forgotPassword = async (req, res) => {
             expires_at: expiresAt,
         });
 
-        // 5. Gửi email "Password Reset"
-        await sendPasswordResetEmail(user.email, otpCode);
 
-        // 6. Trả về thông báo thành công
+        // 5. Trả về thông báo thành công
         res.status(200).json({ message: 'Password reset OTP sent to your email.' });
 
+        // 6. Gửi email chứa OTP
+        sendPasswordResetEmail(user.email, otpCode).catch(err => {
+            console.error(`⚠️ Background Mail Error (ForgotPassword) for ${user.email}:`, err.message);
+        });
     } catch (error) {
         console.error('Error in forgotPassword:', error);
         res.status(500).json({ message: 'Internal server error' });

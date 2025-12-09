@@ -11,6 +11,10 @@ const mailhogTransporter = nodemailer.createTransport({
 // ----- 2. CẤU HÌNH CHO GMAIL -----
 const gmailTransporter = nodemailer.createTransport({
     service: 'gmail',
+    pool: true,
+    maxConnections: 5,
+    rateDelta: 20000,
+    rateLimit: 5,
     auth: {
         user: process.env.GMAIL_USER,
         pass: process.env.GMAIL_PASS,
