@@ -11,30 +11,26 @@ const mailhogTransporter = nodemailer.createTransport({
 // ----- 2. CẤU HÌNH CHO GMAIL -----
 const gmailTransporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 587,
-    secure: false,
-    requireTLS: true,
+    port: 465,
+    secure: true,
+
+    family: 4,
 
     pool: true,
     maxConnections: 3,
 
-    // Tăng timeout lên cao hơn để chờ mạng
-    connectionTimeout: 30000, // 30 giây
-    greetingTimeout: 30000,
+    // Timeout
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
 
     auth: {
         user: process.env.GMAIL_USER,
         pass: process.env.GMAIL_PASS,
     },
-
-    // Cấu hình fix lỗi mạng chập chờn
-    tls: {
-        ciphers: 'SSLv3',          // Hỗ trợ giao thức cũ nếu cần
-        rejectUnauthorized: false  // Bỏ qua lỗi chứng chỉ (quan trọng trên Cloud)
-    }
 });
 
-console.log("🔥 CHECK CONFIG: Đang thử Port:", gmailTransporter.options.port);
+console.log("🔥 CHECK CONFIG: Port:", gmailTransporter.options.port, "| Force IPv4: YES");
 console.log("🔥 SERVICE ĐANG DÙNG LÀ:", gmailTransporter.options.service);
 
 const NO_REPLY_NOTICE_BLOCK = `
