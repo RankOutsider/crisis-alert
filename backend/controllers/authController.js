@@ -7,7 +7,7 @@ const User = require('../models/User');
 const Otp = require('../models/Otp');
 const ReactivationRequest = require('../models/ReactivationRequest');
 
-const sequelize = User.sequelize;
+const { sequelize } = require('../config/db');
 
 const {
     sendVerificationEmail,
