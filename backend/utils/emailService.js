@@ -10,11 +10,19 @@ const mailhogTransporter = nodemailer.createTransport({
 
 // ----- 2. CẤU HÌNH CHO GMAIL -----
 const gmailTransporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     pool: true,
-    maxConnections: 5,
+    maxConnections: 3,
     rateDelta: 20000,
-    rateLimit: 5,
+    rateLimit: 3,
+
+    // Thêm timeout để tránh bị treo request quá lâu
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
+
     auth: {
         user: process.env.GMAIL_USER,
         pass: process.env.GMAIL_PASS,
@@ -184,7 +192,7 @@ const sendVerificationEmail = async (toEmail, otp) => {
             from: activeSender,
             to: toEmail,
             subject: 'OTP For Verifying Crisis Alert Account',
-            html: `
+            html: ` 
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
                     ${NO_REPLY_NOTICE_BLOCK} 
                     <h1 style="color: #333;">Account Verification</h1>
