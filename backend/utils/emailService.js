@@ -23,17 +23,17 @@ const gmailTransporter = nodemailer.createTransport({
 
 // --- C. BREVO (CHÍNH THỨC CHO PRODUCTION) ---
 const brevoTransporter = nodemailer.createTransport({
-    host: 'smtp-relay.brevo.com', // Host chuẩn của Brevo
-    port: 465,
-    secure: true,
+    host: 'smtp-relay.brevo.com',
+    port: 587, // dùng STARTTLS
+    secure: false,
     auth: {
-        user: process.env.BREVO_USER, // Email bạn dùng đăng nhập Brevo
-        pass: process.env.BREVO_PASS, // Key SMTP bạn vừa tạo
+        user: 'apikey', // luôn là 'apikey'
+        pass: process.env.BREVO_PASS, // chính là API key
     },
 });
 
 console.log("--- DEBUG EMAIL CONFIG ---");
-console.log("Brevo User:", process.env.BREVO_USER ? "Đã nhận" : "MISSING!!");
+console.log("Brevo User:", 'apikey' ? "Đã nhận" : "MISSING!!");
 console.log("Brevo Pass:", process.env.BREVO_PASS ? "Đã nhận" : "MISSING!!");
 
 // 👉 CHỌN TRANSPORTER ĐANG DÙNG (Thay đổi biến này)
@@ -45,7 +45,6 @@ const ACTIVE_TRANSPORTER = brevoTransporter;
 const ACTIVE_SENDER = 'andyhuynh1110@gmail.com';
 // Nếu dùng Gmail: process.env.GMAIL_USER
 // Nếu dùng Mailhog: process.env.MAILHOG_USER
-// Nếu dùng Brevo: process.env.BREVO_USER
 
 console.log(`📧 Email Service Active Sender: ${ACTIVE_SENDER}`);
 
@@ -84,7 +83,11 @@ const sendReactivationRequestNotification = async (username) => {
         return info;
 
     } catch (error) {
-        console.error('❌ Error sending admin notification:', error);
+        console.error('❌ Error sending admin notification:', {
+            message: error.message,
+            code: error.code,
+            response: error.response,
+        });
         return null;
     }
 };
@@ -120,7 +123,11 @@ const sendReactivationResultEmail = async (toEmail, status, adminReason) => {
         return info;
 
     } catch (error) {
-        console.error('❌ Error sending result email:', error);
+        console.error('❌ Error sending result email:', {
+            message: error.message,
+            code: error.code,
+            response: error.response,
+        });
         return null;
     }
 };
@@ -153,7 +160,11 @@ const sendNotificationEmail = async (userEmail, alertTitle, post, ccRecipients =
         return info;
 
     } catch (error) {
-        console.error('❌ Error sending notification email:', error);
+        console.error('❌ Error sending notification email:', {
+            message: error.message,
+            code: error.code,
+            response: error.response,
+        });
         return null;
     }
 };
@@ -181,7 +192,11 @@ const sendVerificationEmail = async (toEmail, otp) => {
         return info;
 
     } catch (error) {
-        console.error('❌ Error sending verification email:', error);
+        console.error('❌ Error sending verification email:', {
+            message: error.message,
+            code: error.code,
+            response: error.response,
+        });
         // Không throw lỗi để tránh crash
     }
 };
@@ -209,7 +224,11 @@ const sendPasswordResetEmail = async (toEmail, otp) => {
         return info;
 
     } catch (error) {
-        console.error('❌ Error sending password reset email:', error);
+        console.error('❌ Error sending password reset email:', {
+            message: error.message,
+            code: error.code,
+            response: error.response,
+        });
     }
 };
 
@@ -227,7 +246,11 @@ const sendEmail = async ({ email, subject, message }) => {
         console.log(`✅ Generic Email sent to ${email}. ID: ${info.messageId}`);
         return info;
     } catch (error) {
-        console.error('❌ Error sending generic email:', error);
+        console.error('❌ Error sending generic email:', {
+            message: error.message,
+            code: error.code,
+            response: error.response,
+        });
         return null;
     }
 };
@@ -263,7 +286,11 @@ const sendSubscriptionExpiredEmail = async (toEmail, username, oldPlan) => {
         return info;
 
     } catch (error) {
-        console.error('❌ Error sending expiration email:', error);
+        console.error('❌ Error sending expiration email:', {
+            message: error.message,
+            code: error.code,
+            response: error.response,
+        });
         return null;
     }
 };
