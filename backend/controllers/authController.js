@@ -118,7 +118,7 @@ exports.login = async (req, res) => {
         // KIỂM TRA TRẠNG THÁI XÁC THỰC EMAIL
         if (!user.is_verified) {
             return res.status(403).json({
-                message: 'Account not verified. Please check your email.',
+                message: 'Account not verified. Please verify your account via the OTP sent to your email.',
                 code: 'EMAIL_UNVERIFIED', // Mã lỗi tùy chỉnh để Frontend xử lý
                 email: user.email
             });
