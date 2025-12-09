@@ -31,6 +31,7 @@ const gmailTransporter = nodemailer.createTransport({
 });
 
 console.log("🔥 CHECK CONFIG: Port đang chạy là:", gmailTransporter.options.port);
+console.log("🔥 SERVICE ĐANG DÙNG LÀ:", gmailTransporter.options.service);
 
 const NO_REPLY_NOTICE_BLOCK = `
     <div style="background-color: #fff3cd; padding: 12px; border-radius: 5px; margin-bottom: 20px; border: 1px solid #ffeeba;">
