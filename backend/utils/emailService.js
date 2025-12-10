@@ -10,7 +10,9 @@ const mailhogTransporter = nodemailer.createTransport({
 
 // 2. CẤU HÌNH GMAIL (Production / Render)
 const gmailTransporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
     auth: {
         user: process.env.GMAIL_USER,
         pass: process.env.GMAIL_PASS,
@@ -18,6 +20,8 @@ const gmailTransporter = nodemailer.createTransport({
     pool: true,
     maxConnections: 1,
     rateLimit: 5,
+    logger: true,         // bật log để debug
+    debug: true,          // in chi tiết quá trình kết nối
 });
 
 // A. CHỌN TRANSPORTER
@@ -34,7 +38,7 @@ const CLIENT_URL = process.env.CLIENT_URL || 'https://crisis-alert-rankoutsiders
 
 console.log('====================================================');
 console.log(`📧 EMAIL SERVICE INIT`);
-console.log(`🔗 Client URL đang dùng: ${CLIENT_URL}`); // <-- Nhìn log này để biết nó nhận đúng chưa
+console.log(`🔗 Client URL đang dùng: ${CLIENT_URL}`);
 console.log('====================================================');
 
 // --- CÁC HÀM GỬI EMAIL ---
