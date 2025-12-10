@@ -33,7 +33,7 @@ jobs:
         with:
           context: ./backend
           push: true
-          tags: index.docker.io/${{ secrets.AZUREAPPSERVICE_CONTAINERUSERNAME_9D02545DC34B4DDAA135C05B2E663A9E }}/kyosuper1110/crisis-alert-backend:${{ github.sha }}
+          tags: index.docker.io/${{ secrets.AZUREAPPSERVICE_CONTAINERUSERNAME_9D02545DC34B4DDAA135C05B2E663A9E }}/crisis-alert-backend:${{ github.sha }}
           file: ./backend/Dockerfile
 
   deploy:
@@ -62,4 +62,5 @@ jobs:
           images: 'index.docker.io/${{ secrets.AZUREAPPSERVICE_CONTAINERUSERNAME_9D02545DC34B4DDAA135C05B2E663A9E }}/kyosuper1110/crisis-alert-backend:${{ github.sha }}'
 
           
+
 
