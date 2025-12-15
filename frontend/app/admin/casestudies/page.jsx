@@ -11,11 +11,11 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
-import FilterBar from '@/app/components/FilterBar'; // 1. Import FilterBar
-import useDebounce from '@/hooks/useDebounce';     // 2. Import useDebounce
+import FilterBar from '@/app/components/FilterBar'; // Import FilterBar
+import useDebounce from '@/hooks/useDebounce';     // Import useDebounce
 
 export default function AdminCaseStudies() {
-    // --- 1. FETCH DATA (Lấy toàn bộ danh sách) ---
+    // --- FETCH DATA ---
     // Bỏ pagination param để lấy hết list về client xử lý
     const endpoint = 'admin/casestudies';
     const { data, error, isLoading } = useSWR(endpoint, swrFetcher);
@@ -42,7 +42,7 @@ export default function AdminCaseStudies() {
         setCurrentPage(1);
     }, [debouncedSearchTerm, selectedStatus]);
 
-    // 1. Lọc dữ liệu
+    // Lọc dữ liệu
     const filteredCaseStudies = useMemo(() => {
         return allCaseStudies.filter(cs => {
             const title = cs.title?.toLowerCase() || '';
@@ -59,7 +59,7 @@ export default function AdminCaseStudies() {
         });
     }, [allCaseStudies, debouncedSearchTerm, selectedStatus]);
 
-    // 2. Cắt trang
+    // Cắt trang
     const totalPages = Math.ceil(filteredCaseStudies.length / itemsPerPage) || 1;
     const indexOfLastItem = currentPage * itemsPerPage;
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
@@ -91,7 +91,7 @@ export default function AdminCaseStudies() {
         if (!window.confirm('Delete this Case Study?')) return;
         try {
             await deleteAdminCaseStudy(id);
-            // Optimistic update
+            
             const updatedList = allCaseStudies.filter(c => c.id !== id);
             // Cập nhật lại cache SWR
             mutate(endpoint, { ...data, caseStudies: updatedList }, false);
