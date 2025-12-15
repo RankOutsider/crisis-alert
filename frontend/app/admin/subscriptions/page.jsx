@@ -12,7 +12,8 @@ import {
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
 import Modal from '@/app/components/Modal';
-import FilterBar from '@/app/components/FilterBar'; // Import FilterBar có sẵn
+import FilterBar from '@/app/components/FilterBar';
+import useDebounce from '@/hooks/useDebounce'; // Đã check code: Hook này chuẩn
 
 export default function AdminSubscriptions() {
     // Endpoint lấy danh sách
@@ -26,36 +27,39 @@ export default function AdminSubscriptions() {
     const [isProcessing, setIsProcessing] = useState(false);
 
     // --- State cho Filter & Pagination ---
-    const [searchTerm, setSearchTerm] = useState('');
-    const [selectedStatus, setSelectedStatus] = useState([]); // Mảng trạng thái (cho MultiSelect)
+    const [searchTerm, setSearchTerm] = useState(''); // State nhập liệu (nhảy ngay lập tức)
+    const [selectedStatus, setSelectedStatus] = useState([]);
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
+
+    // --- ÁP DỤNG DEBOUNCE ---
+    // State này chỉ thay đổi sau khi bạn ngừng gõ 500ms -> Dùng cái này để filter
+    const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
     // --- Logic Lọc & Phân trang ---
 
     // 1. Reset về trang 1 khi filter thay đổi
+    // (Lắng nghe debouncedSearchTerm thay vì searchTerm để tránh reset liên tục khi đang gõ)
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, selectedStatus]);
+    }, [debouncedSearchTerm, selectedStatus]);
 
     // 2. Tính toán danh sách đã lọc
     const filteredRequests = useMemo(() => {
         if (!requests) return [];
         return requests.filter(req => {
             const email = req.User?.email?.toLowerCase() || '';
-            const search = searchTerm.toLowerCase();
 
-            // Lọc theo từ khóa (Email)
+            // Sử dụng DEBOUNCED term để lọc (tối ưu hiệu năng)
+            const search = debouncedSearchTerm.toLowerCase();
             const matchesSearch = email.includes(search);
 
             // Lọc theo Status (MultiSelect)
-            // Nếu mảng rỗng -> Coi như chọn tất cả (All)
-            // Nếu mảng có giá trị -> Chỉ lấy item có status nằm trong mảng
             const matchesStatus = selectedStatus.length === 0 || selectedStatus.includes(req.status);
 
             return matchesSearch && matchesStatus;
         });
-    }, [requests, searchTerm, selectedStatus]);
+    }, [requests, debouncedSearchTerm, selectedStatus]); // Dependency là debouncedSearchTerm
 
     // 3. Cắt danh sách theo trang hiện tại
     const totalPages = Math.ceil(filteredRequests.length / itemsPerPage);
@@ -63,7 +67,7 @@ export default function AdminSubscriptions() {
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
     const currentItems = filteredRequests.slice(indexOfFirstItem, indexOfLastItem);
 
-    // --- Handlers ---
+    // --- Handlers (Logic cũ giữ nguyên) ---
 
     const openModal = (request, type) => {
         setSelectedRequest(request);
@@ -80,7 +84,7 @@ export default function AdminSubscriptions() {
             // Gọi API
             await handleAdminSubRequest(selectedRequest.id, actionType, adminNote);
 
-            // Optimistic Update
+            // Update tạm thời trong UI
             if (requests) {
                 mutate(endpoint, requests.map(req =>
                     req.id === selectedRequest.id ? { ...req, status: actionType, adminNote: adminNote } : req
@@ -105,7 +109,8 @@ export default function AdminSubscriptions() {
 
         try {
             await deleteAdminSubRequest(id);
-            // Update ngay lập tức
+            
+            // Update tạm thời trong UI
             if (requests) {
                 mutate(endpoint, requests.filter(req => req.id !== id), false);
             }
@@ -141,27 +146,27 @@ export default function AdminSubscriptions() {
                 </div>
             </div>
 
-            {/* --- FILTER BAR (Tích hợp component có sẵn) --- */}
+            {/* Filter Bar */}
             <FilterBar
-                // Search props
+                // Input vẫn dùng searchTerm (để hiển thị những gì bạn đang gõ ngay lập tức)
                 searchTerm={searchTerm}
                 onSearchChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search by email..."
 
-                // Status Filter props
+                // Status Filter
                 statusOptions={['PENDING', 'APPROVED', 'REJECTED']}
                 selectedStatus={selectedStatus}
                 onStatusChange={setSelectedStatus}
             />
 
-            {/* --- LIST VIEW --- */}
+            {/* List View */}
             {(!filteredRequests || filteredRequests.length === 0) ? (
                 <div className="text-center py-12 text-gray-400 bg-gray-800/50 rounded-xl border border-gray-700/50 border-dashed">
                     No requests found matching your filters.
                 </div>
             ) : (
                 <>
-                    {/* MOBILE VIEW (Cards) */}
+                    {/* MOBILE VIEW */}
                     <div className="md:hidden flex flex-col gap-4">
                         {currentItems.map((req) => (
                             <div key={req.id} className="bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-sm flex flex-col gap-4 hover:border-slate-600 transition-all">
@@ -206,24 +211,15 @@ export default function AdminSubscriptions() {
                                 <div className="flex gap-2 pt-3 border-t border-slate-700/50">
                                     {req.status === 'PENDING' ? (
                                         <>
-                                            <button
-                                                onClick={() => openModal(req, 'APPROVE')}
-                                                className="flex-1 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                                            >
+                                            <button onClick={() => openModal(req, 'APPROVE')} className="flex-1 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
                                                 <CheckCircle size={16} /> Approve
                                             </button>
-                                            <button
-                                                onClick={() => openModal(req, 'REJECT')}
-                                                className="flex-1 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 hover:text-red-300 border border-red-600/30 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                                            >
+                                            <button onClick={() => openModal(req, 'REJECT')} className="flex-1 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 hover:text-red-300 border border-red-600/30 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
                                                 <XCircle size={16} /> Reject
                                             </button>
                                         </>
                                     ) : (
-                                        <button
-                                            onClick={() => handleDelete(req.id)}
-                                            className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                                        >
+                                        <button onClick={() => handleDelete(req.id)} className="w-full py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
                                             <Trash2 size={16} /> Delete
                                         </button>
                                     )}
@@ -232,7 +228,7 @@ export default function AdminSubscriptions() {
                         ))}
                     </div>
 
-                    {/* DESKTOP VIEW (Table) */}
+                    {/* DESKTOP VIEW */}
                     <div className="hidden md:block bg-slate-800 rounded-xl border border-slate-700 overflow-x-auto shadow-sm">
                         <table className="w-full text-left border-collapse min-w-[900px]">
                             <thead>
@@ -290,7 +286,7 @@ export default function AdminSubscriptions() {
                         </table>
                     </div>
 
-                    {/* --- PAGINATION CONTROLS --- */}
+                    {/* Pagination Controls */}
                     {filteredRequests.length > 0 && (
                         <div className="flex flex-col md:flex-row justify-between items-center gap-4 pt-4 border-t border-slate-700/50">
                             <div className="text-sm text-gray-400">
@@ -329,7 +325,7 @@ export default function AdminSubscriptions() {
                 </>
             )}
 
-            {/* MODAL APPROVE / REJECT */}
+            {/* Modal */}
             {selectedRequest && (
                 <Modal
                     isOpen={!!selectedRequest}
@@ -366,8 +362,7 @@ export default function AdminSubscriptions() {
                             <button
                                 onClick={handleSubmit}
                                 disabled={isProcessing}
-                                className={`px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2 text-sm disabled:opacity-50 ${actionType === 'APPROVE' ? 'bg-green-600 hover:bg-green-500' : 'bg-red-600 hover:bg-red-500'
-                                    }`}
+                                className={`px-4 py-2 rounded-lg text-white font-medium flex items-center gap-2 text-sm disabled:opacity-50 ${actionType === 'APPROVE' ? 'bg-green-600 hover:bg-green-500' : 'bg-red-600 hover:bg-red-500'}`}
                             >
                                 {isProcessing ? <Loader2 size={16} className="animate-spin" /> : null}
                                 Confirm {actionType === 'APPROVE' ? 'Approval' : 'Rejection'}
