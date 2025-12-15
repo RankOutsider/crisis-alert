@@ -15,16 +15,18 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
-import FilterBar from '@/app/components/FilterBar'; // 1. Import FilterBar
-import useDebounce from '@/hooks/useDebounce';     // 2. Import useDebounce
+import FilterBar from '@/app/components/FilterBar'; // Import FilterBar
+import useDebounce from '@/hooks/useDebounce';     // Import useDebounce
+
+// Danh sách Platform chuẩn của hệ thống
+const PLATFORM_OPTIONS = ['Facebook', 'Instagram', 'News', 'Forum', 'Threads', 'Tiktok', 'X', 'Youtube', 'Blog'];
 
 export default function AdminPosts() {
-    // --- 1. FETCH DATA (Lấy toàn bộ) ---
-    // Bỏ pagination params
+    // --- FETCH DATA ---
     const endpoint = 'admin/posts';
     const { data, error, isLoading } = useSWR(endpoint, swrFetcher);
 
-    // Xử lý dữ liệu trả về (giả sử backend trả về { posts: [...] } hoặc mảng trực tiếp)
+    // Xử lý dữ liệu trả về
     const allPosts = Array.isArray(data) ? data : (data?.posts || []);
 
     // --- STATE UI ---
@@ -46,7 +48,7 @@ export default function AdminPosts() {
         setCurrentPage(1);
     }, [debouncedSearchTerm, selectedSentiment, selectedPlatform]);
 
-    // 1. Lọc dữ liệu
+    // Lọc dữ liệu
     const filteredPosts = useMemo(() => {
         return allPosts.filter(post => {
             const title = post.title?.toLowerCase() || '';
@@ -63,13 +65,13 @@ export default function AdminPosts() {
 
             // Filter theo Platform
             const matchesPlatform = selectedPlatform.length === 0 ||
-                (post.platform && selectedPlatform.includes(post.platform));
+                (post.platform && selectedPlatform.some(p => p.toLowerCase() === post.platform.toLowerCase()));
 
             return matchesSearch && matchesSentiment && matchesPlatform;
         });
     }, [allPosts, debouncedSearchTerm, selectedSentiment, selectedPlatform]);
 
-    // 2. Cắt trang
+    // Cắt trang
     const totalPages = Math.ceil(filteredPosts.length / itemsPerPage) || 1;
     const indexOfLastItem = currentPage * itemsPerPage;
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
@@ -98,7 +100,7 @@ export default function AdminPosts() {
         if (!window.confirm('Are you sure you want to delete this post?')) return;
         try {
             await deleteAdminPost(id);
-            
+
             const updatedList = allPosts.filter(p => p.id !== id);
             mutate(endpoint, { ...data, posts: updatedList }, false);
 
@@ -110,10 +112,8 @@ export default function AdminPosts() {
         }
     };
 
-    // 2. Xóa hàng loạt
     const handleBulkDelete = async () => {
         if (selectedIds.length === 0) return;
-
         if (window.confirm(`Are you sure you want to DELETE ${selectedIds.length} selected posts? This cannot be undone.`)) {
             try {
                 await deleteAdminPostsBulk(selectedIds);
@@ -151,7 +151,7 @@ export default function AdminPosts() {
                     </h1>
                 </div>
 
-                {/* FILTER BAR (Đầy đủ options) */}
+                {/* FILTER BAR */}
                 <FilterBar
                     searchTerm={searchTerm}
                     onSearchChange={(e) => setSearchTerm(e.target.value)}
@@ -162,8 +162,8 @@ export default function AdminPosts() {
                     selectedSentiments={selectedSentiment}
                     onSentimentChange={setSelectedSentiment}
 
-                    // Filter Platform (Bạn có thể thêm các platform khác nếu cần)
-                    platformOptions={['Facebook', 'Twitter', 'Reddit', 'Instagram', 'Web']}
+                    // Filter Platform
+                    platformOptions={PLATFORM_OPTIONS}
                     selectedPlatforms={selectedPlatform}
                     onPlatformChange={setSelectedPlatform}
                 />
