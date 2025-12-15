@@ -1,17 +1,18 @@
 // frontend/app/admin/subscriptions/page.jsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import useSWR, { mutate } from 'swr';
-import { swrFetcher, handleAdminSubRequest, deleteAdminSubRequest, api } from '@/utils/api';
+import { swrFetcher, handleAdminSubRequest, deleteAdminSubRequest } from '@/utils/api';
 import {
     CheckCircle, XCircle, Loader2, CreditCard,
-    User, Clock, Trash2, MessageSquare, AlertCircle,
-    CheckSquare
+    User, Clock, Trash2, MessageSquare,
+    ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
 import Modal from '@/app/components/Modal';
+import FilterBar from '@/app/components/FilterBar'; // Import FilterBar có sẵn
 
 export default function AdminSubscriptions() {
     // Endpoint lấy danh sách
@@ -24,11 +25,50 @@ export default function AdminSubscriptions() {
     const [adminNote, setAdminNote] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
 
-    // Mở Modal
+    // --- State cho Filter & Pagination ---
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedStatus, setSelectedStatus] = useState([]); // Mảng trạng thái (cho MultiSelect)
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
+
+    // --- Logic Lọc & Phân trang ---
+
+    // 1. Reset về trang 1 khi filter thay đổi
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, selectedStatus]);
+
+    // 2. Tính toán danh sách đã lọc
+    const filteredRequests = useMemo(() => {
+        if (!requests) return [];
+        return requests.filter(req => {
+            const email = req.User?.email?.toLowerCase() || '';
+            const search = searchTerm.toLowerCase();
+
+            // Lọc theo từ khóa (Email)
+            const matchesSearch = email.includes(search);
+
+            // Lọc theo Status (MultiSelect)
+            // Nếu mảng rỗng -> Coi như chọn tất cả (All)
+            // Nếu mảng có giá trị -> Chỉ lấy item có status nằm trong mảng
+            const matchesStatus = selectedStatus.length === 0 || selectedStatus.includes(req.status);
+
+            return matchesSearch && matchesStatus;
+        });
+    }, [requests, searchTerm, selectedStatus]);
+
+    // 3. Cắt danh sách theo trang hiện tại
+    const totalPages = Math.ceil(filteredRequests.length / itemsPerPage);
+    const indexOfLastItem = currentPage * itemsPerPage;
+    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+    const currentItems = filteredRequests.slice(indexOfFirstItem, indexOfLastItem);
+
+    // --- Handlers ---
+
     const openModal = (request, type) => {
         setSelectedRequest(request);
         setActionType(type);
-        setAdminNote(''); // Reset lý do
+        setAdminNote('');
     };
 
     // Gọi API xử lý (Approve/Reject)
@@ -48,8 +88,8 @@ export default function AdminSubscriptions() {
             }
 
             toast.success(`Request ${actionType.toLowerCase()}ed successfully!`);
-            mutate(endpoint); // Refresh data thật
-            setSelectedRequest(null); // Đóng modal
+            mutate(endpoint);
+            setSelectedRequest(null);
 
         } catch (error) {
             console.error(error);
@@ -65,7 +105,7 @@ export default function AdminSubscriptions() {
 
         try {
             await deleteAdminSubRequest(id);
-            // Optimistic Update
+            // Update ngay lập tức
             if (requests) {
                 mutate(endpoint, requests.filter(req => req.id !== id), false);
             }
@@ -101,15 +141,29 @@ export default function AdminSubscriptions() {
                 </div>
             </div>
 
-            {(!requests || requests.length === 0) ? (
+            {/* --- FILTER BAR (Tích hợp component có sẵn) --- */}
+            <FilterBar
+                // Search props
+                searchTerm={searchTerm}
+                onSearchChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search by email..."
+
+                // Status Filter props
+                statusOptions={['PENDING', 'APPROVED', 'REJECTED']}
+                selectedStatus={selectedStatus}
+                onStatusChange={setSelectedStatus}
+            />
+
+            {/* --- LIST VIEW --- */}
+            {(!filteredRequests || filteredRequests.length === 0) ? (
                 <div className="text-center py-12 text-gray-400 bg-gray-800/50 rounded-xl border border-gray-700/50 border-dashed">
-                    No pending subscription requests.
+                    No requests found matching your filters.
                 </div>
             ) : (
                 <>
                     {/* MOBILE VIEW (Cards) */}
                     <div className="md:hidden flex flex-col gap-4">
-                        {requests.map((req) => (
+                        {currentItems.map((req) => (
                             <div key={req.id} className="bg-slate-800 p-5 rounded-xl border border-slate-700 shadow-sm flex flex-col gap-4 hover:border-slate-600 transition-all">
                                 <div className="flex justify-between items-start">
                                     <div className="flex items-center gap-3 overflow-hidden">
@@ -180,12 +234,9 @@ export default function AdminSubscriptions() {
 
                     {/* DESKTOP VIEW (Table) */}
                     <div className="hidden md:block bg-slate-800 rounded-xl border border-slate-700 overflow-x-auto shadow-sm">
-
-                        {/* ➤ [FIX] Thêm min-w-[900px] để bảng không bị bóp méo khi thu nhỏ cửa sổ */}
                         <table className="w-full text-left border-collapse min-w-[900px]">
                             <thead>
                                 <tr className="bg-slate-900/50 text-slate-300 border-b border-slate-700 text-xs uppercase font-semibold">
-                                    {/* Điều chỉnh lại % width cho hợp lý hơn */}
                                     <th className="p-4 w-[25%] min-w-[200px]">User Info</th>
                                     <th className="p-4 w-[12%]">Current Plan</th>
                                     <th className="p-4 w-[12%]">Req. Plan</th>
@@ -195,7 +246,7 @@ export default function AdminSubscriptions() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-700/50">
-                                {requests.map((req) => (
+                                {currentItems.map((req) => (
                                     <tr key={req.id} className="hover:bg-slate-700/30 transition-colors">
                                         <td className="p-4">
                                             <div className="font-semibold text-white break-all">{req.User?.email || 'Unknown'}</div>
@@ -238,6 +289,43 @@ export default function AdminSubscriptions() {
                             </tbody>
                         </table>
                     </div>
+
+                    {/* --- PAGINATION CONTROLS --- */}
+                    {filteredRequests.length > 0 && (
+                        <div className="flex flex-col md:flex-row justify-between items-center gap-4 pt-4 border-t border-slate-700/50">
+                            <div className="text-sm text-gray-400">
+                                Showing <span className="font-bold text-white">{indexOfFirstItem + 1}</span> to <span className="font-bold text-white">{Math.min(indexOfLastItem, filteredRequests.length)}</span> of <span className="font-bold text-white">{filteredRequests.length}</span> results
+                            </div>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                    disabled={currentPage === 1}
+                                    className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-gray-400 hover:text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    <ChevronLeft size={18} />
+                                </button>
+                                {Array.from({ length: totalPages }, (_, i) => (
+                                    <button
+                                        key={i + 1}
+                                        onClick={() => setCurrentPage(i + 1)}
+                                        className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${currentPage === i + 1
+                                                ? 'bg-blue-600 text-white'
+                                                : 'bg-slate-800 border border-slate-700 text-gray-400 hover:bg-slate-700 hover:text-white'
+                                            }`}
+                                    >
+                                        {i + 1}
+                                    </button>
+                                ))}
+                                <button
+                                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                    disabled={currentPage === totalPages}
+                                    className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-gray-400 hover:text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    <ChevronRight size={18} />
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </>
             )}
 
