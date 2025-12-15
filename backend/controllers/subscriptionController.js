@@ -1,3 +1,4 @@
+// backend/controllers/subscriptionController.js
 const { User, SubscriptionRequest } = require('../models/associations');
 const { sendEmail } = require('../utils/emailService');
 
