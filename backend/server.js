@@ -19,38 +19,21 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ============================================================
-// 🔒 CẤU HÌNH BẢO MẬT CORS (LINH HOẠT & AN TOÀN)
+// 🔒 CẤU HÌNH BẢO MẬT CORS (DANH SÁCH TĨNH)
 // ============================================================
 
-// 1. Danh sách các domain CỐ ĐỊNH (Localhost, Domain chính)
-const fixedOrigins = [
-    "http://localhost:3000",
-    "https://crisis-alert.vercel.app", // (Ví dụ nếu bạn có domain ngắn này)
+// Chỉ cho phép đúng những domain này gọi API
+const allowedOrigins = [
+    "http://localhost:3000",                                      // Localhost
+    "https://crisis-alert-theta.vercel.app",                      // Domain Production XỊN
+    "https://crisis-alert-git-master-rankoutsiders-projects.vercel.app" // Domain nhánh Master (phòng hờ)
 ];
 
-// 2. Biểu thức chính quy (Regex) cho các domain ĐỘNG
-// Ý nghĩa: Chấp nhận mọi domain bắt đầu bằng "https://crisis-alert" và kết thúc bằng ".vercel.app"
-// Ví dụ khớp: https://crisis-alert-12345.vercel.app, https://crisis-alert-git-main.vercel.app
-const vercelPreviewPattern = /^https:\/\/crisis-alert.*\.vercel\.app$/;
-
-// 3. Hàm kiểm tra xem Origin có hợp lệ không
-const isOriginAllowed = (origin) => {
-    // Cho phép request không có origin (như Postman, Server-to-Server)
-    if (!origin) return true;
-
-    // Kiểm tra trong danh sách cố định
-    if (fixedOrigins.includes(origin)) return true;
-
-    // Kiểm tra theo mẫu (Regex) cho Vercel Preview
-    if (vercelPreviewPattern.test(origin)) return true;
-
-    return false;
-};
-
-// Cấu hình cho Express
+// Cấu hình CORS cho Express
 const corsOptions = {
     origin: function (origin, callback) {
-        if (isOriginAllowed(origin)) {
+        // !origin: Cho phép request từ Postman hoặc Server-to-Server không có origin
+        if (!origin || allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
             console.log("🚫 CORS Blocked:", origin);
@@ -58,25 +41,18 @@ const corsOptions = {
         }
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    credentials: true,
+    credentials: true, // Cho phép nhận cookie/token
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
 };
 
 const httpServer = http.createServer(app);
 
 // ============================================================
-// 🔌 CẤU HÌNH SOCKET.IO (DÙNG CHUNG LOGIC TRÊN)
+// 🔌 CẤU HÌNH SOCKET.IO
 // ============================================================
 const io = new Server(httpServer, {
     cors: {
-        origin: function (origin, callback) {
-            // Socket.io đôi khi gửi origin là "null" hoặc undefined trong một số trường hợp handshake
-            if (isOriginAllowed(origin)) {
-                callback(null, true);
-            } else {
-                callback(new Error('Not allowed by CORS'));
-            }
-        },
+        origin: allowedOrigins, // Dùng chung danh sách allowedOrigins ở trên
         methods: ["GET", "POST"],
         credentials: true
     }
@@ -115,7 +91,7 @@ app.use('/api/subscription', require('./routes/subscription'));
 app.use('/api/admin', require('./routes/admin'));
 
 app.get('/', (req, res) => {
-    res.send('CrisisAlert API is Running with Dynamic CORS!');
+    res.send('CrisisAlert API is Running (Production Mode)!');
 });
 
 // Start Server
