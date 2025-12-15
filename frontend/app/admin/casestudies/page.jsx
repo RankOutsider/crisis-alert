@@ -145,7 +145,7 @@ export default function AdminCaseStudies() {
                     placeholder="Search by title or summary..."
 
                     // Thêm filter Status cho Case Study (nếu cần)
-                    statusOptions={['Active', 'Resolved', 'Pending']}
+                    statusOptions={['Unresolved', 'Resolved']}
                     selectedStatus={selectedStatus}
                     onStatusChange={setSelectedStatus}
                 />
