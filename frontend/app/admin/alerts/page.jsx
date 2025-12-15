@@ -11,11 +11,11 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
-import FilterBar from '@/app/components/FilterBar'; // 1. Import FilterBar
-import useDebounce from '@/hooks/useDebounce';     // 2. Import useDebounce
+import FilterBar from '@/app/components/FilterBar'; // Import FilterBar
+import useDebounce from '@/hooks/useDebounce';     // Import useDebounce
 
 export default function AdminAlerts() {
-    // --- 1. FETCH DATA (Lấy toàn bộ) ---
+    // --- FETCH DATA ---
     // Bỏ pagination params
     const endpoint = 'admin/alerts';
     const { data, error, isLoading } = useSWR(endpoint, swrFetcher);
@@ -42,7 +42,7 @@ export default function AdminAlerts() {
         setCurrentPage(1);
     }, [debouncedSearchTerm, selectedStatus, selectedSeverity]);
 
-    // 1. Lọc dữ liệu
+    // Lọc dữ liệu
     const filteredAlerts = useMemo(() => {
         return allAlerts.filter(alert => {
             const title = alert.title?.toLowerCase() || '';
@@ -62,7 +62,7 @@ export default function AdminAlerts() {
         });
     }, [allAlerts, debouncedSearchTerm, selectedStatus, selectedSeverity]);
 
-    // 2. Cắt trang
+    // Cắt trang
     const totalPages = Math.ceil(filteredAlerts.length / itemsPerPage) || 1;
     const indexOfLastItem = currentPage * itemsPerPage;
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
@@ -88,14 +88,13 @@ export default function AdminAlerts() {
 
     // --- ACTION HANDLERS ---
 
-    // 1. Xóa đơn lẻ
+    // Xóa đơn lẻ
     const handleDelete = async (id) => {
         if (!window.confirm('Delete this alert? This will stop tracking for the user.')) return;
 
         try {
             await deleteAdminAlert(id);
 
-            // Update tạm thời UI
             const updatedList = allAlerts.filter(a => a.id !== id);
             mutate(endpoint, { ...data, alerts: updatedList }, false);
 

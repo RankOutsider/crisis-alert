@@ -1,7 +1,7 @@
 // frontend/app/admin/posts/page.jsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import useSWR, { mutate } from 'swr';
 import {
     swrFetcher,
@@ -9,36 +9,76 @@ import {
     deleteAdminPostsBulk
 } from '@/utils/api';
 import {
-    Search, Trash2, ChevronLeft, ChevronRight,
+    Trash2, ChevronLeft, ChevronRight,
     Loader2, ExternalLink, Calendar, Layers,
     CheckSquare, Square, MessageCircle
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
+import FilterBar from '@/app/components/FilterBar'; // 1. Import FilterBar
+import useDebounce from '@/hooks/useDebounce';     // 2. Import useDebounce
 
 export default function AdminPosts() {
-    // State UI
-    const [page, setPage] = useState(1);
-    const [search, setSearch] = useState('');
+    // --- 1. FETCH DATA (Lấy toàn bộ) ---
+    // Bỏ pagination params
+    const endpoint = 'admin/posts';
+    const { data, error, isLoading } = useSWR(endpoint, swrFetcher);
+
+    // Xử lý dữ liệu trả về (giả sử backend trả về { posts: [...] } hoặc mảng trực tiếp)
+    const allPosts = Array.isArray(data) ? data : (data?.posts || []);
+
+    // --- STATE UI ---
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedSentiment, setSelectedSentiment] = useState([]); // Filter Sentiment
+    const [selectedPlatform, setSelectedPlatform] = useState([]);   // Filter Platform
+
+    const [currentPage, setCurrentPage] = useState(1);
     const [selectedIds, setSelectedIds] = useState([]);
+    const itemsPerPage = 10;
 
-    // --- 1. SWR FETCH DATA ---
-    // Thêm debouncing cho search nếu cần, ở đây dùng trực tiếp
-    const endpoint = `admin/posts?page=${page}&limit=10&search=${search}`;
+    // --- DEBOUNCE SEARCH ---
+    const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
-    const { data, error, isLoading } = useSWR(endpoint, swrFetcher, {
-        keepPreviousData: true,
-    });
+    // --- LOGIC LỌC & PHÂN TRANG CLIENT-SIDE ---
 
-    // Parse dữ liệu
-    const posts = data?.posts || [];
-    const totalPages = data?.pages || 1;
-    const totalPosts = data?.totalPosts || 0;
+    // Reset trang về 1 khi filter thay đổi
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [debouncedSearchTerm, selectedSentiment, selectedPlatform]);
 
-    // Scroll lên đầu khi chuyển trang
+    // 1. Lọc dữ liệu
+    const filteredPosts = useMemo(() => {
+        return allPosts.filter(post => {
+            const title = post.title?.toLowerCase() || '';
+            const content = post.content?.toLowerCase() || '';
+            const source = post.source?.toLowerCase() || '';
+            const search = debouncedSearchTerm.toLowerCase();
+
+            // Tìm theo Title, Content hoặc Source
+            const matchesSearch = title.includes(search) || content.includes(search) || source.includes(search);
+
+            // Filter theo Sentiment
+            const matchesSentiment = selectedSentiment.length === 0 ||
+                (post.sentiment && selectedSentiment.includes(post.sentiment.toUpperCase()));
+
+            // Filter theo Platform
+            const matchesPlatform = selectedPlatform.length === 0 ||
+                (post.platform && selectedPlatform.includes(post.platform));
+
+            return matchesSearch && matchesSentiment && matchesPlatform;
+        });
+    }, [allPosts, debouncedSearchTerm, selectedSentiment, selectedPlatform]);
+
+    // 2. Cắt trang
+    const totalPages = Math.ceil(filteredPosts.length / itemsPerPage) || 1;
+    const indexOfLastItem = currentPage * itemsPerPage;
+    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+    const currentItems = filteredPosts.slice(indexOfFirstItem, indexOfLastItem);
+
+    // Scroll lên đầu khi đổi trang
     useEffect(() => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
-    }, [page]);
+    }, [currentPage]);
 
     // --- LOGIC CHECKBOX ---
     const toggleSelect = (id) => {
@@ -48,28 +88,21 @@ export default function AdminPosts() {
     };
 
     const toggleSelectAll = () => {
-        selectedIds.length === posts.length && posts.length > 0
+        selectedIds.length === filteredPosts.length && filteredPosts.length > 0
             ? setSelectedIds([])
-            : setSelectedIds(posts.map(post => post.id));
+            : setSelectedIds(filteredPosts.map(post => post.id));
     };
 
     // --- LOGIC ACTIONS ---
-
-    // 1. Xóa đơn lẻ
     const handleDelete = async (id) => {
         if (!window.confirm('Are you sure you want to delete this post?')) return;
-
         try {
             await deleteAdminPost(id);
-
-            // Optimistic Update
-            mutate(endpoint, {
-                ...data,
-                posts: posts.filter(p => p.id !== id)
-            }, false);
+            
+            const updatedList = allPosts.filter(p => p.id !== id);
+            mutate(endpoint, { ...data, posts: updatedList }, false);
 
             toast.success('Post deleted successfully');
-            // Fetch lại để đồng bộ
             mutate(endpoint);
         } catch (error) {
             console.error(error);
@@ -84,9 +117,9 @@ export default function AdminPosts() {
         if (window.confirm(`Are you sure you want to DELETE ${selectedIds.length} selected posts? This cannot be undone.`)) {
             try {
                 await deleteAdminPostsBulk(selectedIds);
-                mutate(endpoint); // Refresh lại
                 toast.success(`Deleted ${selectedIds.length} posts successfully.`);
                 setSelectedIds([]);
+                mutate(endpoint);
             } catch (error) {
                 console.error(error);
                 toast.error('Failed to delete selected posts.');
@@ -105,16 +138,6 @@ export default function AdminPosts() {
         }
     };
 
-    const Pagination = () => (
-        <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-400 hidden md:inline">Page {page} of {totalPages}</span>
-            <div className="flex space-x-2">
-                <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="p-2 rounded bg-gray-800 border border-gray-700 hover:bg-gray-700 disabled:opacity-50 transition-colors"><ChevronLeft size={20} /></button>
-                <button disabled={page === totalPages} onClick={() => setPage(p => p + 1)} className="p-2 rounded bg-gray-800 border border-gray-700 hover:bg-gray-700 disabled:opacity-50 transition-colors"><ChevronRight size={20} /></button>
-            </div>
-        </div>
-    );
-
     if (error) return <div className="text-center py-10 text-red-400">Failed to load posts.</div>;
 
     return (
@@ -124,23 +147,26 @@ export default function AdminPosts() {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                         <MessageCircle className="text-blue-500" />
-                        Post Management <span className="text-gray-500 text-lg font-normal">({totalPosts})</span>
+                        Post Management <span className="text-gray-500 text-lg font-normal">({filteredPosts.length})</span>
                     </h1>
-
-                    <div className="flex flex-col-reverse md:flex-row gap-4 w-full md:w-auto items-end md:items-center">
-                        <Pagination />
-                        <div className="relative w-full md:w-auto">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                            <input
-                                type="text"
-                                placeholder="Search title, content..."
-                                className="bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none w-full md:w-64 text-sm transition-all"
-                                value={search}
-                                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                            />
-                        </div>
-                    </div>
                 </div>
+
+                {/* FILTER BAR (Đầy đủ options) */}
+                <FilterBar
+                    searchTerm={searchTerm}
+                    onSearchChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search title, content, source..."
+
+                    // Filter Sentiment
+                    sentimentOptions={['POSITIVE', 'NEGATIVE', 'NEUTRAL']}
+                    selectedSentiments={selectedSentiment}
+                    onSentimentChange={setSelectedSentiment}
+
+                    // Filter Platform (Bạn có thể thêm các platform khác nếu cần)
+                    platformOptions={['Facebook', 'Twitter', 'Reddit', 'Instagram', 'Web']}
+                    selectedPlatforms={selectedPlatform}
+                    onPlatformChange={setSelectedPlatform}
+                />
 
                 {/* BULK ACTION BAR */}
                 {selectedIds.length > 0 && (
@@ -162,9 +188,9 @@ export default function AdminPosts() {
             {/* LOADING STATE */}
             {isLoading ? (
                 <div className="flex justify-center py-10 text-gray-400"><Loader2 className="animate-spin mr-2" /> Loading posts...</div>
-            ) : posts.length === 0 ? (
+            ) : filteredPosts.length === 0 ? (
                 <div className="text-center py-12 text-gray-400 bg-gray-800/50 rounded-xl border border-gray-700/50 border-dashed">
-                    No posts found matching your search.
+                    No posts found matching your filters.
                 </div>
             ) : (
                 <>
@@ -172,12 +198,12 @@ export default function AdminPosts() {
                     <div className="md:hidden flex flex-col gap-4">
                         <div className="flex items-center gap-3 px-1 mb-1">
                             <button onClick={toggleSelectAll} className="text-gray-400 hover:text-white flex items-center gap-2 transition-colors">
-                                {selectedIds.length === posts.length ? <CheckSquare className="text-blue-500" size={20} /> : <Square size={20} />}
+                                {selectedIds.length === filteredPosts.length ? <CheckSquare className="text-blue-500" size={20} /> : <Square size={20} />}
                                 <span className="text-sm font-medium">Select All</span>
                             </button>
                         </div>
 
-                        {posts.map((post) => {
+                        {currentItems.map((post) => {
                             const isSelected = selectedIds.includes(post.id);
                             return (
                                 <div key={post.id} className={`bg-slate-800 p-5 rounded-xl border shadow-sm flex flex-col gap-3 transition-all ${isSelected ? 'border-blue-500/50 bg-blue-900/10' : 'border-slate-700 hover:border-slate-600'}`}>
@@ -246,7 +272,7 @@ export default function AdminPosts() {
                                 <tr className="bg-slate-900/50 text-slate-300 border-b border-slate-700 text-xs uppercase font-semibold">
                                     <th className="p-4 w-12 text-center">
                                         <button onClick={toggleSelectAll} className="hover:text-white transition-colors">
-                                            {posts.length > 0 && selectedIds.length === posts.length ? <CheckSquare className="text-blue-500" size={18} /> : <Square size={18} />}
+                                            {filteredPosts.length > 0 && selectedIds.length === filteredPosts.length ? <CheckSquare className="text-blue-500" size={18} /> : <Square size={18} />}
                                         </button>
                                     </th>
                                     <th className="p-4 w-[40%]">Post Content</th>
@@ -257,7 +283,7 @@ export default function AdminPosts() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-700/50">
-                                {posts.map((post) => {
+                                {currentItems.map((post) => {
                                     const isSelected = selectedIds.includes(post.id);
                                     return (
                                         <tr key={post.id} className={`transition-colors ${isSelected ? 'bg-blue-900/10 hover:bg-blue-900/20' : 'hover:bg-slate-700/30'}`}>
@@ -314,10 +340,42 @@ export default function AdminPosts() {
                 </>
             )}
 
-            {/* Bottom Pagination */}
-            <div className="flex justify-end pt-4">
-                <Pagination />
-            </div>
+            {/* Pagination Controls */}
+            {filteredPosts.length > 0 && (
+                <div className="flex flex-col md:flex-row justify-between items-center gap-4 pt-4 border-t border-slate-700/50">
+                    <div className="text-sm text-gray-400">
+                        Showing <span className="font-bold text-white">{indexOfFirstItem + 1}</span> to <span className="font-bold text-white">{Math.min(indexOfLastItem, filteredPosts.length)}</span> of <span className="font-bold text-white">{filteredPosts.length}</span> results
+                    </div>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                            disabled={currentPage === 1}
+                            className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-gray-400 hover:text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            <ChevronLeft size={18} />
+                        </button>
+                        {Array.from({ length: totalPages }, (_, i) => (
+                            <button
+                                key={i + 1}
+                                onClick={() => setCurrentPage(i + 1)}
+                                className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${currentPage === i + 1
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-slate-800 border border-slate-700 text-gray-400 hover:bg-slate-700 hover:text-white'
+                                    }`}
+                            >
+                                {i + 1}
+                            </button>
+                        ))}
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                            disabled={currentPage === totalPages}
+                            className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-gray-400 hover:text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            <ChevronRight size={18} />
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
