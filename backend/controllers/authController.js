@@ -196,7 +196,7 @@ exports.createReactivationRequest = async (req, res) => {
 
         // Gửi email thông báo cho Admin
         res.status(201).json({ message: 'Reactivation request sent successfully to the administrator.' });
-        sendReactivationRequestNotification(user.username).catch(err => {
+        sendReactivationRequestNotification(user.username, user.email).catch(err => {
             console.error(`⚠️ Background email sending error (Reactivation Request) for ${user.username}:`, err.message);
         });
     } catch (error) {
