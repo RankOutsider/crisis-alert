@@ -122,23 +122,26 @@ const getEmailTemplate = (title, content, callToAction = null) => {
 
 
 // 1. Admin Notification
-const sendReactivationRequestNotification = async (username) => {
+const sendReactivationRequestNotification = async (username, userEmail) => {
     const adminEmail = process.env.ADMIN_EMAIL || ACTIVE_SENDER;
     try {
         const html = getEmailTemplate(
             '🔔 Reactivation Request',
             `<p>User <strong style="font-size: 18px; color: #0f172a;">${username}</strong> has requested to reactivate their account.</p>
-             <p>Please review their profile in the Admin Dashboard.</p>`,
-            { text: 'Go to Admin Dashboard', url: `${CLIENT_URL}/admin`, color: 'blue' }
+            <p><strong>Email:</strong> <a href="mailto:${userEmail}" style="color: #3b82f6;">${userEmail}</a></p>
+            <p>Please review their profile and approve/reject the request in the Admin Dashboard.</p>`,
+            { text: 'Go to Admin Dashboard', url: `${CLIENT_URL}/admin/reactivations`, color: 'blue' }
         );
 
         return await ACTIVE_TRANSPORTER.sendMail({
             from: ACTIVE_SENDER,
             to: adminEmail,
-            subject: `🔔 [Admin] Reactivation Request: ${username}`,
+            subject: `🔔 [Admin] Unlock Request: ${username}`,
             html: html
         });
-    } catch (e) { console.error(e); }
+    } catch (e) {
+        console.error("❌ Error sending admin notification:", e);
+    }
 };
 
 // 2. Reactivation Result
