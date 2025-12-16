@@ -586,10 +586,6 @@ const deleteCaseStudiesBulk = async (req, res) => {
     }
 };
 
-// ---------------------------------------------------------
-// NEW FUNCTIONS: Reactivation History
-// ---------------------------------------------------------
-
 // @desc    Lấy lịch sử yêu cầu (Đã duyệt/từ chối)
 // @route   GET /api/admin/reactivations/history
 const getReactivationHistory = async (req, res) => {
@@ -602,7 +598,7 @@ const getReactivationHistory = async (req, res) => {
         const whereCondition = {
             status: status
                 ? status // Nếu có filter, dùng chính xác
-                : { [Op.in]: ['Approved', 'Rejected'] } // Mặc định bỏ PENDING
+                : { [Op.in]: ['APPROVED', 'REJECTED'] } // Mặc định bỏ PENDING
         };
 
         // Cấu hình include User để search theo email/username
