@@ -18,10 +18,6 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ============================================================
-// 🔒 CẤU HÌNH BẢO MẬT CORS (DANH SÁCH TĨNH)
-// ============================================================
-
 // Chỉ cho phép đúng những domain này gọi API
 const allowedOrigins = [
     "http://localhost:3000",                                      // Localhost
