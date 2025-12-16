@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import Modal from './Modal'; // Import Modal dùng chung
-import api from '@/utils/api'; // Đường dẫn api của bạn
+import { api } from '@/utils/api'; // Đường dẫn api của bạn
 import { Search, Trash2, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 
 export default function ReactivationHistoryModal({ isOpen, onClose }) {
