@@ -31,7 +31,6 @@ const registerSchema = {
     },
     confirmPassword: {
         required: true,
-        // So sánh với password
         custom: (value, values) => value === values.password,
         message: "Passwords do not match."
     }
