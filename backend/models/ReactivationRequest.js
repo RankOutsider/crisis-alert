@@ -27,9 +27,9 @@ ReactivationRequest.init({
     },
     // Trạng thái của yêu cầu
     status: {
-        type: DataTypes.ENUM('Pending', 'Approved', 'Rejected'),
+        type: DataTypes.ENUM('PENDING', 'APPROVED', 'REJECTED'),
         allowNull: false,
-        defaultValue: 'Pending'
+        defaultValue: 'PENDING'
     },
     // Lý do Admin đưa ra khi Phê duyệt/Từ chối (Tùy chọn)
     adminReason: {
