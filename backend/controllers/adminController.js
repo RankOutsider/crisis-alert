@@ -276,7 +276,7 @@ const approveReactivationRequest = async (req, res) => {
             await user.save({ transaction: t });
 
             // 2. Cập nhật trạng thái yêu cầu
-            request.status = 'Approved';
+            request.status = 'APPROVED';
             request.processedAt = new Date();
 
             request.adminReason = adminReason || 'Your account has been reactivated by admin.';
@@ -294,7 +294,7 @@ const approveReactivationRequest = async (req, res) => {
         // 4. SỬ DỤNG EMAIL SERVICE
 
         try {
-            await sendReactivationResultEmail(user.email, 'Approved', request.adminReason);
+            await sendReactivationResultEmail(user.email, 'APPROVED', request.adminReason);
         } catch (emailError) {
             console.error(`🔴 Lỗi gửi email cho user ${user.email}:`, emailError);
         }
@@ -333,7 +333,7 @@ const rejectReactivationRequest = async (req, res) => {
         }
 
         // 1. Cập nhật trạng thái yêu cầu
-        request.status = 'Rejected';
+        request.status = 'REJECTED';
         request.processedAt = new Date();
         request.adminReason = adminReason;
         await request.save();
@@ -347,7 +347,7 @@ const rejectReactivationRequest = async (req, res) => {
 
         // 3. SỬ DỤNG EMAIL SERVICE
         try {
-            await sendReactivationResultEmail(user.email, 'Rejected', adminReason);
+            await sendReactivationResultEmail(user.email, 'REJECTED', adminReason);
         } catch (emailError) {
             console.error(`🔴 Lỗi gửi email cho user ${user.email}:`, emailError);
         }
@@ -644,7 +644,7 @@ const deleteReactivationHistory = async (req, res) => {
         const deleted = await ReactivationRequest.destroy({
             where: {
                 id,
-                status: { [Op.in]: ['Approved', 'Rejected'] }
+                status: { [Op.in]: ['APPROVED', 'REJECTED'] }
             }
         });
 
