@@ -9,7 +9,8 @@ const {
     getPosts, deletePost, deletePostsBulk,
     getAlerts, deleteAlert, deleteAlertsBulk,
     getCaseStudies, deleteCaseStudy, deleteCaseStudiesBulk,
-    getReactivationRequests, approveReactivationRequest, rejectReactivationRequest
+    getReactivationRequests, approveReactivationRequest, rejectReactivationRequest,
+    getReactivationHistory, deleteReactivationHistory
 } = require('../controllers/adminController');
 
 router.use(protect);
@@ -22,6 +23,10 @@ router.route('/users/:id').put(updateUserByAdmin);
 
 // Toggle Admin Status
 router.put('/users/:id/admin-lock', toggleUserAdminStatus);
+
+// --- Reactivation History Routes ---
+router.get('/reactivations/history', getReactivationHistory);
+router.delete('/reactivations/history/:id', deleteReactivationHistory);
 
 // --- Reactivation Request Routes ---
 router.get('/reactivation-requests', getReactivationRequests);

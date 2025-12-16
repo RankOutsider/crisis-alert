@@ -9,15 +9,15 @@ import { toast } from 'react-toastify';
 import {
     CheckCircle, XCircle, Loader2, Clock,
     User, Mail, MessageSquare, AlertCircle,
-    ChevronLeft, ChevronRight
+    ChevronLeft, ChevronRight, History
 } from 'lucide-react';
 import Modal from '@/app/components/Modal';
-import FilterBar from '@/app/components/FilterBar'; // Import FilterBar
-import useDebounce from '@/hooks/useDebounce';     // Import useDebounce
+import FilterBar from '@/app/components/FilterBar';
+import useDebounce from '@/hooks/useDebounce';
+import ReactivationHistoryModal from '@/app/components/ReactivationHistoryModal';
 
 export default function ReactivationRequestsPage() {
     // --- FETCH DATA ---
-    // Bỏ pagination params
     const endpoint = '/admin/reactivation-requests';
     const { data, error, isLoading } = useSWR(endpoint, swrFetcher);
 
@@ -26,16 +26,19 @@ export default function ReactivationRequestsPage() {
 
     // --- STATE UI ---
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedStatus, setSelectedStatus] = useState([]); // Filter Status
+    const [selectedStatus, setSelectedStatus] = useState([]); // Filter Status client-side
 
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
-    // --- State cho Modal Xử lý ---
+    // --- State cho Modal Xử lý (Approve/Reject) ---
     const [selectedRequest, setSelectedRequest] = useState(null);
     const [actionType, setActionType] = useState(null); // 'approve' | 'reject'
     const [adminReason, setAdminReason] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
+
+    // --- State cho Modal Lịch sử ---
+    const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
     // --- DEBOUNCE SEARCH ---
     const debouncedSearchTerm = useDebounce(searchTerm, 500);
@@ -57,7 +60,7 @@ export default function ReactivationRequestsPage() {
             // Tìm theo Username hoặc Email
             const matchesSearch = username.includes(search) || email.includes(search);
 
-            // Filter theo Status
+            // Filter theo Status (Thực tế API chỉ trả về Pending, nhưng giữ logic này nếu API thay đổi sau này)
             const matchesStatus = selectedStatus.length === 0 || selectedStatus.includes(req.status);
 
             return matchesSearch && matchesStatus;
@@ -105,7 +108,7 @@ export default function ReactivationRequestsPage() {
             mutate(endpoint, { ...data, requests: updatedRequests }, false);
 
             toast.success(`Request ${actionType}ed successfully!`);
-            mutate(endpoint); // Fetch lại data chuẩn từ server
+            mutate(endpoint); // Fetch lại data chuẩn từ server để list biến mất
             setSelectedRequest(null);
 
         } catch (err) {
@@ -139,6 +142,15 @@ export default function ReactivationRequestsPage() {
                         </h1>
                         <p className="text-sm text-gray-400 mt-1">Manage account unlocking requests</p>
                     </div>
+
+                    {/* NÚT MỞ LỊCH SỬ XỬ LÝ (MỚI) */}
+                    <button
+                        onClick={() => setIsHistoryOpen(true)}
+                        className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg transition-colors text-sm font-medium border border-slate-600 shadow-sm"
+                    >
+                        <History size={18} />
+                        <span>Lịch sử xử lý</span>
+                    </button>
                 </div>
 
                 {/* FILTER BAR */}
@@ -158,7 +170,7 @@ export default function ReactivationRequestsPage() {
             {filteredRequests.length === 0 ? (
                 <div className="bg-slate-800/50 rounded-xl p-10 text-center border border-slate-700 border-dashed flex flex-col items-center gap-3">
                     <CheckCircle size={40} className="text-green-500/50" />
-                    <p className="text-gray-400">No requests found matching your filters.</p>
+                    <p className="text-gray-400">No pending requests found.</p>
                 </div>
             ) : (
                 /* Grid Cards */
@@ -235,8 +247,8 @@ export default function ReactivationRequestsPage() {
                                 key={i + 1}
                                 onClick={() => setCurrentPage(i + 1)}
                                 className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${currentPage === i + 1
-                                        ? 'bg-blue-600 text-white'
-                                        : 'bg-slate-800 border border-slate-700 text-gray-400 hover:bg-slate-700 hover:text-white'
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-slate-800 border border-slate-700 text-gray-400 hover:bg-slate-700 hover:text-white'
                                     }`}
                             >
                                 {i + 1}
@@ -300,6 +312,12 @@ export default function ReactivationRequestsPage() {
                     </div>
                 </Modal>
             )}
+
+            {/* --- MODAL LỊCH SỬ REACTIVATION --- */}
+            <ReactivationHistoryModal
+                isOpen={isHistoryOpen}
+                onClose={() => setIsHistoryOpen(false)}
+            />
         </div>
     );
 }
