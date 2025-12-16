@@ -352,7 +352,8 @@ const rejectReactivationRequest = async (req, res) => {
             console.error(`🔴 Lỗi gửi email cho user ${user.email}:`, emailError);
         }
         res.status(200).json({ message: 'Request rejected successfully.', request });
-    } catch (error) {        console.error("Error rejecting reactivation request:", error);
+    } catch (error) {
+        console.error("Error rejecting reactivation request:", error);
         res.status(500).json({ message: 'Server Error during rejection' });
     }
 };
@@ -585,11 +586,87 @@ const deleteCaseStudiesBulk = async (req, res) => {
     }
 };
 
+// ---------------------------------------------------------
+// NEW FUNCTIONS: Reactivation History
+// ---------------------------------------------------------
+
+// @desc    Lấy lịch sử yêu cầu (Đã duyệt/từ chối)
+// @route   GET /api/admin/reactivations/history
+const getReactivationHistory = async (req, res) => {
+    try {
+        const { page = 1, limit = 10, search = '', status = '' } = req.query;
+        const offset = (page - 1) * limit;
+
+        // Mặc định: Lấy Approved hoặc Rejected (không lấy PENDING)
+        // Nếu user chọn filter, dùng filter đó.
+        const whereCondition = {
+            status: status
+                ? status // Nếu có filter, dùng chính xác
+                : { [Op.in]: ['Approved', 'Rejected'] } // Mặc định bỏ PENDING
+        };
+
+        // Cấu hình include User để search theo email/username
+        const includeUser = {
+            model: User,
+            attributes: ['id', 'username', 'email'],
+        };
+
+        // Logic search: Tìm trong User model (username hoặc email)
+        if (search) {
+            includeUser.where = {
+                [Op.or]: [
+                    { username: { [Op.like]: `%${search}%` } },
+                    { email: { [Op.like]: `%${search}%` } }
+                ]
+            };
+        }
+
+        const { count, rows } = await ReactivationRequest.findAndCountAll({
+            where: whereCondition,
+            include: [includeUser],
+            limit: parseInt(limit),
+            offset: parseInt(offset),
+            order: [['updatedAt', 'DESC']], // Mới nhất lên đầu
+        });
+
+        res.json({
+            total: count,
+            pages: Math.ceil(count / limit),
+            data: rows
+        });
+    } catch (error) {
+        console.error('Error fetching history:', error);
+        res.status(500).json({ message: 'Server error fetching history' });
+    }
+};
+
+// @desc    Xoá lịch sử yêu cầu (Hard delete log)
+// @route   DELETE /api/admin/reactivations/history/:id
+const deleteReactivationHistory = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const deleted = await ReactivationRequest.destroy({
+            where: {
+                id,
+                status: { [Op.in]: ['Approved', 'Rejected'] }
+            }
+        });
+
+        if (!deleted) {
+            return res.status(404).json({ message: 'Request log not found or is still pending' });
+        }
+
+        res.json({ message: 'History log deleted successfully' });
+    } catch (error) {
+        console.error("Error deleting history:", error);
+        res.status(500).json({ message: 'Server error deleting history' });
+    }
+};
+
 module.exports = {
-    getUsers, updateUserByAdmin, deleteUsersBulk,
-    toggleUserAdminStatus,
-    getPosts, deletePost, deletePostsBulk,
-    getAlerts, deleteAlert, deleteAlertsBulk,
-    getCaseStudies, deleteCaseStudy, deleteCaseStudiesBulk,
-    getReactivationRequests, approveReactivationRequest, rejectReactivationRequest
+    getUsers, updateUserByAdmin, deleteUsersBulk, toggleUserAdminStatus,
+    getPosts, deletePost, deletePostsBulk, getAlerts,
+    deleteAlert, deleteAlertsBulk, getCaseStudies, deleteCaseStudy,
+    deleteCaseStudiesBulk, getReactivationRequests, approveReactivationRequest, rejectReactivationRequest,
+    getReactivationHistory, deleteReactivationHistory
 };
