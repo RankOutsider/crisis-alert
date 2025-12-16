@@ -26,14 +26,14 @@ export default function ReactivationRequestsPage() {
 
     // --- STATE UI ---
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedStatus, setSelectedStatus] = useState([]); // Filter Status client-side
+    const [selectedStatus, setSelectedStatus] = useState([]);
 
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
-    // --- State cho Modal Xử lý (Approve/Reject) ---
+    // --- State cho Modal Xử lý ---
     const [selectedRequest, setSelectedRequest] = useState(null);
-    const [actionType, setActionType] = useState(null); // 'approve' | 'reject'
+    const [actionType, setActionType] = useState(null);
     const [adminReason, setAdminReason] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
 
@@ -43,43 +43,33 @@ export default function ReactivationRequestsPage() {
     // --- DEBOUNCE SEARCH ---
     const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
-    // --- LOGIC LỌC & PHÂN TRANG CLIENT-SIDE ---
-
-    // Reset trang về 1 khi filter thay đổi
+    // --- LOGIC LỌC ---
     useEffect(() => {
         setCurrentPage(1);
     }, [debouncedSearchTerm, selectedStatus]);
 
-    // Lọc dữ liệu
     const filteredRequests = useMemo(() => {
         return allRequests.filter(req => {
             const username = req.User?.username?.toLowerCase() || '';
             const email = req.User?.email?.toLowerCase() || '';
             const search = debouncedSearchTerm.toLowerCase();
-
-            // Tìm theo Username hoặc Email
             const matchesSearch = username.includes(search) || email.includes(search);
-
-            // Filter theo Status (Thực tế API chỉ trả về Pending, nhưng giữ logic này nếu API thay đổi sau này)
             const matchesStatus = selectedStatus.length === 0 || selectedStatus.includes(req.status);
-
             return matchesSearch && matchesStatus;
         });
     }, [allRequests, debouncedSearchTerm, selectedStatus]);
 
-    // Cắt trang
+    // --- PHÂN TRANG ---
     const totalPages = Math.ceil(filteredRequests.length / itemsPerPage) || 1;
     const indexOfLastItem = currentPage * itemsPerPage;
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
     const currentItems = filteredRequests.slice(indexOfFirstItem, indexOfLastItem);
 
-    // Scroll lên đầu khi đổi trang
     useEffect(() => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }, [currentPage]);
 
     // --- HANDLERS ---
-
     const openModal = (request, type) => {
         setSelectedRequest(request);
         setActionType(type);
@@ -88,11 +78,9 @@ export default function ReactivationRequestsPage() {
 
     const handleSubmit = async () => {
         if (!selectedRequest || !actionType) return;
-
         setIsProcessing(true);
         try {
             const apiEndpoint = `admin/reactivation-requests/${selectedRequest.id}/${actionType}`;
-
             await api(apiEndpoint, {
                 method: 'PUT',
                 body: JSON.stringify({ adminReason })
@@ -104,13 +92,10 @@ export default function ReactivationRequestsPage() {
                     : req
             );
 
-            // Cập nhật cache SWR
             mutate(endpoint, { ...data, requests: updatedRequests }, false);
-
             toast.success(`Request ${actionType}ed successfully!`);
-            mutate(endpoint); // Fetch lại data chuẩn từ server để list biến mất
+            mutate(endpoint);
             setSelectedRequest(null);
-
         } catch (err) {
             toast.error(err.message || "Failed to process request");
         } finally {
@@ -118,7 +103,6 @@ export default function ReactivationRequestsPage() {
         }
     };
 
-    // Helper Status Colors
     const getStatusBadge = (status) => {
         switch (status) {
             case 'APPROVED': return 'bg-green-500/10 text-green-400 border-green-500/20';
@@ -143,13 +127,13 @@ export default function ReactivationRequestsPage() {
                         <p className="text-sm text-gray-400 mt-1">Manage account unlocking requests</p>
                     </div>
 
-                    {/* NÚT MỞ LỊCH SỬ XỬ LÝ (MỚI) */}
+                    {/* NÚT MỞ LỊCH SỬ */}
                     <button
                         onClick={() => setIsHistoryOpen(true)}
                         className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg transition-colors text-sm font-medium border border-slate-600 shadow-sm"
                     >
                         <History size={18} />
-                        <span>Lịch sử xử lý</span>
+                        <span>History Log</span>
                     </button>
                 </div>
 
@@ -158,8 +142,6 @@ export default function ReactivationRequestsPage() {
                     searchTerm={searchTerm}
                     onSearchChange={(e) => setSearchTerm(e.target.value)}
                     placeholder="Search by username or email..."
-
-                    // Filter Status
                     statusOptions={['PENDING', 'APPROVED', 'REJECTED']}
                     selectedStatus={selectedStatus}
                     onStatusChange={setSelectedStatus}
@@ -173,7 +155,6 @@ export default function ReactivationRequestsPage() {
                     <p className="text-gray-400">No pending requests found.</p>
                 </div>
             ) : (
-                /* Grid Cards */
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {currentItems.map((req) => (
                         <div key={req.id} className="bg-slate-800 border border-slate-700 rounded-xl p-5 hover:border-slate-600 transition-colors shadow-sm flex flex-col h-full animate-fadeIn">
@@ -206,7 +187,6 @@ export default function ReactivationRequestsPage() {
                                 </div>
                             </div>
 
-                            {/* Actions chỉ hiện nếu status là PENDING */}
                             {req.status === 'PENDING' && (
                                 <div className="flex gap-2 mt-auto pt-3 border-t border-slate-700/50">
                                     <button
@@ -313,7 +293,7 @@ export default function ReactivationRequestsPage() {
                 </Modal>
             )}
 
-            {/* --- MODAL LỊCH SỬ REACTIVATION --- */}
+            {/* MODAL LỊCH SỬ */}
             <ReactivationHistoryModal
                 isOpen={isHistoryOpen}
                 onClose={() => setIsHistoryOpen(false)}
