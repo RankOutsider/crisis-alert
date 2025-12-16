@@ -1,6 +1,7 @@
 // backend/controllers/subscriptionController.js
 const { User, SubscriptionRequest } = require('../models/associations');
-const { sendEmail } = require('../utils/emailService');
+const { sendEmail, sendUpgradeRequestNotification } = require('../utils/emailService'); // Import thêm hàm mới
+const { getActiveAdminEmails } = require('../utils/adminHelpers'); // Import Helper lấy email admin
 
 // [USER] Gửi yêu cầu nâng cấp khi bấm nút "I have completed payment"
 exports.createSubscriptionRequest = async (req, res) => {
@@ -22,6 +23,18 @@ exports.createSubscriptionRequest = async (req, res) => {
             plan,
             amount,
             status: 'PENDING'
+        });
+
+        // 1. Lấy danh sách email admin đang active
+        getActiveAdminEmails().then(async (activeAdminEmails) => {
+
+            if (activeAdminEmails && activeAdminEmails.length > 0) {
+                // Gửi mail cho tất cả admin cùng lúc
+                await sendUpgradeRequestNotification(activeAdminEmails, req.user, plan);
+            }
+        }).catch(err => {
+            console.error("⚠️ Background Admin Notification Error:", err);
+            // Không throw lỗi ở đây để tránh ảnh hưởng response trả về cho User
         });
 
         res.status(201).json({ message: 'Request submitted successfully', request: newRequest });
@@ -118,7 +131,7 @@ exports.handleSubscriptionRequest = async (req, res) => {
             }
         }
 
-        // 3. GỬI EMAIL THÔNG BÁO
+        // 3. GỬI EMAIL THÔNG BÁO CHO USER (Kết quả duyệt)
         if (user.email) {
             const emailContent = `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">

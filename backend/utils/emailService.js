@@ -277,6 +277,43 @@ const sendSubscriptionExpiredEmail = async (toEmail, username, oldPlan) => {
     }
 };
 
+// 8. Subscription Upgrade Request Notification to Admins
+const sendUpgradeRequestNotification = async (recipients, userRequesting, planName) => {
+    // recipients là mảng các email admin active
+    if (!recipients || recipients.length === 0) {
+        console.warn("⚠️ No active admins found to send notification.");
+        return;
+    }
+
+    // Chuyển mảng thành chuỗi cách nhau bởi dấu phẩy (NodeMailer hiểu định dạng này)
+    const toAddress = recipients.join(', ');
+
+    console.log(`📧 Sending Upgrade Notification to admins: ${toAddress}`);
+
+    try {
+        const html = getEmailTemplate(
+            '💰 New Upgrade Request',
+            `<p>A user has requested to upgrade their subscription plan.</p>
+             <div style="background-color: #f0f9ff; padding: 15px; border-radius: 8px; border: 1px solid #bae6fd; margin: 20px 0;">
+                <p><strong>User:</strong> ${userRequesting.username} (${userRequesting.email})</p>
+                <p><strong>Requested Plan:</strong> <span style="color: #0284c7; font-weight: bold;">${planName}</span></p>
+                <p><strong>Status:</strong> Pending Review</p>
+             </div>
+             <p>Please check the payment proof and approve/reject the request.</p>`,
+            { text: 'Process Request', url: `${CLIENT_URL}/admin/subscriptions`, color: 'green' }
+        );
+
+        return await ACTIVE_TRANSPORTER.sendMail({
+            from: ACTIVE_SENDER,
+            to: toAddress, // Gửi một lúc cho tất cả Admin active
+            subject: `💰 [Admin] Upgrade Request: ${userRequesting.username}`,
+            html: html
+        });
+    } catch (e) {
+        console.error("❌ Error sending upgrade notification:", e);
+    }
+};
+
 module.exports = {
     sendNotificationEmail,
     sendVerificationEmail,
@@ -284,5 +321,6 @@ module.exports = {
     sendEmail,
     sendReactivationRequestNotification,
     sendReactivationResultEmail,
-    sendSubscriptionExpiredEmail
+    sendSubscriptionExpiredEmail,
+    sendUpgradeRequestNotification
 };
