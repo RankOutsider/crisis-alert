@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from 'react';
 import Modal from './Modal';
-import { api } from '@/utils/api';
+import { api } from '@/utils/api'; // Giữ nguyên import này
 import { Search, Trash2, ChevronLeft, ChevronRight, RefreshCw, User, Calendar, Mail } from 'lucide-react';
 
 export default function ReactivationHistoryModal({ isOpen, onClose }) {
@@ -16,20 +16,25 @@ export default function ReactivationHistoryModal({ isOpen, onClose }) {
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
 
-    // Hàm lấy dữ liệu từ API
+    // --- SỬA LẠI HÀM FETCH HISTORY ---
     const fetchHistory = async () => {
         try {
             setLoading(true);
-            const res = await api.get('/admin/reactivations/history', {
-                params: {
-                    page,
-                    limit: 5,
-                    search,
-                    status: statusFilter
-                }
-            });
-            setData(res.data.data);
-            setTotalPages(res.data.pages);
+
+            // 1. Tạo Query String thủ công
+            const queryParams = new URLSearchParams({
+                page: page.toString(),
+                limit: '5',
+                search: search,
+                status: statusFilter
+            }).toString();
+
+            // 2. Gọi hàm api() trực tiếp
+            const res = await api(`/admin/reactivations/history?${queryParams}`);
+
+            setData(res.data || []);
+            setTotalPages(res.pages || 1);
+
         } catch (error) {
             console.error("Failed to fetch history", error);
         } finally {
@@ -52,19 +57,22 @@ export default function ReactivationHistoryModal({ isOpen, onClose }) {
         return () => clearTimeout(timeout);
     }, [search]);
 
+    // Xử lý xóa log
     const handleDelete = async (id) => {
         if (!confirm('Are you sure you want to permanently delete this log?')) return;
         try {
-            await api.delete(`/admin/reactivations/history/${id}`);
+            await api(`/admin/reactivations/history/${id}`, {
+                method: 'DELETE'
+            });
             fetchHistory();
         } catch (error) {
-            alert('Delete failed');
+            alert('Delete failed: ' + (error.message || 'Unknown error'));
         }
     };
 
     // Render Badge trạng thái
     const renderStatusBadge = (status) => (
-        <span className={`px-2 py-1 rounded text-xs font-bold border ${status === 'approved' || status === 'Approved'
+        <span className={`px-2 py-1 rounded text-xs font-bold border ${status === 'approved' || status === 'APPROVED'
                 ? 'bg-green-500/10 text-green-400 border-green-500/20'
                 : 'bg-red-500/10 text-red-400 border-red-500/20'
             }`}>
@@ -130,12 +138,11 @@ export default function ReactivationHistoryModal({ isOpen, onClose }) {
                         <div className="text-center py-10 text-slate-500">No history found.</div>
                     ) : (
                         <>
-                            {/* --- MOBILE VIEW: CARDS (Hiện khi màn hình nhỏ hơn md) --- */}
+                            {/* --- MOBILE VIEW: CARDS --- */}
                             <div className="grid grid-cols-1 gap-3 md:hidden">
                                 {data.map((item) => (
                                     <div key={item.id} className="bg-slate-900 border border-slate-700 rounded-lg p-4 flex flex-col gap-3 relative">
-                                        {/* Row 1: User Info */}
-                                        <div className="flex items-start justify-between pr-8"> {/* pr-8 để tránh đè nút xoá */}
+                                        <div className="flex items-start justify-between pr-8">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-blue-400 shrink-0">
                                                     <User size={20} />
@@ -148,11 +155,7 @@ export default function ReactivationHistoryModal({ isOpen, onClose }) {
                                                 </div>
                                             </div>
                                         </div>
-
-                                        {/* Divider */}
                                         <div className="h-px bg-slate-800 w-full"></div>
-
-                                        {/* Row 2: Info Details */}
                                         <div className="flex justify-between items-center text-sm">
                                             <div className="flex items-center gap-2 text-slate-400">
                                                 <Calendar size={14} />
@@ -160,8 +163,6 @@ export default function ReactivationHistoryModal({ isOpen, onClose }) {
                                             </div>
                                             {renderStatusBadge(item.status)}
                                         </div>
-
-                                        {/* Delete Button (Absolute top-right) */}
                                         <button
                                             onClick={() => handleDelete(item.id)}
                                             className="absolute top-3 right-3 p-2 text-slate-500 hover:text-red-400 hover:bg-slate-800 rounded-full transition-colors"
@@ -172,7 +173,7 @@ export default function ReactivationHistoryModal({ isOpen, onClose }) {
                                 ))}
                             </div>
 
-                            {/* --- DESKTOP VIEW: TABLE (Hiện khi màn hình lớn hơn hoặc bằng md) --- */}
+                            {/* --- DESKTOP VIEW: TABLE --- */}
                             <div className="hidden md:block overflow-x-auto border border-slate-700 rounded-lg">
                                 <table className="w-full text-left border-collapse whitespace-nowrap">
                                     <thead>
