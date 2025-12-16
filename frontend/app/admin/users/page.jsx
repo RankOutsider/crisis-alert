@@ -1,20 +1,22 @@
 // frontend/app/admin/users/page.jsx
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import useSWR, { mutate } from 'swr';
 import { swrFetcher, updateAdminUser, deleteAdminUsersBulk, api } from '@/utils/api';
 import {
     Search, Edit, X, Save,
     ChevronLeft, ChevronRight, Loader2,
     CheckSquare, Square, Trash2, Lock, Unlock,
-    User, Mail, Calendar, Shield, Clock
+    User, Mail, Calendar, Clock
 } from 'lucide-react';
 import Portal from '@/app/components/Portal';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
+import FilterBar from '@/app/components/FilterBar'; // Import FilterBar
+import useDebounce from '@/hooks/useDebounce';     // Import useDebounce
 
-// --- COMPONENT NÚT TOGGLE RIÊNG (Cho User Active) ---
+// --- COMPONENT NÚT TOGGLE RIÊNG ---
 const UserStatusToggle = ({ isActive, onClick, isLoading, disabled, title }) => {
     return (
         <button
@@ -33,10 +35,26 @@ const UserStatusToggle = ({ isActive, onClick, isLoading, disabled, title }) => 
 };
 
 export default function AdminUsers() {
-    // State UI
-    const [page, setPage] = useState(1);
-    const [search, setSearch] = useState('');
+    // --- FETCH DATA ---
+    // Bỏ pagination params để lấy hết về client
+    const endpoint = 'admin/users';
+    const { data, error, isLoading } = useSWR(endpoint, swrFetcher);
+    const { data: currentUser } = useSWR('auth/me', swrFetcher);
+
+    // Xử lý dữ liệu trả về
+    const allUsers = Array.isArray(data) ? data : (data?.users || []);
+
+    // --- STATE UI ---
+    const [searchTerm, setSearchTerm] = useState('');
+    const [selectedRole, setSelectedRole] = useState([]); // Filter Role
+    const [selectedTier, setSelectedTier] = useState([]); // Filter Subscription Tier
+
+    // Thêm Filter Status (Active, Locked, Admin Locked)
+    const [selectedStatus, setSelectedStatus] = useState([]);
+
+    const [currentPage, setCurrentPage] = useState(1);
     const [selectedIds, setSelectedIds] = useState([]);
+    const itemsPerPage = 10;
 
     // State Edit
     const [editingUser, setEditingUser] = useState(null);
@@ -46,21 +64,58 @@ export default function AdminUsers() {
     const [togglingId, setTogglingId] = useState(null);
     const [adminTogglingId, setAdminTogglingId] = useState(null);
 
-    // --- 1. SWR SETUP ---
-    const { data: currentUser } = useSWR('auth/me', swrFetcher);
-    const endpoint = `admin/users?page=${page}&limit=10&search=${search}`;
+    // --- DEBOUNCE SEARCH ---
+    const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
-    const { data, error, isLoading } = useSWR(endpoint, swrFetcher, {
-        keepPreviousData: true,
-    });
+    // --- LOGIC LỌC & PHÂN TRANG CLIENT-SIDE ---
 
-    const users = data?.users || [];
-    const totalPages = data?.pages || 1;
-    const totalUsers = data?.totalUsers || 0;
+    // Reset trang về 1 khi filter thay đổi
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [debouncedSearchTerm, selectedRole, selectedTier, selectedStatus]);
 
+    // Lọc dữ liệu
+    const filteredUsers = useMemo(() => {
+        return allUsers.filter(user => {
+            const username = user.username?.toLowerCase() || '';
+            const email = user.email?.toLowerCase() || '';
+            const search = debouncedSearchTerm.toLowerCase();
+
+            // Tìm theo Username hoặc Email
+            const matchesSearch = username.includes(search) || email.includes(search);
+
+            // Filter Role
+            const matchesRole = selectedRole.length === 0 || selectedRole.includes(user.role);
+
+            // Filter Tier
+            const matchesTier = selectedTier.length === 0 || selectedTier.includes(user.subscriptionTier);
+
+            // Filter Status (Logic phức tạp hơn chút)
+            // Options: 'Active' (is_active=true), 'User Locked' (is_active=false), 'Admin Locked' (is_active_admin=false)
+            let matchesStatus = true;
+            if (selectedStatus.length > 0) {
+                matchesStatus = selectedStatus.some(status => {
+                    if (status === 'Active') return user.is_active && user.is_active_admin;
+                    if (status === 'User Locked') return !user.is_active;
+                    if (status === 'Admin Locked') return !user.is_active_admin;
+                    return false;
+                });
+            }
+
+            return matchesSearch && matchesRole && matchesTier && matchesStatus;
+        });
+    }, [allUsers, debouncedSearchTerm, selectedRole, selectedTier, selectedStatus]);
+
+    // Cắt trang
+    const totalPages = Math.ceil(filteredUsers.length / itemsPerPage) || 1;
+    const indexOfLastItem = currentPage * itemsPerPage;
+    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+    const currentItems = filteredUsers.slice(indexOfFirstItem, indexOfLastItem);
+
+    // Scroll lên đầu khi đổi trang
     useEffect(() => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
-    }, [page]);
+    }, [currentPage]);
 
     // --- LOGIC CHECKBOX ---
     const toggleSelect = (id) => {
@@ -70,14 +125,14 @@ export default function AdminUsers() {
     };
 
     const toggleSelectAll = () => {
-        selectedIds.length === users.length && users.length > 0
+        selectedIds.length === filteredUsers.length && filteredUsers.length > 0
             ? setSelectedIds([])
-            : setSelectedIds(users.map(u => u.id));
+            : setSelectedIds(filteredUsers.map(u => u.id));
     };
 
     // --- LOGIC ACTIONS ---
 
-    // 1. Bulk Delete
+    // Bulk Delete
     const handleBulkDelete = async () => {
         if (selectedIds.length === 0) return;
 
@@ -93,7 +148,7 @@ export default function AdminUsers() {
                 await deleteAdminUsersBulk(selectedIds);
                 toast.success(`Deleted ${selectedIds.length} users successfully.`);
                 setSelectedIds([]);
-                mutate(endpoint);
+                mutate(endpoint); // Fetch lại data mới
             } catch (error) {
                 console.error(error);
                 toast.error('Failed to delete selected users.');
@@ -101,7 +156,7 @@ export default function AdminUsers() {
         }
     };
 
-    // 2. Toggle User Active Status (Is Active)
+    // Toggle User Active Status
     const handleStatusChange = async (user) => {
         if (currentUser && user.id === currentUser.id) {
             toast.warning("You cannot deactivate the currently logged-in account from the Admin Dashboard.");
@@ -122,12 +177,11 @@ export default function AdminUsers() {
         try {
             await updateAdminUser(user.id, { is_active: newStatus });
             // Optimistic Update
-            mutate(endpoint, {
-                ...data,
-                users: users.map(u => u.id === user.id ? { ...u, is_active: newStatus } : u)
-            }, false);
+            const updatedUsers = allUsers.map(u => u.id === user.id ? { ...u, is_active: newStatus } : u);
+            mutate(endpoint, { ...data, users: updatedUsers }, false);
 
             toast.success(`User ${newStatus ? 'activated' : 'deactivated'}.`);
+            mutate(endpoint); // Re-fetch chuẩn
         } catch (error) {
             console.error("Error:", error);
             toast.error(error.message || "Failed to update status");
@@ -136,7 +190,7 @@ export default function AdminUsers() {
         }
     };
 
-    // 3. Toggle Admin Lock Status (Is Active Admin)
+    // Toggle Admin Lock Status
     const handleToggleAdminLock = async (user) => {
         if (currentUser && user.id === currentUser.id) {
             toast.warning("Security Alert: You cannot Admin-Lock your own ADMIN account.");
@@ -158,13 +212,13 @@ export default function AdminUsers() {
                 body: JSON.stringify({ is_active_admin: newStatus })
             });
 
-            // Optimistic Update: Update both admin lock and active status
-            const updatedUsers = users.map(u => {
+            // Optimistic Update
+            const updatedUsers = allUsers.map(u => {
                 if (u.id === user.id) {
                     return {
                         ...u,
                         is_active_admin: newStatus,
-                        is_active: newStatus ? u.is_active : false
+                        is_active: newStatus ? u.is_active : false // Nếu khóa admin -> active cũng false
                     };
                 }
                 return u;
@@ -172,6 +226,7 @@ export default function AdminUsers() {
 
             mutate(endpoint, { ...data, users: updatedUsers }, false);
             toast.success(newStatus ? `Unlocked user ${user.username}` : `Locked user ${user.username}`);
+            mutate(endpoint); // Re-fetch
 
         } catch (error) {
             console.error("Admin Lock Error:", error);
@@ -181,7 +236,7 @@ export default function AdminUsers() {
         }
     };
 
-    // 4. Edit User
+    // Edit User
     const handleEditClick = (user) => {
         setEditingUser(user);
 
@@ -190,15 +245,11 @@ export default function AdminUsers() {
 
         if (user.subscriptionExpiresAt) {
             const date = new Date(user.subscriptionExpiresAt);
-
-            // Lấy từng thành phần theo giờ địa phương
             const year = date.getFullYear();
-            const month = String(date.getMonth() + 1).padStart(2, '0'); // Tháng bắt đầu từ 0
+            const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
             const hours = String(date.getHours()).padStart(2, '0');
             const minutes = String(date.getMinutes()).padStart(2, '0');
-
-            // Ghép lại thành chuỗi đúng chuẩn input datetime-local
             formattedDate = `${year}-${month}-${day}T${hours}:${minutes}`;
         }
 
@@ -212,28 +263,27 @@ export default function AdminUsers() {
     const handleSave = async () => {
         if (!editingUser) return;
         try {
-            // Chuẩn bị dữ liệu ngày tháng
             let finalDate = null;
             if (formData.subscriptionExpiresAt) {
-                // 1. Tạo đối tượng Date từ chuỗi giờ địa phương trong input
-                // Ví dụ: Input là "2025-12-28T16:41" (giờ VN) -> new Date() sẽ hiểu đúng là giờ VN
                 const localDate = new Date(formData.subscriptionExpiresAt);
-
-                // 2. Chuyển đổi sang chuẩn ISO (UTC) để gửi lên Server
-                // Kết quả sẽ là: "2025-12-28T09:41:00.000Z" (Chuẩn quốc tế)
                 finalDate = localDate.toISOString();
             }
 
             const payload = {
                 role: formData.role,
                 subscriptionTier: formData.subscriptionTier,
-                subscriptionExpiresAt: finalDate // Gửi chuỗi UTC chuẩn
+                subscriptionExpiresAt: finalDate
             };
 
             await updateAdminUser(editingUser.id, payload);
+
+            // Optimistic Update (Optional)
+            const updatedList = allUsers.map(u => u.id === editingUser.id ? { ...u, ...payload } : u);
+            mutate(endpoint, { ...data, users: updatedList }, false);
+
             toast.success('User updated successfully!');
             setEditingUser(null);
-            mutate(endpoint);
+            mutate(endpoint); // Re-fetch
         } catch (error) {
             console.error(error);
             toast.error('Error updating user');
@@ -253,16 +303,6 @@ export default function AdminUsers() {
         ? 'bg-red-500/20 text-red-400 border-red-500/50'
         : 'bg-green-500/20 text-green-400 border-green-500/50';
 
-    const Pagination = () => (
-        <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-400 hidden md:inline">Page {page} of {totalPages}</span>
-            <div className="flex space-x-2">
-                <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="p-2 rounded bg-gray-800 border border-gray-700 hover:bg-gray-700 disabled:opacity-50 transition-colors"><ChevronLeft size={20} /></button>
-                <button disabled={page === totalPages} onClick={() => setPage(p => p + 1)} className="p-2 rounded bg-gray-800 border border-gray-700 hover:bg-gray-700 disabled:opacity-50 transition-colors"><ChevronRight size={20} /></button>
-            </div>
-        </div>
-    );
-
     if (error) return <div className="text-center py-10 text-red-400">Failed to load users.</div>;
 
     return (
@@ -272,23 +312,30 @@ export default function AdminUsers() {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                         <User className="text-blue-500" />
-                        User Management <span className="text-gray-500 text-lg font-normal">({totalUsers})</span>
+                        User Management <span className="text-gray-500 text-lg font-normal">({filteredUsers.length})</span>
                     </h1>
-
-                    <div className="flex flex-col-reverse md:flex-row gap-4 w-full md:w-auto items-end md:items-center">
-                        <Pagination />
-                        <div className="relative w-full md:w-auto">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                            <input
-                                type="text"
-                                placeholder="Search username, email..."
-                                className="bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-white focus:ring-2 focus:ring-blue-500 outline-none w-full md:w-64 text-sm transition-all"
-                                value={search}
-                                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                            />
-                        </div>
-                    </div>
                 </div>
+
+                {/* FILTER BAR */}
+                <FilterBar
+                    searchTerm={searchTerm}
+                    onSearchChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search username, email..."
+
+                    // Filter Status
+                    statusOptions={['Active', 'User Locked', 'Admin Locked']}
+                    selectedStatus={selectedStatus}
+                    onStatusChange={setSelectedStatus}
+
+
+                    roleOptions={['admin', 'user']}
+                    selectedRoles={selectedRole}
+                    onRoleChange={setSelectedRole}
+
+                    tierOptions={['Free', 'VIP', 'Pro']}
+                    selectedTiers={selectedTier}
+                    onTierChange={setSelectedTier}
+                />
 
                 {/* BULK ACTION BAR */}
                 {selectedIds.length > 0 && (
@@ -309,9 +356,9 @@ export default function AdminUsers() {
                 <div className="flex justify-center py-10 text-gray-400">
                     <Loader2 className="animate-spin mr-2" /> Loading users...
                 </div>
-            ) : users.length === 0 ? (
+            ) : filteredUsers.length === 0 ? (
                 <div className="text-center py-12 text-gray-400 bg-gray-800/50 rounded-xl border border-gray-700/50 border-dashed">
-                    No users found.
+                    No users found matching your filters.
                 </div>
             ) : (
                 <>
@@ -320,7 +367,11 @@ export default function AdminUsers() {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-slate-900/50 text-slate-300 border-b border-slate-700 text-xs uppercase font-semibold">
-                                    <th className="p-4 w-12 text-center"><button onClick={toggleSelectAll} className="hover:text-white transition-colors">{users.length > 0 && selectedIds.length === users.length ? <CheckSquare className="text-blue-500" size={18} /> : <Square size={18} />}</button></th>
+                                    <th className="p-4 w-12 text-center">
+                                        <button onClick={toggleSelectAll} className="hover:text-white transition-colors">
+                                            {filteredUsers.length > 0 && selectedIds.length === filteredUsers.length ? <CheckSquare className="text-blue-500" size={18} /> : <Square size={18} />}
+                                        </button>
+                                    </th>
                                     <th className="p-4">User Info</th>
                                     <th className="p-4">Role</th>
                                     <th className="p-4">Subscription</th>
@@ -331,16 +382,16 @@ export default function AdminUsers() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-700/50">
-                                {users.map((user) => {
+                                {currentItems.map((user) => {
                                     const isSelected = selectedIds.includes(user.id);
                                     const isAdminUser = user.role === 'admin';
-
                                     const isSelf = currentUser && currentUser.id === user.id;
 
                                     return (
                                         <tr key={user.id} className={`transition-colors ${isSelected ? 'bg-blue-900/10 hover:bg-blue-900/20' : 'hover:bg-slate-700/30'}`}>
                                             <td className="p-4 text-center">
-                                                <button onClick={() => toggleSelect(user.id)} className="text-slate-400 hover:text-white transition-colors">{isSelected ? <CheckSquare className="text-blue-500" size={18} /> : <Square size={18} />}
+                                                <button onClick={() => toggleSelect(user.id)} className="text-slate-400 hover:text-white transition-colors">
+                                                    {isSelected ? <CheckSquare className="text-blue-500" size={18} /> : <Square size={18} />}
                                                 </button>
                                             </td>
 
@@ -364,7 +415,6 @@ export default function AdminUsers() {
                                                 </span>
                                             </td>
 
-                                            {/* Hiển thị Ngày hết hạn */}
                                             <td className="p-4 text-sm">
                                                 {user.subscriptionExpiresAt ? (
                                                     <span className="text-slate-300 flex items-center gap-1">
@@ -376,7 +426,6 @@ export default function AdminUsers() {
                                                 )}
                                             </td>
 
-                                            {/* Cột User Active */}
                                             <td className="p-4 text-center">
                                                 <div className="flex flex-col items-center gap-1">
                                                     <UserStatusToggle
@@ -392,7 +441,6 @@ export default function AdminUsers() {
                                                 </div>
                                             </td>
 
-                                            {/* Cột Admin Lock */}
                                             <td className="p-4 text-center">
                                                 <div className="flex flex-col items-center gap-1">
                                                     <button
@@ -434,7 +482,14 @@ export default function AdminUsers() {
 
                     {/* MOBILE VIEW */}
                     <div className="md:hidden flex flex-col gap-4">
-                        {users.map((user) => {
+                        <div className="flex items-center gap-3 px-1 mb-1">
+                            <button onClick={toggleSelectAll} className="text-gray-400 hover:text-white flex items-center gap-2 transition-colors">
+                                {selectedIds.length === filteredUsers.length ? <CheckSquare className="text-blue-500" size={20} /> : <Square size={20} />}
+                                <span className="text-sm font-medium">Select All</span>
+                            </button>
+                        </div>
+
+                        {currentItems.map((user) => {
                             const isSelected = selectedIds.includes(user.id);
                             const isAdminUser = user.role === 'admin';
                             const isSelf = currentUser && currentUser.id === user.id;
@@ -450,7 +505,6 @@ export default function AdminUsers() {
                                             <div className="text-xs text-slate-600 mt-1 flex items-center gap-1">
                                                 <Calendar size={10} /> Joined: {user.createdAt ? format(new Date(user.createdAt), 'MMM dd, yyyy') : '-'}
                                             </div>
-
                                             {user.subscriptionExpiresAt && (
                                                 <div className="text-xs text-red-400 mt-1 flex items-center gap-1">
                                                     <Clock size={10} /> Exp: {format(new Date(user.subscriptionExpiresAt), 'MMM dd, yyyy')}
@@ -485,20 +539,54 @@ export default function AdminUsers() {
                                             <UserStatusToggle
                                                 isActive={user.is_active}
                                                 isLoading={togglingId === user.id}
-                                                disabled={!isAdminUser && !user.is_active_admin || isSelf}
+                                                disabled={(!isAdminUser && !user.is_active_admin) || isSelf}
                                                 onClick={() => handleStatusChange(user)}
                                             />
                                         </div>
                                     </div>
                                 </div>
-                            )
+                            );
                         })}
                     </div>
                 </>
             )}
 
             {/* Bottom Pagination */}
-            <div className="flex justify-end pt-4"><Pagination /></div>
+            {filteredUsers.length > 0 && (
+                <div className="flex flex-col md:flex-row justify-between items-center gap-4 pt-4 border-t border-slate-700/50">
+                    <div className="text-sm text-gray-400">
+                        Showing <span className="font-bold text-white">{indexOfFirstItem + 1}</span> to <span className="font-bold text-white">{Math.min(indexOfLastItem, filteredUsers.length)}</span> of <span className="font-bold text-white">{filteredUsers.length}</span> results
+                    </div>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                            disabled={currentPage === 1}
+                            className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-gray-400 hover:text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            <ChevronLeft size={18} />
+                        </button>
+                        {Array.from({ length: totalPages }, (_, i) => (
+                            <button
+                                key={i + 1}
+                                onClick={() => setCurrentPage(i + 1)}
+                                className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${currentPage === i + 1
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-slate-800 border border-slate-700 text-gray-400 hover:bg-slate-700 hover:text-white'
+                                    }`}
+                            >
+                                {i + 1}
+                            </button>
+                        ))}
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                            disabled={currentPage === totalPages}
+                            className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-gray-400 hover:text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                            <ChevronRight size={18} />
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* EDIT MODAL */}
             {editingUser && (
@@ -539,8 +627,6 @@ export default function AdminUsers() {
                                         <option value="Pro">Pro</option>
                                     </select>
                                 </div>
-
-                                {/* Input chọn ngày hết hạn */}
                                 <div>
                                     <label className="block text-sm text-gray-300 mb-1">Expires At (Optional)</label>
                                     <input

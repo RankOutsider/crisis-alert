@@ -124,7 +124,7 @@ function VerifyOtpContent() {
             </h1>
             <p className="text-center text-gray-300 text-sm sm:text-base mb-6">
                 We sent a 6-digit code to <br />
-                <span className="font-medium text-cyan-300">{email}</span>.
+                <span className="font-medium text-cyan-300">{email}</span>
                 <br />
                 Please check your email (and spam folder).
             </p>

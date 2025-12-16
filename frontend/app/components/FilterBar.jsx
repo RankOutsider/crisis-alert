@@ -34,6 +34,14 @@ export default function FilterBar({
     severityOptions,      // Mảng options cho Severity
     selectedSeverity,     // Mảng giá trị Severity đã chọn
     onSeverityChange,     // Function(newSelection: string[])
+
+    roleOptions,          // Mảng options cho Role (vd: ['Admin', 'User'])
+    selectedRoles,        // Mảng giá trị Role đã chọn
+    onRoleChange,         // Function(newSelection: string[])
+
+    tierOptions,          // Mảng options cho Subscription Tier (vd: ['Free', 'VIP', 'Pro'])
+    selectedTiers,        // Mảng giá trị Tier đã chọn
+    onTierChange,         // Function(newSelection: string[])
 }) {
     // --- Logic kiểm tra xem nên hiển thị phần nào ---
     const showSearchInput = searchTerm !== undefined && onSearchChange;
@@ -44,7 +52,11 @@ export default function FilterBar({
     const showStatusDropdown = statusOptions && selectedStatus && onStatusChange;
     const showSeverityDropdown = severityOptions && selectedSeverity && onSeverityChange;
 
-    const hasAnyDropdown = showPlatformDropdown || showSentimentDropdown || showStatusDropdown || showSeverityDropdown;
+    // Logic hiển thị Role & Tier (Mới)
+    const showRoleDropdown = roleOptions && selectedRoles && onRoleChange;
+    const showTierDropdown = tierOptions && selectedTiers && onTierChange;
+
+    const hasAnyDropdown = showPlatformDropdown || showSentimentDropdown || showStatusDropdown || showSeverityDropdown || showRoleDropdown || showTierDropdown;
     const showDivider = showFieldsSection && hasAnyDropdown;
     const showSecondRow = showFieldsSection || hasAnyDropdown;
 
@@ -96,6 +108,25 @@ export default function FilterBar({
                     )}
 
                     {/* Phần Dropdowns (Render có điều kiện) */}
+
+                    {showRoleDropdown && (
+                        <MultiSelectDropdown
+                            title="Role"
+                            options={roleOptions}
+                            selectedOptions={selectedRoles}
+                            onChange={onRoleChange}
+                        />
+                    )}
+
+                    {showTierDropdown && (
+                        <MultiSelectDropdown
+                            title="Subscription"
+                            options={tierOptions}
+                            selectedOptions={selectedTiers}
+                            onChange={onTierChange}
+                        />
+                    )}
+
                     {showPlatformDropdown && (
                         <MultiSelectDropdown
                             title="Platform"
