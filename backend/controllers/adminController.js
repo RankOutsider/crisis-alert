@@ -222,7 +222,7 @@ const getReactivationRequests = async (req, res) => {
     try {
         const { count, rows } = await ReactivationRequest.findAndCountAll({
             where: {
-                status: 'Pending'
+                status: 'PENDING'
             },
             include: [
                 {
@@ -259,7 +259,7 @@ const approveReactivationRequest = async (req, res) => {
             include: [{ model: User }]
         });
 
-        if (!request || request.status !== 'Pending') {
+        if (!request || request.status !== 'PENDING') {
             return res.status(404).json({ message: 'Reactivation request not found or already processed' });
         }
 
@@ -322,7 +322,7 @@ const rejectReactivationRequest = async (req, res) => {
             include: [{ model: User }]
         });
 
-        if (!request || request.status !== 'Pending') {
+        if (!request || request.status !== 'PENDING') {
             return res.status(404).json({ message: 'Reactivation request not found or already processed' });
         }
 

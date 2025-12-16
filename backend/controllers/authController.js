@@ -180,7 +180,7 @@ exports.createReactivationRequest = async (req, res) => {
         const existingRequest = await ReactivationRequest.findOne({
             where: {
                 userId: user.id,
-                status: 'Pending'
+                status: 'PENDING'
             }
         });
 

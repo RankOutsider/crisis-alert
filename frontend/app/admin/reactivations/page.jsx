@@ -195,7 +195,7 @@ export default function ReactivationRequestsPage() {
                             </div>
 
                             {/* Actions chỉ hiện nếu status là PENDING */}
-                            {req.status === 'Pending' && (
+                            {req.status === 'PENDING' && (
                                 <div className="flex gap-2 mt-auto pt-3 border-t border-slate-700/50">
                                     <button
                                         onClick={() => openModal(req, 'approve')}
