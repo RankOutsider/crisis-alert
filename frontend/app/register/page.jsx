@@ -6,9 +6,10 @@ import { useRouter } from 'next/navigation';
 import { api } from '@/utils/api';
 import { useFormValidation } from '@/hooks/useFormValidation';
 
-import { User, Mail, Phone, KeyRound, Loader2 } from 'lucide-react';
+import { User, Mail, Phone, KeyRound, Loader2, CheckCircle } from 'lucide-react';
 import Input from '@/app/components/Input';
 
+// SCHEMA VALIDATION
 const registerSchema = {
     username: {
         required: true,
@@ -27,6 +28,12 @@ const registerSchema = {
     password: {
         required: true,
         minLength: 6
+    },
+    confirmPassword: {
+        required: true,
+        // So sánh với password
+        custom: (value, values) => value === values.password,
+        message: "Passwords do not match."
     }
 };
 
@@ -34,7 +41,8 @@ const initialValues = {
     username: "",
     email: "",
     phone: "",
-    password: ""
+    password: "",
+    confirmPassword: ""
 };
 
 export default function RegisterPage() {
@@ -62,21 +70,23 @@ export default function RegisterPage() {
         setLoading(true);
 
         try {
+            const { confirmPassword, ...payload } = values;
+
             await api("auth/register", {
                 method: "POST",
-                body: JSON.stringify(values),
+                body: JSON.stringify(payload),
             });
 
             // Lấy email từ form
             const { email } = values;
 
-            // 1. Đặt thông báo thành công mới
+            // Đặt thông báo thành công mới
             setSuccess("Registration successful! Check your email for an OTP. Redirecting...");
 
-            // 2. Chuyển hướng đến trang verify-otp VÀ đính kèm email
+            // Chuyển hướng đến trang verify-otp VÀ đính kèm email
             setTimeout(() => {
                 router.push(`/verify-otp?email=${encodeURIComponent(email)}`);
-            }, 2000); // 2s delay cho UX
+            }, 2000);
 
         } catch (err) {
             const errorMessage = err.message || "Registration failed!";
@@ -119,12 +129,12 @@ export default function RegisterPage() {
                     </div>
                 )}
                 {success && (
-                    <div className="bg-green-900/50 border border-green-700 text-green-300 p-3 rounded-lg mb-4 text-center text-sm sm:text-base">
-                        {success}
+                    <div className="bg-green-900/50 border border-green-700 text-green-300 p-3 rounded-lg mb-4 text-center text-sm sm:text-base flex items-center justify-center gap-2">
+                        <CheckCircle size={18} /> {success}
                     </div>
                 )}
 
-                <form onSubmit={handleRegister} className="space-y-4 sm:space-y-6" noValidate>
+                <form onSubmit={handleRegister} className="space-y-4 sm:space-y-5" noValidate>
                     {/* --- Username --- */}
                     <div>
                         <label className="block text-sm sm:text-base font-medium text-gray-300 mb-1">Username</label>
@@ -137,9 +147,7 @@ export default function RegisterPage() {
                             leftIcon={<User size={20} />}
                             className={errors.username ? 'border-red-500' : 'border-gray-700'}
                         />
-                        {errors.username && (
-                            <p className="mt-1 text-xs text-red-400">{errors.username}</p>
-                        )}
+                        {errors.username && <p className="mt-1 text-xs text-red-400">{errors.username}</p>}
                     </div>
 
                     {/* --- Email --- */}
@@ -154,9 +162,7 @@ export default function RegisterPage() {
                             leftIcon={<Mail size={20} />}
                             className={errors.email ? 'border-red-500' : 'border-gray-700'}
                         />
-                        {errors.email && (
-                            <p className="mt-1 text-xs text-red-400">{errors.email}</p>
-                        )}
+                        {errors.email && <p className="mt-1 text-xs text-red-400">{errors.email}</p>}
                     </div>
 
                     {/* --- Phone Number --- */}
@@ -171,9 +177,7 @@ export default function RegisterPage() {
                             leftIcon={<Phone size={20} />}
                             className={errors.phone ? 'border-red-500' : 'border-gray-700'}
                         />
-                        {errors.phone && (
-                            <p className="mt-1 text-xs text-red-400">{errors.phone}</p>
-                        )}
+                        {errors.phone && <p className="mt-1 text-xs text-red-400">{errors.phone}</p>}
                     </div>
 
                     {/* --- Password --- */}
@@ -188,22 +192,34 @@ export default function RegisterPage() {
                             leftIcon={<KeyRound size={20} />}
                             className={errors.password ? 'border-red-500' : 'border-gray-700'}
                         />
-                        {errors.password && (
-                            <p className="mt-1 text-xs text-red-400">{errors.password}</p>
-                        )}
+                        {errors.password && <p className="mt-1 text-xs text-red-400">{errors.password}</p>}
                     </div>
 
+                    {/* --- 3. Confirm Password --- */}
+                    <div>
+                        <label className="block text-sm sm:text-base font-medium text-gray-300 mb-1">Confirm Password</label>
+                        <Input
+                            name="confirmPassword"
+                            type="password"
+                            placeholder="Re-enter your password"
+                            value={values.confirmPassword}
+                            onChange={handleChange}
+                            leftIcon={<KeyRound size={20} />}
+                            className={errors.confirmPassword ? 'border-red-500' : 'border-gray-700'}
+                        />
+                        {errors.confirmPassword && <p className="mt-1 text-xs text-red-400">{errors.confirmPassword}</p>}
+                    </div>
 
                     <div className="pt-3 sm:pt-4 flex justify-center">
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full sm:w-auto h-10 sm:h-12 px-4 sm:px-6 font-semibold rounded-full text-white bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base flex items-center justify-center"
+                            className="w-full sm:w-auto h-10 sm:h-12 px-6 sm:px-8 font-semibold rounded-full text-white bg-gradient-to-r from-blue-500 to-cyan-400 hover:from-blue-600 hover:to-cyan-500 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base flex items-center justify-center shadow-lg"
                         >
                             {loading ? (
                                 <>
                                     <Loader2 size={20} className="animate-spin mr-2" />
-                                    Signing Up
+                                    Creating Account...
                                 </>
                             ) : (
                                 'Sign Up'
@@ -215,7 +231,7 @@ export default function RegisterPage() {
                 <p className="text-center text-xs sm:text-sm text-gray-300 mt-4 sm:mt-6">
                     Already have an account?{' '}
                     <Link href="/login">
-                        <span className="text-blue-400 hover:text-blue-300 font-medium">
+                        <span className="text-blue-400 hover:text-blue-300 font-medium transition duration-300 cursor-pointer">
                             Login
                         </span>
                     </Link>

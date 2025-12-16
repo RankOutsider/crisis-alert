@@ -116,10 +116,7 @@ const getEmailTemplate = (title, content, callToAction = null) => {
     `;
 };
 
-
-
-// --- CÁC HÀM GỬI EMAIL (ĐÃ UPDATE DESIGN) ---
-
+// --- CÁC HÀM GỬI EMAIL ---
 
 // 1. Admin Notification
 const sendReactivationRequestNotification = async (username, userEmail) => {
