@@ -58,23 +58,22 @@ export default function AlertModal({ isOpen, onClose, onSubmit, initialData = nu
             return;
         }
 
-        // Gửi data ra ngoài cho cha xử lý (không async/await ở đây nữa)
+        // Gửi data ra ngoài cho cha xử lý
         onSubmit(formData);
     };
 
-    // Merge lỗi từ client và server để hiển thị
     const errors = { ...clientErrors, ...serverErrors };
 
     return (
         <Modal
             isOpen={isOpen} onClose={onClose} title={isEditMode ? "Edit Alert" : "Create New Alert"} size="max-w-2xl"
             footer={
-                <div className="flex flex-col sm:flex-row justify-end gap-3">
+                <div className="grid grid-cols-2 gap-3 sm:flex sm:justify-end">
                     <button
                         type="button"
                         onClick={onClose}
                         disabled={isLoading}
-                        className="px-4 py-2 font-semibold rounded-lg bg-slate-600 hover:bg-slate-700 w-full sm:w-auto text-white transition-colors">
+                        className="px-4 py-2 font-semibold rounded-lg bg-slate-600 hover:bg-slate-700 text-white transition-colors w-full sm:w-auto text-center">
                         Cancel
                     </button>
 
@@ -82,11 +81,11 @@ export default function AlertModal({ isOpen, onClose, onSubmit, initialData = nu
                         type="submit"
                         form="alert-form"
                         disabled={isLoading}
-                        className="flex items-center justify-center gap-2 px-5 py-2.5 font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 w-full sm:w-auto transition-colors disabled:opacity-50">
+                        className="flex items-center justify-center gap-2 px-5 py-2.5 font-semibold rounded-lg text-white bg-blue-600 hover:bg-blue-700 transition-colors disabled:opacity-50 w-full sm:w-auto text-center">
 
                         {isLoading ? <Loader2 size={18} className="animate-spin" /> : isEditMode ? <Save size={18} /> : <PlusCircle size={18} />}
 
-                        {isLoading ? 'Saving...' : isEditMode ? 'Save Changes' : 'Create Alert'}
+                        {isLoading ? 'Saving...' : isEditMode ? 'Save' : 'Create'}
                     </button>
                 </div>
             }
@@ -143,7 +142,6 @@ export default function AlertModal({ isOpen, onClose, onSubmit, initialData = nu
                         </button>
                     </div>
 
-                    {/* Dòng thông báo đỏ khi max limit */}
                     {hasReachedKeywordLimit && (
                         <p className="mt-2 text-xs text-red-400 flex items-center gap-1 animate-pulse">
                             <X size={12} /> You have reached the maximum limit of {keywordLimit} keywords. Please remove some to add new ones.
@@ -210,7 +208,7 @@ export default function AlertModal({ isOpen, onClose, onSubmit, initialData = nu
                         <option value="High">
                             High
                         </option>
-                        
+
                         <option value="Critical">
                             Critical
                         </option>
