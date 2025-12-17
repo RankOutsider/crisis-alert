@@ -34,12 +34,15 @@ const AdminSidebar = ({ isOpen, onClose }) => {
             {/* Sidebar chính */}
             <aside
                 className={`
-                    fixed top-0 right-0 z-40 w-64 bg-gray-800 border-l border-gray-700
+                    fixed top-0 right-0 z-40 w-64 bg-gray-800 border-l border-gray-700 
                     transition-transform duration-300 ease-in-out h-[100dvh]
                     ${isOpen ? 'translate-x-0' : 'translate-x-full'} 
-                    lg:translate-x-0 lg:static lg:block lg:h-full
-                    lg:z-auto lg:transform-none
-                `}
+        
+                    lg:transition-none 
+                    lg:transform-none 
+                    lg:static lg:translate-x-0 lg:block lg:h-full 
+                    lg:z-0
+    `}
             >
                 <div className="p-6 flex items-center justify-between border-b border-gray-700">
                     <h1 className="text-xl font-bold text-blue-500">Admin Panel</h1>
