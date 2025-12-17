@@ -115,6 +115,9 @@ const updateUserByAdmin = async (req, res) => {
             return res.status(400).json({ message: 'Use the dedicated /admin-lock endpoint to change is_active_admin status.' });
         }
 
+        // Lưu role cũ
+        const oldRole = user.role;
+
         // 1. CẬP NHẬT ROLE
         if (req.body.role) {
             user.role = req.body.role;
@@ -125,7 +128,7 @@ const updateUserByAdmin = async (req, res) => {
             user.subscriptionTier = req.body.subscriptionTier;
         }
 
-        // 3. XỬ LÝ NGÀY HẾT HẠN (Logic thông minh hơn)
+        // 3. XỬ LÝ NGÀY HẾT HẠN
         if (req.body.subscriptionExpiresAt !== undefined) {
             const inputDate = req.body.subscriptionExpiresAt;
 
@@ -167,6 +170,9 @@ const updateUserByAdmin = async (req, res) => {
         if (req.io) {
             console.log(`📡 Admin updated user_${user.id}. Sending socket signal...`);
 
+            // Kiểm tra xem role có thay đổi không
+            const isRoleChanged = oldRole !== updatedUser.role;
+
             // Tạo thông báo tùy thuộc vào việc admin vừa sửa cái gì
             let message = 'The account information has been updated by an admin.';
             if (typeof req.body.is_active !== 'undefined') {
@@ -177,7 +183,9 @@ const updateUserByAdmin = async (req, res) => {
 
             req.io.to(`user_${user.id}`).emit('user_updated', {
                 message: message,
-                user: updatedUser // Gửi kèm user mới nhất để client tự cập nhật state
+                user: updatedUser,
+                type: isRoleChanged ? 'ROLE_UPDATE' : 'INFO_UPDATE',
+                roleChanged: isRoleChanged
             });
         }
 
