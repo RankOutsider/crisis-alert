@@ -95,11 +95,15 @@ export default function Sidebar({ isOpen, onClose }) {
             <aside
                 className={`
                     fixed inset-y-0 left-0 z-40 w-72 bg-slate-800/80 backdrop-blur-md border-r border-slate-700/50
-                    transform transition-transform duration-300 ease-in-out flex flex-col h-[100dvh]
+                    transform transition-transform duration-300 ease-in-out flex flex-col 
+                    h-[100dvh]
                     ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+        
+                    md:transition-none
+                    md:transform-none
                     md:static md:translate-x-0 md:w-64 md:h-full
-                    md:z-auto md:transform-none
-                `}
+                    md:z-0
+    `}
             >
                 {/* Header (Logo + Close Btn) */}
                 <div className="flex items-center justify-between p-6 shrink-0">
