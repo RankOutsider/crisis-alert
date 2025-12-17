@@ -111,9 +111,6 @@ export default function ReactivationRequestsPage() {
         }
     };
 
-    if (isLoading) return <div className="flex justify-center py-10 text-gray-400"><Loader2 className="animate-spin mr-2" /> Loading requests...</div>;
-    if (error) return <div className="p-10 text-center text-red-500">Failed to load requests</div>;
-
     return (
         <div className="space-y-6 pb-20">
             {/* Header */}
@@ -122,7 +119,9 @@ export default function ReactivationRequestsPage() {
                     <div>
                         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
                             <Clock className="text-yellow-500" />
-                            Reactivations <span className="text-gray-500 text-lg font-normal">({filteredRequests.length})</span>
+                            Reactivations <span className="text-gray-500 text-lg font-normal">
+                                {isLoading ? '...' : `(${filteredRequests.length})`}
+                            </span>
                         </h1>
                         <p className="text-sm text-gray-400 mt-1">Manage account unlocking requests</p>
                     </div>
@@ -148,104 +147,118 @@ export default function ReactivationRequestsPage() {
                 />
             </div>
 
-            {/* CONTENT */}
-            {filteredRequests.length === 0 ? (
+            {/* CONTENT AREA */}
+            {isLoading ? (
+                // 1. Loading State
+                <div className="flex flex-col items-center justify-center py-20 text-gray-400 bg-slate-800/30 rounded-xl border border-slate-700/50 border-dashed">
+                    <Loader2 className="animate-spin mb-3 text-blue-500" size={32} />
+                    <p>Loading reactivation requests...</p>
+                </div>
+            ) : error ? (
+                // 2. Error State
+                <div className="p-10 text-center text-red-400 bg-red-900/10 rounded-xl border border-red-900/20">
+                    <AlertCircle className="mx-auto mb-2" size={32} />
+                    <p>Failed to load requests. Please try again later.</p>
+                </div>
+            ) : filteredRequests.length === 0 ? (
+                // 3. Empty State
                 <div className="bg-slate-800/50 rounded-xl p-10 text-center border border-slate-700 border-dashed flex flex-col items-center gap-3">
                     <CheckCircle size={40} className="text-green-500/50" />
-                    <p className="text-gray-400">No pending requests found.</p>
+                    <p className="text-gray-400">No requests found matching your filters.</p>
                 </div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {currentItems.map((req) => (
-                        <div key={req.id} className="bg-slate-800 border border-slate-700 rounded-xl p-5 hover:border-slate-600 transition-colors shadow-sm flex flex-col h-full animate-fadeIn">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="flex items-center gap-3 overflow-hidden">
-                                    <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-blue-400 shrink-0">
-                                        <User size={20} />
-                                    </div>
-                                    <div className="min-w-0">
-                                        <h3 className="font-semibold text-white truncate" title={req.User?.username}>{req.User?.username || 'Unknown'}</h3>
-                                        <div className="flex items-center gap-1 text-xs text-gray-400 truncate">
-                                            <Mail size={12} className="shrink-0" /> <span className="truncate">{req.User?.email}</span>
+                // 4. Data List
+                <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {currentItems.map((req) => (
+                            <div key={req.id} className="bg-slate-800 border border-slate-700 rounded-xl p-5 hover:border-slate-600 transition-colors shadow-sm flex flex-col h-full animate-fadeIn">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="flex items-center gap-3 overflow-hidden">
+                                        <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-blue-400 shrink-0">
+                                            <User size={20} />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <h3 className="font-semibold text-white truncate" title={req.User?.username}>{req.User?.username || 'Unknown'}</h3>
+                                            <div className="flex items-center gap-1 textz-xs text-gray-400 truncate">
+                                                <Mail size={12} className="shrink-0" /> <span className="truncate">{req.User?.email}</span>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                                <span className={`text-xs px-2 py-1 rounded border font-medium shrink-0 ${getStatusBadge(req.status)}`}>
-                                    {req.status}
-                                </span>
-                            </div>
-
-                            <div className="mb-4 p-3 bg-slate-900/50 rounded-lg text-sm text-gray-300 border border-slate-700/50 flex-grow">
-                                <p className="text-xs text-gray-500 mb-2 flex items-center gap-1">
-                                    <Clock size={12} /> Requested: {req.createdAt ? format(new Date(req.createdAt), 'MMM dd, HH:mm') : 'N/A'}
-                                </p>
-                                <div className="flex items-start gap-2">
-                                    <AlertCircle size={14} className="text-blue-400 mt-0.5 shrink-0" />
-                                    <span className="italic text-gray-400">
-                                        {req.reason ? `"${req.reason}"` : "Requesting account reactivation due to admin lock."}
+                                    <span className={`text-xs px-2 py-1 rounded border font-medium shrink-0 ${getStatusBadge(req.status)}`}>
+                                        {req.status}
                                     </span>
                                 </div>
-                            </div>
 
-                            {req.status === 'PENDING' && (
-                                <div className="flex gap-2 mt-auto pt-3 border-t border-slate-700/50">
-                                    <button
-                                        onClick={() => openModal(req, 'approve')}
-                                        className="flex-1 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                                    >
-                                        <CheckCircle size={16} /> Approve
-                                    </button>
-                                    <button
-                                        onClick={() => openModal(req, 'reject')}
-                                        className="flex-1 py-2 bg-red-900/20 hover:bg-red-900/40 text-red-400 hover:text-red-300 border border-red-800/30 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                                    >
-                                        <XCircle size={16} /> Reject
-                                    </button>
+                                <div className="mb-4 p-3 bg-slate-900/50 rounded-lg text-sm text-gray-300 border border-slate-700/50 flex-grow">
+                                    <p className="text-xs text-gray-500 mb-2 flex items-center gap-1">
+                                        <Clock size={12} /> Requested: {req.createdAt ? format(new Date(req.createdAt), 'MMM dd, HH:mm') : 'N/A'}
+                                    </p>
+                                    <div className="flex items-start gap-2">
+                                        <AlertCircle size={14} className="text-blue-400 mt-0.5 shrink-0" />
+                                        <span className="italic text-gray-400">
+                                            {req.reason ? `"${req.reason}"` : "Requesting account reactivation due to admin lock."}
+                                        </span>
+                                    </div>
                                 </div>
-                            )}
-                        </div>
-                    ))}
-                </div>
-            )}
 
-            {/* Pagination Controls */}
-            {filteredRequests.length > 0 && (
-                <div className="flex flex-col md:flex-row justify-between items-center gap-4 pt-4 border-t border-slate-700/50">
-                    <div className="text-sm text-gray-400">
-                        Showing <span className="font-bold text-white">{indexOfFirstItem + 1}</span> to <span className="font-bold text-white">{Math.min(indexOfLastItem, filteredRequests.length)}</span> of <span className="font-bold text-white">{filteredRequests.length}</span> results
-                    </div>
-                    <div className="flex gap-2">
-                        <button
-                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                            disabled={currentPage === 1}
-                            className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-gray-400 hover:text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                            <ChevronLeft size={18} />
-                        </button>
-                        {Array.from({ length: totalPages }, (_, i) => (
-                            <button
-                                key={i + 1}
-                                onClick={() => setCurrentPage(i + 1)}
-                                className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${currentPage === i + 1
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-slate-800 border border-slate-700 text-gray-400 hover:bg-slate-700 hover:text-white'
-                                    }`}
-                            >
-                                {i + 1}
-                            </button>
+                                {req.status === 'PENDING' && (
+                                    <div className="flex gap-2 mt-auto pt-3 border-t border-slate-700/50">
+                                        <button
+                                            onClick={() => openModal(req, 'approve')}
+                                            className="flex-1 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            <CheckCircle size={16} /> Approve
+                                        </button>
+                                        <button
+                                            onClick={() => openModal(req, 'reject')}
+                                            className="flex-1 py-2 bg-red-900/20 hover:bg-red-900/40 text-red-400 hover:text-red-300 border border-red-800/30 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                                        >
+                                            <XCircle size={16} /> Reject
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         ))}
-                        <button
-                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                            disabled={currentPage === totalPages}
-                            className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-gray-400 hover:text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                            <ChevronRight size={18} />
-                        </button>
                     </div>
-                </div>
+
+                    {/* Pagination Controls */}
+                    <div className="flex flex-col md:flex-row justify-between items-center gap-4 pt-4 border-t border-slate-700/50">
+                        <div className="text-sm text-gray-400">
+                            Showing <span className="font-bold text-white">{indexOfFirstItem + 1}</span> to <span className="font-bold text-white">{Math.min(indexOfLastItem, filteredRequests.length)}</span> of <span className="font-bold text-white">{filteredRequests.length}</span> results
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                disabled={currentPage === 1}
+                                className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-gray-400 hover:text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <ChevronLeft size={18} />
+                            </button>
+                            {Array.from({ length: totalPages }, (_, i) => (
+                                <button
+                                    key={i + 1}
+                                    onClick={() => setCurrentPage(i + 1)}
+                                    className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${currentPage === i + 1
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-slate-800 border border-slate-700 text-gray-400 hover:bg-slate-700 hover:text-white'
+                                        }`}
+                                >
+                                    {i + 1}
+                                </button>
+                            ))}
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                disabled={currentPage === totalPages}
+                                className="p-2 rounded-lg bg-slate-800 border border-slate-700 text-gray-400 hover:text-white hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <ChevronRight size={18} />
+                            </button>
+                        </div>
+                    </div>
+                </>
             )}
 
-            {/* MODAL APPROVE / REJECT */}
+            {/* MODAL APPROVED/REJECTED HISTORY*/}
             {selectedRequest && (
                 <Modal
                     isOpen={!!selectedRequest}

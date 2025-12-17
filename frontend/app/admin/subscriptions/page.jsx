@@ -7,13 +7,13 @@ import { swrFetcher, handleAdminSubRequest, deleteAdminSubRequest } from '@/util
 import {
     CheckCircle, XCircle, Loader2, CreditCard,
     User, Clock, Trash2, MessageSquare,
-    ChevronLeft, ChevronRight
+    ChevronLeft, ChevronRight, AlertCircle
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { format } from 'date-fns';
 import Modal from '@/app/components/Modal';
 import FilterBar from '@/app/components/FilterBar';
-import useDebounce from '@/hooks/useDebounce'; // Đã check code: Hook này chuẩn
+import useDebounce from '@/hooks/useDebounce';
 
 export default function AdminSubscriptions() {
     // Endpoint lấy danh sách
@@ -27,74 +27,55 @@ export default function AdminSubscriptions() {
     const [isProcessing, setIsProcessing] = useState(false);
 
     // --- State cho Filter & Pagination ---
-    const [searchTerm, setSearchTerm] = useState(''); // State nhập liệu (nhảy ngay lập tức)
+    const [searchTerm, setSearchTerm] = useState('');
     const [selectedStatus, setSelectedStatus] = useState([]);
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
     // --- ÁP DỤNG DEBOUNCE ---
-    // State này chỉ thay đổi sau khi bạn ngừng gõ 500ms -> Dùng cái này để filter
     const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
     // --- Logic Lọc & Phân trang ---
-
-    // 1. Reset về trang 1 khi filter thay đổi
-    // (Lắng nghe debouncedSearchTerm thay vì searchTerm để tránh reset liên tục khi đang gõ)
     useEffect(() => {
         setCurrentPage(1);
     }, [debouncedSearchTerm, selectedStatus]);
 
-    // 2. Tính toán danh sách đã lọc
     const filteredRequests = useMemo(() => {
         if (!requests) return [];
         return requests.filter(req => {
             const email = req.User?.email?.toLowerCase() || '';
-
-            // Sử dụng DEBOUNCED term để lọc (tối ưu hiệu năng)
             const search = debouncedSearchTerm.toLowerCase();
             const matchesSearch = email.includes(search);
-
-            // Lọc theo Status (MultiSelect)
             const matchesStatus = selectedStatus.length === 0 || selectedStatus.includes(req.status);
-
             return matchesSearch && matchesStatus;
         });
-    }, [requests, debouncedSearchTerm, selectedStatus]); // Dependency là debouncedSearchTerm
+    }, [requests, debouncedSearchTerm, selectedStatus]);
 
-    // 3. Cắt danh sách theo trang hiện tại
-    const totalPages = Math.ceil(filteredRequests.length / itemsPerPage);
+    const totalPages = Math.ceil(filteredRequests.length / itemsPerPage) || 1;
     const indexOfLastItem = currentPage * itemsPerPage;
     const indexOfFirstItem = indexOfLastItem - itemsPerPage;
     const currentItems = filteredRequests.slice(indexOfFirstItem, indexOfLastItem);
 
-    // --- Handlers (Logic cũ giữ nguyên) ---
-
+    // --- Handlers ---
     const openModal = (request, type) => {
         setSelectedRequest(request);
         setActionType(type);
         setAdminNote('');
     };
 
-    // Gọi API xử lý (Approve/Reject)
     const handleSubmit = async () => {
         if (!selectedRequest || !actionType) return;
-
         setIsProcessing(true);
         try {
-            // Gọi API
             await handleAdminSubRequest(selectedRequest.id, actionType, adminNote);
-
-            // Update tạm thời trong UI
             if (requests) {
                 mutate(endpoint, requests.map(req =>
                     req.id === selectedRequest.id ? { ...req, status: actionType, adminNote: adminNote } : req
                 ), false);
             }
-
             toast.success(`Request ${actionType.toLowerCase()}ed successfully!`);
             mutate(endpoint);
             setSelectedRequest(null);
-
         } catch (error) {
             console.error(error);
             toast.error(error.message || 'Failed to process request');
@@ -103,14 +84,10 @@ export default function AdminSubscriptions() {
         }
     };
 
-    // Xử lý Xóa
     const handleDelete = async (id) => {
         if (!window.confirm("Delete this history permanently?")) return;
-
         try {
             await deleteAdminSubRequest(id);
-            
-            // Update tạm thời trong UI
             if (requests) {
                 mutate(endpoint, requests.filter(req => req.id !== id), false);
             }
@@ -130,8 +107,7 @@ export default function AdminSubscriptions() {
         }
     };
 
-    if (isLoading) return <div className="flex justify-center py-10 text-gray-400"><Loader2 className="animate-spin mr-2" /> Loading requests...</div>;
-    if (error) return <div className="text-center py-10 text-red-400">Failed to load requests.</div>;
+    // --- REMOVED EARLY RETURN ---
 
     return (
         <div className="space-y-6 pb-20">
@@ -148,23 +124,34 @@ export default function AdminSubscriptions() {
 
             {/* Filter Bar */}
             <FilterBar
-                // Input vẫn dùng searchTerm (để hiển thị những gì bạn đang gõ ngay lập tức)
                 searchTerm={searchTerm}
                 onSearchChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search by email..."
-
-                // Status Filter
                 statusOptions={['PENDING', 'APPROVED', 'REJECTED']}
                 selectedStatus={selectedStatus}
                 onStatusChange={setSelectedStatus}
             />
 
-            {/* List View */}
-            {(!filteredRequests || filteredRequests.length === 0) ? (
+            {/* Content Area */}
+            {isLoading ? (
+                // 1. Loading State
+                <div className="flex flex-col items-center justify-center py-20 text-gray-400 bg-slate-800/30 rounded-xl border border-slate-700/50 border-dashed">
+                    <Loader2 className="animate-spin mb-3 text-blue-500" size={32} />
+                    <p>Loading subscription requests...</p>
+                </div>
+            ) : error ? (
+                // 2. Error State
+                <div className="p-10 text-center text-red-400 bg-red-900/10 rounded-xl border border-red-900/20">
+                    <AlertCircle className="mx-auto mb-2" size={32} />
+                    <p>Failed to load requests. Please try again later.</p>
+                </div>
+            ) : (!filteredRequests || filteredRequests.length === 0) ? (
+                // 3. Empty State
                 <div className="text-center py-12 text-gray-400 bg-gray-800/50 rounded-xl border border-gray-700/50 border-dashed">
                     No requests found matching your filters.
                 </div>
             ) : (
+                // 4. Data List
                 <>
                     {/* MOBILE VIEW */}
                     <div className="md:hidden flex flex-col gap-4">
@@ -305,8 +292,8 @@ export default function AdminSubscriptions() {
                                         key={i + 1}
                                         onClick={() => setCurrentPage(i + 1)}
                                         className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${currentPage === i + 1
-                                                ? 'bg-blue-600 text-white'
-                                                : 'bg-slate-800 border border-slate-700 text-gray-400 hover:bg-slate-700 hover:text-white'
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-slate-800 border border-slate-700 text-gray-400 hover:bg-slate-700 hover:text-white'
                                             }`}
                                     >
                                         {i + 1}
@@ -325,7 +312,7 @@ export default function AdminSubscriptions() {
                 </>
             )}
 
-            {/* Modal */}
+            {/* Modal - Luôn nằm ngoài điều kiện Loading để tránh lỗi Render Hook */}
             {selectedRequest && (
                 <Modal
                     isOpen={!!selectedRequest}
