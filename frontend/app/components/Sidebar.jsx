@@ -7,7 +7,6 @@ import {
     FileSearch, Book, User as UserIcon, Zap, Shield
 } from 'lucide-react';
 import { useEffect } from 'react';
-import { getToken } from '@/utils/api';
 import { useSWRConfig } from 'swr';
 import { toast } from 'react-toastify';
 import { socket } from '@/utils/socket';
@@ -29,28 +28,31 @@ export default function Sidebar({ isOpen, onClose }) {
     const userId = user?.id;
     const username = user?.username || user?.name;
 
-    useEffect(() => {
-        console.log("🧠 useEffect ran — setting up socket listeners...");
-    }, []);
+    // Hàm logout wrapper để xử lý đóng socket trước khi logout
+    const handleLogout = () => {
+        if (socket.connected) {
+            socket.disconnect();
+        }
+        logout();
+    };
 
     useEffect(() => {
         if (!userId) return;
-        if (socket.connected) {
-            console.log("⚡ Socket đã kết nối, bỏ qua connect lại.");
-            return;
-        }
 
-        console.log("🧠 Socket connecting for user: ", userId);
-        socket.connect();
+        // Kết nối Socket nếu chưa có
+        if (!socket.connected) {
+            console.log("🧠 Socket connecting for user: ", userId);
+            socket.connect();
+        }
 
         function onConnect() {
             console.log("🔌 [Socket.IO] Connected to the server.");
             socket.emit("join_user_room", userId);
         }
 
+        // --- XỬ LÝ NHẬN ALERT MỚI ---
         function onNewMatch(data) {
             console.log("🎉 [Socket.IO] Received signal for new post(s)", data);
-
             toast.success(
                 `Alert "${data.alertTitle}" found ${data.newPostCount} new post(s)!`,
                 {
@@ -58,29 +60,46 @@ export default function Sidebar({ isOpen, onClose }) {
                     containerId: "dashboard-toast"
                 }
             );
-
-            // Gọi hàm 'mutate' toàn cục của SWR
+            // Refresh data
             mutate('/api/alerts/stats');
-
             mutate((key) => typeof key === 'string' && key.startsWith('/api/posts/over-time'));
         }
 
+        // --- XỬ LÝ KHI ROLE BỊ THAY ĐỔI ---
+        function onUserUpdated(data) {
+            console.log("🔔 [Socket.IO] User update signal received:", data);
+
+            // Nếu là update Role -> Force Logout
+            if (data.type === 'ROLE_UPDATE' || data.isRoleChanged) {
+                toast.info("⚠️ Quyền hạn tài khoản đã thay đổi. Đang đăng xuất để cập nhật...", {
+                    autoClose: 2000,
+                    onClose: () => handleLogout() // Logout khi đóng thông báo
+                });
+
+                // Backup: Tự động logout sau 2s
+                setTimeout(() => {
+                    handleLogout();
+                }, 2000);
+            } else {
+                // Nếu update thông tin thường (Active, Tier...)
+                if (data.message) {
+                    toast.info(data.message);
+                }
+            }
+        }
+
+        // Đăng ký sự kiện
         socket.on("connect", onConnect);
         socket.on("new_match", onNewMatch);
+        socket.on("user_updated", onUserUpdated);
 
         return () => {
             console.log("🧹 [Socket.IO] Cleaning up listeners...");
             socket.off("connect", onConnect);
             socket.off("new_match", onNewMatch);
+            socket.off("user_updated", onUserUpdated);
         };
     }, [userId, mutate]);
-
-    const handleLogout = () => {
-        if (socket.connected) {
-            socket.disconnect();
-        }
-        logout();
-    };
 
     return (
         <>
