@@ -38,6 +38,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
                     transition-transform duration-300 ease-in-out h-[100dvh]
                     ${isOpen ? 'translate-x-0' : 'translate-x-full'} 
                     lg:translate-x-0 lg:static lg:block lg:h-full
+                    lg:z-auto lg:transform-none
                 `}
             >
                 <div className="p-6 flex items-center justify-between border-b border-gray-700">
