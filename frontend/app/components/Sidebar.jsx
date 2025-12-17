@@ -86,7 +86,7 @@ export default function Sidebar({ isOpen, onClose }) {
         <>
             {/* Overlay */}
             <div
-                className={`fixed inset-0 bg-black/60 z-40 md:hidden transition-opacity duration-300 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+                className={`fixed inset-0 bg-black/60 z-30 md:hidden transition-opacity duration-300 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
                     }`}
                 onClick={onClose}
             ></div>
@@ -94,9 +94,9 @@ export default function Sidebar({ isOpen, onClose }) {
             {/* Sidebar Container */}
             <aside
                 className={`
-                    fixed inset-y-0 left-0 z-50 w-72 bg-slate-800/80 backdrop-blur-md border-r border-slate-700/50
-                    transform transition-transform duration-300 ease-in-out flex flex-col h-full
-                    md:static md:translate-x-0 md:w-64
+                    fixed inset-y-0 left-0 z-40 w-72 bg-slate-800/80 backdrop-blur-md border-r border-slate-700/50
+                    transform transition-transform duration-300 ease-in-out flex flex-col h-[100dvh]
+                    md:static md:translate-x-0 md:w-64 md:h-full
                     ${isOpen ? 'translate-x-0' : '-translate-x-full'}
                 `}
             >

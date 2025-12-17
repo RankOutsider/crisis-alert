@@ -1,4 +1,3 @@
-/* frontend/app/globals.css */
 @import "tailwindcss";
 @import "react-toastify/dist/ReactToastify.css";
 
@@ -10,34 +9,43 @@
   --font-mono: var(--font-geist-mono);
 }
 
-/* --- KEEP ORIGINAL BODY STYLE --- */
+/* --- BASE STYLES --- */
+
+/* 1. Cấu hình HTML & Fix lỗi giật màn hình (Layout Shift) */
+html {
+  scroll-behavior: smooth;
+  /* Mặc định Mobile: KHÔNG thêm scrollbar-gutter để tiết kiệm diện tích màn hình bé */
+}
+
+/* CHỈ áp dụng fix giật màn hình cho Desktop/Tablet (từ 768px trở lên) */
+@media (min-width: 768px) {
+  html {
+    /* Dành ra khoảng trống cố định cho thanh cuộn.
+       Khi mở Modal (mất thanh cuộn), khoảng trống này vẫn giữ nguyên -> Web đứng yên, không bị giật. */
+    scrollbar-gutter: stable;
+  }
+}
+
+/* 2. Cấu hình Body */
 body {
   background: var(--color-background);
   color: var(--color-foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
   transition: background 0.3s ease, color 0.3s ease;
+  /* Làm mượt font chữ */
+  -webkit-font-smoothing: antialiased;
 }
 
-/* --- Safe enhancements that do NOT affect layout --- */
+/* --- UTILITIES & RESETS --- */
 
-/* Prevent iOS zoom on input */
+/* Prevent iOS zoom on input: Giữ font size tối thiểu 16px */
 input,
 textarea,
 select {
   font-size: 16px;
 }
 
-/* Smooth scroll only (no reset) */
-html {
-  scroll-behavior: smooth;
-}
-
-/* Optional small detail: anti-aliasing text (safe) */
-body {
-  -webkit-font-smoothing: antialiased;
-}
-
-/* Make media responsive (safe, non-destructive) */
+/* Make media responsive */
 img,
 video,
 canvas {

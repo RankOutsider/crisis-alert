@@ -1,4 +1,4 @@
-// components/AdminSidebar.jsx
+// frontend/app/components/AdminSidebar.jsx
 'use client';
 
 import Link from 'next/link';
@@ -26,7 +26,7 @@ const AdminSidebar = ({ isOpen, onClose }) => {
             {/* Overlay đen mờ khi mở trên mobile */}
             {isOpen && (
                 <div
-                    className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+                    className="fixed inset-0 bg-black/50 z-30 lg:hidden"
                     onClick={onClose}
                 ></div>
             )}
@@ -34,10 +34,10 @@ const AdminSidebar = ({ isOpen, onClose }) => {
             {/* Sidebar chính */}
             <aside
                 className={`
-                    fixed top-0 right-0 z-50 h-full w-64 bg-gray-800 border-l border-gray-700 
-                    transition-transform duration-300 ease-in-out
+                    fixed top-0 right-0 z-40 w-64 bg-gray-800 border-l border-gray-700
+                    transition-transform duration-300 ease-in-out h-[100dvh]
                     ${isOpen ? 'translate-x-0' : 'translate-x-full'} 
-                    lg:translate-x-0 lg:static lg:block
+                    lg:translate-x-0 lg:static lg:block lg:h-full
                 `}
             >
                 <div className="p-6 flex items-center justify-between border-b border-gray-700">
