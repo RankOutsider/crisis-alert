@@ -6,6 +6,8 @@ const CaseStudy = require('./CaseStudy');
 const User = require('./User');
 const SubscriptionRequest = require('./SubscriptionRequest');
 const ReactivationRequest = require('./ReactivationRequest');
+const PostAlert = require('./PostAlert');
+const PostCaseStudy = require('./PostCaseStudy');
 
 // --- Quan hệ User - Alert (Một-Nhiều) ---
 User.hasMany(Alert, { foreignKey: 'userId', onDelete: 'CASCADE' });
