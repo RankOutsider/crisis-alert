@@ -120,10 +120,16 @@ const getEmailTemplate = (title, content, callToAction = null) => {
 // --- CÁC HÀM GỬI EMAIL ---
 
 // 1. Admin Notification
-const sendReactivationRequestNotification = async (username, userEmail) => {
-    const adminEmail = ACTIVE_SENDER;
-    console.log(`🔍 DEBUG EMAIL: Đang gửi từ [${ACTIVE_SENDER}] tới Admin [${adminEmail}]`);
-    
+const sendReactivationRequestNotification = async (recipients, username, userEmail) => {
+    if( !recipients || recipients.length === 0 ) {
+        console.warn("⚠️ No active admins found to send notification.");
+        return;
+    }
+    // Chuyển mảng thành chuỗi cách nhau bởi dấu phẩy
+    const toAddress = Array.isArray(recipients) ? recipients.join(', ') : recipients;
+
+    console.log(`📧 Sending Reactivation Notification to admins: ${toAddress}`);
+
     try {
         const html = getEmailTemplate(
             '🔔 Reactivation Request',
@@ -135,7 +141,7 @@ const sendReactivationRequestNotification = async (username, userEmail) => {
 
         return await ACTIVE_TRANSPORTER.sendMail({
             from: ACTIVE_SENDER,
-            to: adminEmail,
+            to: toAddress,
             subject: `🔔 [Admin] Unlock Request: ${username}`,
             html: html
         });

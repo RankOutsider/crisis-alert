@@ -175,7 +175,7 @@ exports.createReactivationRequest = async (req, res) => {
             return res.status(400).json({ message: 'Account is currently active or locked by user.' });
         }
 
-        // Kiểm tra yêu cầu Pending đã tồn tại chưa
+        // Kiểm tra yêu cầu đã tồn tại chưa
 
         const existingRequest = await ReactivationRequest.findOne({
             where: {
@@ -196,7 +196,20 @@ exports.createReactivationRequest = async (req, res) => {
 
         // Gửi email thông báo cho Admin
         res.status(201).json({ message: 'Reactivation request sent successfully to the administrator.' });
-        sendReactivationRequestNotification(user.username, user.email).catch(err => {
+
+        const admins = await User.findAll({
+            where: {
+                role: 'admin',
+                is_active: true,
+                is_active_admin: true
+            },
+            attributes: ['email']
+        });
+
+        const adminEmails = admins.map(admin => admin.email);
+
+        // Gọi hàm gửi mail với danh sách vừa tìm được
+        sendReactivationRequestNotification(adminEmails, user.username, user.email).catch(err => {
             console.error(`⚠️ Background email sending error (Reactivation Request) for ${user.username}:`, err.message);
         });
     } catch (error) {
