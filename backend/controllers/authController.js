@@ -24,28 +24,28 @@ exports.register = async (req, res) => {
 
     try {
         // 1. Kiểm tra username đã tồn tại
-        let existingUser = await User.findOne({ where: { username } });
+        let existingUser = await User.findOne({ where: { username }, transaction: t });
         if (existingUser) {
             await t.rollback();
             return res.status(400).json({ message: 'Username already exists.' });
         }
 
         // 2. Kiểm tra SĐT đã tồn tại
-        existingUser = await User.findOne({ where: { phone } });
+        existingUser = await User.findOne({ where: { phone }, transaction: t });
         if (existingUser) {
             await t.rollback();
             return res.status(400).json({ message: 'Phone number is already in use.' });
         }
 
         // 3. Kiểm tra email đã tồn tại VÀ ĐÃ XÁC THỰC
-        existingUser = await User.findOne({ where: { email, is_verified: true } });
+        existingUser = await User.findOne({ where: { email, is_verified: true }, transaction: t });
         if (existingUser) {
             await t.rollback();
             return res.status(400).json({ message: 'Email is already in use.' });
         }
 
         // 4. Xử lý email đã đăng ký nhưng CHƯA XÁC THỰC
-        existingUser = await User.findOne({ where: { email, is_verified: false } });
+        existingUser = await User.findOne({ where: { email, is_verified: false }, transaction: t });
         if (existingUser) {
             await Otp.destroy({ where: { email }, transaction: t });
             await User.destroy({ where: { id: existingUser.id }, transaction: t });

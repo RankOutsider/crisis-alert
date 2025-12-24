@@ -28,6 +28,7 @@ const gmailTransporter = nodemailer.createTransport({
 
 // A. CHỌN TRANSPORTER
 const ACTIVE_TRANSPORTER = gmailTransporter; // Hoặc logic check process.env.NODE_ENV
+// gmailTransporter || mailhogTransporter;
 
 // B. NGƯỜI GỬI
 const ACTIVE_SENDER = process.env.GMAIL_USER;
@@ -120,7 +121,7 @@ const getEmailTemplate = (title, content, callToAction = null) => {
 
 // 1. Admin Notification
 const sendReactivationRequestNotification = async (username, userEmail) => {
-    const adminEmail = process.env.ADMIN_EMAIL || ACTIVE_SENDER;
+    const adminEmail = ACTIVE_SENDER;
     console.log(`🔍 DEBUG EMAIL: Đang gửi từ [${ACTIVE_SENDER}] tới Admin [${adminEmail}]`);
     
     try {

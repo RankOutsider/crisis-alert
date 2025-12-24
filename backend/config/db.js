@@ -13,36 +13,44 @@ const sequelize = new Sequelize(
         dialectOptions: {
             ssl: {
                 require: true,
-                rejectUnauthorized: false // Chấp nhận chứng chỉ bảo mật của TiDB
-            }
+                rejectUnauthorized: false // Chấp nhận chứng chỉ TiDB
+            },
+            connectTimeout: 60000 // 60 giây
         },
 
-        // --- Cấu hình Connection Pool (Tăng ổn định và hiệu suất) ---
+        // --- Cấu hình Connection Pool ---
         pool: {
-            max: 5,
+            max: 20,
             min: 0,
-            acquire: 30000,
+            acquire: 60000,
             idle: 10000
         },
 
         // --- Cấu hình Logging (Chỉ bật khi phát triển) ---
-        // Chỉ in ra các truy vấn SQL khi NODE_ENV là 'development'
         logging: process.env.NODE_ENV === 'development' ? console.log : false,
 
         // --- Cấu hình Độ ổn định (Tự thử lại khi lỗi tạm thời) ---
-        retry: { max: 3 } // Tự động thử lại kết nối tối đa 3 lần nếu thất bại
+        retry: {
+            match: [
+                /SequelizeConnectionError/,
+                /SequelizeConnectionRefusedError/,
+                /SequelizeHostNotFoundError/,
+                /SequelizeHostNotReachableError/,
+                /SequelizeInvalidConnectionError/,
+                /SequelizeConnectionTimedOutError/
+            ],
+            max: 3
+        }
     }
 );
 
 // Hàm kiểm tra và xác thực kết nối database
 const connectDB = async () => {
     try {
-        // Thử xác thực kết nối với database
         await sequelize.authenticate();
-        console.log('Kết nối MySQL thành công.');
+        console.log('✅ Kết nối MySQL thành công.');
     } catch (error) {
-        // Log lỗi và dừng ứng dụng nếu không thể kết nối
-        console.error('Không thể kết nối tới MySQL:', error.message);
+        console.error('❌ Không thể kết nối tới MySQL:', error.message);
         process.exit(1);
     }
 };
