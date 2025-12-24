@@ -121,6 +121,8 @@ const getEmailTemplate = (title, content, callToAction = null) => {
 // 1. Admin Notification
 const sendReactivationRequestNotification = async (username, userEmail) => {
     const adminEmail = process.env.ADMIN_EMAIL || ACTIVE_SENDER;
+    console.log(`🔍 DEBUG EMAIL: Đang gửi từ [${ACTIVE_SENDER}] tới Admin [${adminEmail}]`);
+    
     try {
         const html = getEmailTemplate(
             '🔔 Reactivation Request',
