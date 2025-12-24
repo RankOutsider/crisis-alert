@@ -152,28 +152,31 @@ const sendReactivationRequestNotification = async (recipients, username, userEma
 
 // 2. Reactivation Result
 const sendReactivationResultEmail = async (toEmail, status, adminReason) => {
-    const isApproved = status === 'Approved';
-    const color = isApproved ? 'green' : 'red';
+    const cleanStatus = status ? status.toString().trim().toLowerCase() : '';
+    const isApproved = cleanStatus === 'approved';
+
+    // Các biến giao diện
+    const color = isApproved ? '#16a34a' : '#dc2626';
     const icon = isApproved ? '🎉' : '🚫';
+    const displayStatus = isApproved ? 'APPROVED' : 'REJECTED';
 
     try {
         const html = getEmailTemplate(
             `${icon} Account Status Update`,
-            `<p>Your account reactivation request has been <strong style="color: ${isApproved ? '#16a34a' : '#dc2626'}; text-transform: uppercase;">${status}</strong>.</p>
+            `<p>Your account reactivation request has been <strong style="color: ${color}; text-transform: uppercase;">${displayStatus}</strong>.</p>
              <div style="background-color: #f8fafc; padding: 15px; border-radius: 6px; border: 1px solid #e2e8f0; margin: 20px 0;">
                 <strong>Admin Message:</strong><br/>
-                <em style="color: #475569;">"${adminReason}"</em>
+                <em style="color: #475569;">"${adminReason || 'No reason provided.'}"</em>
              </div>`,
-            isApproved ? { text: 'Login Now', url: `${CLIENT_URL}/login`, color: 'blue' } : null
         );
 
         return await ACTIVE_TRANSPORTER.sendMail({
             from: ACTIVE_SENDER,
             to: toEmail,
-            subject: `${icon} Account Reactivation ${status}`,
+            subject: `${icon} Account Reactivation ${displayStatus}`,
             html: html
         });
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error("Error sending result email:", e); }
 };
 
 // 3. New Alert Notification (Nổi bật nhất)
