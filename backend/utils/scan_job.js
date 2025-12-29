@@ -31,7 +31,11 @@ const runScanJob = async (io) => {
             { type: sequelize.QueryTypes.SELECT, raw: true }
         );
         const dbLinks = new Set(
-            existingLinksRaw.map(link => `${link.AlertId}-${link.PostId}`)
+            existingLinksRaw.map(link => {
+                const aId = link.AlertId || link.alertId;
+                const pId = link.PostId || link.postId;
+                return `${aId}-${pId}`;
+            })
         );
         console.log(`🔎 [NODE-CRON] Found ${activeAlerts.length} ACTIVE Alerts. Loaded ${dbLinks.size} existing associations from DB.`);
 
@@ -92,9 +96,11 @@ const runScanJob = async (io) => {
             if (newPostsToLink.length > 0) {
                 try {
                     await alert.addPosts(newPostsToLink, { ignoreDuplicates: true });
+
                     totalNewLinksCreated += newPostsToLink.length;
                     console.log(`✅ [NODE-CRON] [Alert ID ${alert.id}] Associated ${newPostsToLink.length} NEW Posts.`);
 
+                    // Gửi thông báo real-time qua Socket.io
                     if (io && user) {
                         io.to(`user_${user.id}`).emit('new_match', {
                             alertId: alert.id,
