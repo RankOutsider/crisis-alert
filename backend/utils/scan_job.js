@@ -1,20 +1,17 @@
-// backend/utils/scan_job.js
-
 const { Alert, Post, User, sequelize } = require('../models/associations');
 const { Op } = require('sequelize');
 const { sendNotificationEmail } = require('./emailService');
+// Hàm sleep để delay nếu cần (giữ lại cho chắc)
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 const runScanJob = async (io) => {
     const JOB_NAME = "ALERT_POST_SCANNER";
     console.log("");
-    console.log("");
-    console.log("");
     console.log("==========================================================");
     console.log(`[${new Date().toISOString()}] 🤖 [NODE-CRON] Starting periodically scanning job...`);
 
     try {
-        // --- LẤY TẤT CẢ ALERTS ACTIVE ---
+        // --- 1. LẤY TẤT CẢ ALERTS ACTIVE ---
         const activeAlerts = await Alert.findAll({
             where: { status: 'ACTIVE' },
             include: [{ model: User, attributes: ['id', 'email', 'notificationsEnabled', 'cc_emails'] }]
@@ -25,13 +22,16 @@ const runScanJob = async (io) => {
             return;
         }
 
-        // --- LẤY CÁC LIÊN KẾT ĐÃ TỒN TẠI TỪ DATABASE ---
+        // --- 2. LẤY CÁC LIÊN KẾT ĐÃ TỒN TẠI TỪ DATABASE (ĐỂ LỌC RAM) ---
+        // Lưu ý: Tên bảng là 'postalerts' dựa trên ảnh bạn cung cấp
         const existingLinksRaw = await sequelize.query(
             "SELECT `AlertId`, `PostId` FROM `postalerts`",
             { type: sequelize.QueryTypes.SELECT, raw: true }
         );
+
         const dbLinks = new Set(
             existingLinksRaw.map(link => {
+                // Xử lý cả trường hợp viết hoa/thường do khác biệt Driver
                 const aId = link.AlertId || link.alertId;
                 const pId = link.PostId || link.postId;
                 return `${aId}-${pId}`;
@@ -39,14 +39,14 @@ const runScanJob = async (io) => {
         );
         console.log(`🔎 [NODE-CRON] Found ${activeAlerts.length} ACTIVE Alerts. Loaded ${dbLinks.size} existing associations from DB.`);
 
-        // --- TÌM NGÀY BẮT ĐẦU QUÉT CHUNG ---
+        // --- 3. TÌM NGÀY BẮT ĐẦU QUÉT CHUNG ---
         const earliestStartDate = new Date(
             Math.min(...activeAlerts.map(a => new Date(a.createdAt)))
         );
         const startOfEarliestMonth = new Date(earliestStartDate.getFullYear(), earliestStartDate.getMonth(), 1);
         startOfEarliestMonth.setHours(0, 0, 0, 0);
 
-        // --- LẤY TẤT CẢ POSTS CẦN QUÉT (CHỈ 1 LẦN) ---
+        // --- 4. LẤY TẤT CẢ POSTS CẦN QUÉT ---
         const allPostsToScan = await Post.findAll({
             where: { publishedAt: { [Op.gte]: startOfEarliestMonth } },
             raw: true
@@ -58,7 +58,7 @@ const runScanJob = async (io) => {
         }
         console.log(`🔎 [NODE-CRON] Found ${allPostsToScan.length} Posts to scan.`);
 
-        // --- SO KHỚP VÀ GỬI EMAIL (TRONG BỘ NHỚ) ---
+        // --- 5. SO KHỚP VÀ XỬ LÝ ---
         let totalNewLinksCreated = 0;
 
         for (const alert of activeAlerts) {
@@ -68,16 +68,19 @@ const runScanJob = async (io) => {
 
             const user = alert.User;
             const ccEmails = user.cc_emails;
+
+            // Logic ngày tháng của Alert cụ thể
             const alertCreationDate = new Date(alert.createdAt);
             const startOfMonth = new Date(alertCreationDate.getFullYear(), alertCreationDate.getMonth(), 1);
             startOfMonth.setHours(0, 0, 0, 0);
 
-            const newPostsToLink = [];
-            const newPostObjectsForEmail = [];
+            const newPostsToLink = []; // Chỉ chứa ID để Insert
+            const newPostObjectsForEmail = []; // Chứa full object để gửi mail
 
             for (const post of allPostsToScan) {
                 if (new Date(post.publishedAt) < startOfMonth) continue;
 
+                // Check trùng trên RAM trước
                 const linkKey = `${alert.id}-${post.id}`;
                 if (dbLinks.has(linkKey)) continue;
 
@@ -88,19 +91,30 @@ const runScanJob = async (io) => {
                 if (keywordMatch && platformMatch) {
                     newPostsToLink.push(post.id);
                     newPostObjectsForEmail.push(post);
-                    dbLinks.add(linkKey);
+                    dbLinks.add(linkKey); // Cập nhật luôn vào RAM để vòng sau không lặp
                 }
             }
 
-            // TẠO LIÊN KẾT MỚI (HÀNG LOẠT) VÀ GỬI EMAIL
+            // --- 6. INSERT IGNORE (PHẦN QUAN TRỌNG NHẤT) ---
             if (newPostsToLink.length > 0) {
                 try {
-                    await alert.addPosts(newPostsToLink, { ignoreDuplicates: true });
+                    // Chuẩn bị thời gian hiện tại cho SQL
+                    const now = new Date().toISOString().slice(0, 19).replace('T', ' '); // Format: YYYY-MM-DD HH:mm:ss
 
+                    // Tạo chuỗi Values cho câu lệnh SQL: (AlertId, PostId, createdAt, updatedAt)
+                    const values = newPostsToLink.map(pId => `(${alert.id}, ${pId}, '${now}', '${now}')`).join(',');
+
+                    // Câu lệnh BẤT TỬ: INSERT IGNORE INTO ...
+                    // Nếu trùng AlertId + PostId -> Nó sẽ tự bỏ qua, không báo lỗi.
+                    const query = `INSERT IGNORE INTO postalerts (AlertId, PostId, createdAt, updatedAt) VALUES ${values}`;
+
+                    await sequelize.query(query);
+
+                    // --- LOG XANH (Thành công) ---
                     totalNewLinksCreated += newPostsToLink.length;
-                    console.log(`✅ [NODE-CRON] [Alert ID ${alert.id}] Associated ${newPostsToLink.length} NEW Posts.`);
+                    console.log(`✅ [NODE-CRON] [Alert ID ${alert.id}] Processed ${newPostsToLink.length} posts (Duplicates ignored automatically).`);
 
-                    // Gửi thông báo real-time qua Socket.io
+                    // Gửi Socket IO
                     if (io && user) {
                         io.to(`user_${user.id}`).emit('new_match', {
                             alertId: alert.id,
@@ -108,28 +122,22 @@ const runScanJob = async (io) => {
                             newPostCount: newPostsToLink.length
                         });
                     }
-                } catch (dbError) {
-                    if (dbError.name === 'SequelizeUniqueConstraintError') {
-                        console.log(`⚠️ [Info] Alert ID ${alert.id} đã có liên kết tồn tại (Skipped duplicates).`);
-                    } else {
-                        console.error(`❌ [NODE-CRON] LỖI LƯU DB cho Alert ID ${alert.id}:`, dbError.message);
-                    }
-                    continue;
-                }
 
-                // Gửi email
-                if (user && user.email && user.notificationsEnabled) {
-                    console.log(`... Preparing to send ${newPostsToLink.length} emails to ${user.email} (CC: ${ccEmails ? ccEmails.split(',').length : 0} others)`);
-                    for (const post of newPostObjectsForEmail) {
-                        try {
-                            await sendNotificationEmail(user.email, alert.title, post, ccEmails);
-                            console.log(`... Sent email for Post ID ${post.id} to ${user.email}`);
-                            // await sleep(1000); // Thêm delay cho gửi GMAIL
-                        } catch (emailError) {
-                            console.error(`❌ Error sending email (Post ID: ${post.id}):`, emailError.message);
-                            // await sleep(2000); // Thêm delay cho gửi GMAIL nếu lỗi
+                    // Gửi Email
+                    if (user && user.email && user.notificationsEnabled) {
+                        console.log(`... Preparing to send ${newPostsToLink.length} emails...`);
+                        for (const post of newPostObjectsForEmail) {
+                            try {
+                                await sendNotificationEmail(user.email, alert.title, post, ccEmails);
+                            } catch (emailError) {
+                                console.error(`⚠️ Email error (Post ${post.id}): ${emailError.message}`);
+                            }
                         }
                     }
+
+                } catch (dbError) {
+                    // Nếu vào đây thì chỉ có thể là lỗi kết nối DB hoặc sai tên bảng, cần in ra để fix
+                    console.error(`❌ [NODE-CRON] CRITICAL ERROR for Alert ID ${alert.id}:`, dbError.message);
                 }
             }
         }
