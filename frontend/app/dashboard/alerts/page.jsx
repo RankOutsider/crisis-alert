@@ -288,11 +288,89 @@ export default function AlertsPage() {
 
             <div className="bg-slate-800/50 p-3 sm:p-6 rounded-lg">
                 <h2 className="text-xl font-semibold text-white mb-4">Existing Alerts</h2>
-                <FilterBar searchTerm={searchTerm} onSearchChange={e => setSearchTerm(e.target.value)} placeholder="Search alerts..." availableFields={ALERT_SEARCH_FIELDS} activeFields={searchFields} onFieldChange={f => setSearchFields(p => ({ ...p, [f.toLowerCase()]: !p[f.toLowerCase()] }))} platformOptions={PLATFORM_OPTIONS} selectedPlatforms={filters.platforms} onPlatformChange={p => setFilters(prev => ({ ...prev, platforms: p }))} statusOptions={STATUS_OPTIONS} selectedStatus={filters.status} onStatusChange={s => setFilters(prev => ({ ...prev, status: s }))} severityOptions={SEVERITY_OPTIONS} selectedSeverity={filters.severity} onSeverityChange={s => setFilters(prev => ({ ...prev, severity: s }))} />
+                <FilterBar
+                    searchTerm={searchTerm}
+                    onSearchChange={e => setSearchTerm(e.target.value)}
+                    placeholder="Search alerts..."
+                    availableFields={ALERT_SEARCH_FIELDS}
+                    activeFields={searchFields}
+                    onFieldChange={f => setSearchFields(p => ({
+                        ...p, [f.toLowerCase()]: !p[f.toLowerCase()]
+                    }))}
+                    platformOptions={PLATFORM_OPTIONS}
+                    selectedPlatforms={filters.platforms}
+                    onPlatformChange={p => setFilters(prev => ({
+                        ...prev, platforms: p
+                    }))}
+                    statusOptions={STATUS_OPTIONS}
+                    selectedStatus={filters.status}
+                    onStatusChange={s => setFilters(prev => ({
+                        ...prev, status: s
+                    }))}
+                    severityOptions={SEVERITY_OPTIONS}
+                    selectedSeverity={filters.severity}
+                    onSeverityChange={s => setFilters(prev => ({
+                        ...prev, severity: s
+                    }))}
+                />
 
-                {isLoading ? <div className="space-y-4 py-10">{[...Array(ITEMS_PER_PAGE)].map((_, i) => <AlertCardSkeleton key={i} />)}</div> : error ? <div className="text-center py-10 text-red-300">Error loading alerts. <button onClick={() => mutate()} className="underline">Retry</button></div> : alerts.length > 0 ? <div className="space-y-4">{alerts.map(alert => <AlertCard key={alert.id} alert={alert} isSelected={selectedAlerts.includes(alert.id)} onSelect={handleSelectAlert} onEdit={() => handleOpenModal('edit', alert)} onDelete={() => setConfirmDeleteId(alert.id)} />)}</div> : <div className="text-center py-16 text-slate-400 border-2 border-dashed border-slate-700 rounded-lg"><AlertIcon className="mx-auto h-12 w-12 text-slate-500 mb-2" /><h3>No Alerts Found</h3><button onClick={() => handleOpenModal('create')} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">Create New Alert</button></div>}
+                {isLoading ? <div
+                    className="space-y-4 py-10">{[
+                        ...Array(ITEMS_PER_PAGE)
+                    ].map((_, i) =>
+                        <AlertCardSkeleton key={i} />)}
+                </div> : error ?
+                    <div
+                        className="text-center py-10 text-red-300">
+                        Error loading alerts.
+                        <button onClick={() => mutate()}
+                            className="underline">
+                            Retry
+                        </button>
+                    </div> : alerts.length > 0 ?
+                        <div className="space-y-4">
+                            {alerts.map(alert =>
+                                <AlertCard key={alert.id}
+                                    alert={alert}
+                                    isSelected={selectedAlerts.includes(alert.id)}
+                                    onSelect={handleSelectAlert}
+                                    onEdit={() => handleOpenModal('edit', alert)}
+                                    onDelete={() => setConfirmDeleteId(alert.id)}
+                                />)}
+                        </div> :
+                        <div
+                            className="text-center py-16 text-slate-400 border-2 border-dashed border-slate-700 rounded-lg">
+                            <AlertIcon
+                                className="mx-auto h-12 w-12 text-slate-500 mb-2" />
+                            <h3>
+                                No Alerts Found
+                            </h3>
+                            <button
+                                onClick={() => handleOpenModal('create')}
+                                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">
+                                Create New Alert
+                            </button>
+                        </div>}
 
-                {!isLoading && totalPages > 1 && <div className="flex justify-center items-center gap-4 mt-8"><button onClick={() => setCurrentPage(c => c - 1)} disabled={currentPage === 1} className="px-4 py-2 bg-slate-700 rounded text-white disabled:opacity-50">Prev</button><span className="text-sm text-gray-400">Page {currentPage} / {totalPages}</span><button onClick={() => setCurrentPage(c => c + 1)} disabled={currentPage === totalPages} className="px-4 py-2 bg-slate-700 rounded text-white disabled:opacity-50">Next</button></div>}
+                {!isLoading && totalPages > 1 &&
+                    <div className="flex justify-center items-center gap-4 mt-8">
+                        <button
+                            onClick={() => setCurrentPage(c => c - 1)}
+                            disabled={currentPage === 1}
+                            className="px-4 py-2 bg-slate-700 rounded text-white disabled:opacity-50">
+                            Prev
+                        </button>
+                        <span
+                            className="text-sm text-gray-400">
+                            Page {currentPage} / {totalPages}
+                        </span>
+                        <button
+                            onClick={() => setCurrentPage(c => c + 1)}
+                            disabled={currentPage === totalPages}
+                            className="px-4 py-2 bg-slate-700 rounded text-white disabled:opacity-50">
+                            Next
+                        </button>
+                    </div>}
             </div>
 
             {/* Modal & Dialogs */}
@@ -307,8 +385,55 @@ export default function AlertsPage() {
                     serverErrors={modalErrors}
                 />
             )}
-            {confirmDeleteId && <Modal isOpen={true} onClose={() => setConfirmDeleteId(null)} title="Delete Alert" footer={<div className="flex justify-end gap-3"><button onClick={() => setConfirmDeleteId(null)} className="px-4 py-2 bg-slate-600 rounded text-white">Cancel</button><button onClick={handleDelete} disabled={isProcessing} className="px-4 py-2 bg-red-600 rounded text-white">Delete</button></div>}><p className="text-slate-300">Are you sure?</p></Modal>}
-            {confirmBulkDelete && <Modal isOpen={true} onClose={() => setConfirmBulkDelete(false)} title="Bulk Delete" footer={<div className="flex justify-end gap-3"><button onClick={() => setConfirmBulkDelete(false)} className="px-4 py-2 bg-slate-600 rounded text-white">Cancel</button><button onClick={() => handleBulkAction('delete')} disabled={isProcessing} className="px-4 py-2 bg-red-600 rounded text-white">Delete All</button></div>}><p className="text-slate-300">Delete {selectedAlerts.length} items?</p></Modal>}
+            {confirmDeleteId &&
+                <Modal
+                    isOpen={true}
+                    onClose={() => setConfirmDeleteId(null)}
+                    title="Delete Alert"
+                    footer={<div
+                        className="flex justify-end gap-3">
+                        <button
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="px-4 py-2 bg-slate-600 rounded text-white">
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleDelete}
+                            disabled={isProcessing}
+                            className="px-4 py-2 bg-red-600 rounded text-white">
+                            Delete
+                        </button>
+                    </div>}>
+                    <p
+                        className="text-slate-300">
+                        Are you sure?
+                    </p>
+                </Modal>}
+                
+            {confirmBulkDelete &&
+                <Modal
+                    isOpen={true}
+                    onClose={() => setConfirmBulkDelete(false)}
+                    title="Bulk Delete"
+                    footer={<div
+                        className="flex justify-end gap-3">
+                        <button
+                            onClick={() => setConfirmBulkDelete(false)}
+                            className="px-4 py-2 bg-slate-600 rounded text-white">
+                            Cancel
+                        </button>
+                        <button
+                            onClick={() => handleBulkAction('delete')}
+                            disabled={isProcessing}
+                            className="px-4 py-2 bg-red-600 rounded text-white">
+                            Delete All
+                        </button>
+                    </div>}>
+                    <p
+                        className="text-slate-300">
+                        Delete {selectedAlerts.length} items?
+                    </p>
+                </Modal>}
         </div>
     );
 }

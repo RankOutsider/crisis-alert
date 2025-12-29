@@ -1,7 +1,7 @@
 // frontend/app/components/MultiSelectDropdown.jsx
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { ChevronDown, X, Check } from 'lucide-react';
 import { useClickAway } from 'react-use';
 
@@ -15,19 +15,38 @@ import { useClickAway } from 'react-use';
  */
 export default function MultiSelectDropdown({ title, options, selectedOptions, onChange, showOrder = false }) {
     const [isOpen, setIsOpen] = useState(false);
+    // State mới để quyết định căn trái hay phải
+    const [alignRight, setAlignRight] = useState(false);
     const ref = useRef(null);
 
     useClickAway(ref, () => {
         setIsOpen(false);
     });
 
+    // --- LOGIC MỚI: Hàm toggle thông minh ---
+    const toggleDropdown = useCallback(() => {
+        if (!isOpen && ref.current) {
+            // Trước khi mở, tính toán vị trí
+            const rect = ref.current.getBoundingClientRect();
+            const viewportWidth = window.innerWidth;
+            // Ước lượng chiều rộng dropdown (khoảng 240px theo class min-w-[240px] + margin an toàn)
+            const estimatedDropdownWidth = 250;
+
+            // Tính khoảng trống còn lại bên phải
+            const spaceOnRight = viewportWidth - rect.right;
+
+            // Nếu khoảng trống bên phải nhỏ hơn chiều rộng menu -> Căn phải
+            // Ngược lại -> Căn trái (mặc định)
+            setAlignRight(spaceOnRight < estimatedDropdownWidth);
+        }
+        setIsOpen(prev => !prev);
+    }, [isOpen]);
+
     const handleSelect = (option) => {
         let newSelected;
         if (selectedOptions.includes(option)) {
-            // Logic cũ: Bỏ chọn
             newSelected = selectedOptions.filter(item => item !== option);
         } else {
-            // Logic cũ: Thêm vào cuối (giữ thứ tự click)
             newSelected = [...selectedOptions, option];
         }
         onChange(newSelected);
@@ -53,7 +72,9 @@ export default function MultiSelectDropdown({ title, options, selectedOptions, o
         <div className="relative" ref={ref}>
             <button
                 type="button"
-                onClick={() => setIsOpen(!isOpen)}
+                // Thay onClick cũ bằng hàm toggleDropdown mới
+                onClick={toggleDropdown}
+                aria-expanded={isOpen}
                 className="flex items-center justify-between gap-2 px-3 py-2 text-sm bg-slate-800 border border-slate-600 rounded-md hover:bg-slate-700 w-full min-w-[140px] text-white transition-colors"
             >
                 <span className="truncate font-medium">{getButtonText()}</span>
@@ -68,7 +89,14 @@ export default function MultiSelectDropdown({ title, options, selectedOptions, o
             </button>
 
             {isOpen && (
-                <div className="absolute z-[9999] top-full left-0 mt-2 w-full min-w-[220px] max-h-80 overflow-y-auto bg-slate-900 border border-slate-700 rounded-lg shadow-xl custom-scrollbar animate-in fade-in zoom-in-95 duration-100">
+                // --- CẬP NHẬT CLASS Ở ĐÂY ---
+                // Sử dụng biến alignRight để đổi class left-0/right-0 và origin animation
+                <div className={`absolute z-[9999] top-full mt-2 
+                                w-full min-w-[220px] sm:min-w-[240px] max-h-80 overflow-y-auto 
+                                bg-slate-900 border border-slate-700 
+                                rounded-lg shadow-xl custom-scrollbar animate-in fade-in zoom-in-95 duration-100
+                                ${alignRight ? 'right-0 origin-top-right' : 'left-0 origin-top-left'}
+                `}>
                     <div className="sticky top-0 bg-slate-900 p-2 border-b border-slate-700 flex justify-between z-10">
                         <button onClick={selectAll} className="text-xs text-blue-400 hover:text-blue-300 font-medium px-2 py-1 hover:bg-slate-800 rounded">
                             Select All
@@ -82,7 +110,6 @@ export default function MultiSelectDropdown({ title, options, selectedOptions, o
                         {options.map(option => {
                             const selectedIndex = selectedOptions.indexOf(option);
                             const isSelected = selectedIndex !== -1;
-                            // Chỉ tính số thứ tự nếu prop showOrder = true
                             const displayOrder = (showOrder && isSelected) ? selectedIndex + 1 : null;
 
                             return (
@@ -108,7 +135,6 @@ export default function MultiSelectDropdown({ title, options, selectedOptions, o
                                         <span className="capitalize">{option}</span>
                                     </div>
 
-                                    {/* Chỉ hiển thị số nếu showOrder = true */}
                                     {displayOrder && (
                                         <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold shadow-sm">
                                             {displayOrder}
