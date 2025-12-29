@@ -1,21 +1,11 @@
-// frontend/app/components/MultiSelectDropdown.jsx
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
 import { ChevronDown, X, Check } from 'lucide-react';
 import { useClickAway } from 'react-use';
 
-/**
- * Props:
- * - title: "Platform" | "Sentiment"
- * - options: Mảng các chuỗi
- * - selectedOptions: Mảng các chuỗi đã chọn
- * - onChange: Hàm (newSelected) => {}
- * - showOrder: (Boolean) Có hiện số thứ tự chọn hay không (Mặc định: false)
- */
 export default function MultiSelectDropdown({ title, options, selectedOptions, onChange, showOrder = false }) {
     const [isOpen, setIsOpen] = useState(false);
-    // State mới để quyết định căn trái hay phải
     const [alignRight, setAlignRight] = useState(false);
     const ref = useRef(null);
 
@@ -23,21 +13,15 @@ export default function MultiSelectDropdown({ title, options, selectedOptions, o
         setIsOpen(false);
     });
 
-    // --- LOGIC MỚI: Hàm toggle thông minh ---
+    // --- LOGIC MỚI: Căn cứ vào tâm màn hình ---
     const toggleDropdown = useCallback(() => {
         if (!isOpen && ref.current) {
-            // Trước khi mở, tính toán vị trí
             const rect = ref.current.getBoundingClientRect();
-            const viewportWidth = window.innerWidth;
-            // Ước lượng chiều rộng dropdown (khoảng 240px theo class min-w-[240px] + margin an toàn)
-            const estimatedDropdownWidth = 250;
+            const screenCenter = window.innerWidth / 2;
 
-            // Tính khoảng trống còn lại bên phải
-            const spaceOnRight = viewportWidth - rect.right;
-
-            // Nếu khoảng trống bên phải nhỏ hơn chiều rộng menu -> Căn phải
-            // Ngược lại -> Căn trái (mặc định)
-            setAlignRight(spaceOnRight < estimatedDropdownWidth);
+            // Nếu nút bấm nằm ở nửa bên phải màn hình -> Căn phải (để menu đổ về phía trái cho đỡ tràn)
+            // Ngược lại thì căn trái
+            setAlignRight(rect.left > screenCenter);
         }
         setIsOpen(prev => !prev);
     }, [isOpen]);
@@ -72,9 +56,7 @@ export default function MultiSelectDropdown({ title, options, selectedOptions, o
         <div className="relative" ref={ref}>
             <button
                 type="button"
-                // Thay onClick cũ bằng hàm toggleDropdown mới
                 onClick={toggleDropdown}
-                aria-expanded={isOpen}
                 className="flex items-center justify-between gap-2 px-3 py-2 text-sm bg-slate-800 border border-slate-600 rounded-md hover:bg-slate-700 w-full min-w-[140px] text-white transition-colors"
             >
                 <span className="truncate font-medium">{getButtonText()}</span>
@@ -89,10 +71,10 @@ export default function MultiSelectDropdown({ title, options, selectedOptions, o
             </button>
 
             {isOpen && (
-                // --- CẬP NHẬT CLASS Ở ĐÂY ---
-                // Sử dụng biến alignRight để đổi class left-0/right-0 và origin animation
                 <div className={`absolute z-[9999] top-full mt-2 
-                                w-full min-w-[220px] sm:min-w-[240px] max-h-80 overflow-y-auto 
+                                w-max min-w-[200px] sm:min-w-[240px] 
+                                max-w-[calc(100vw-2rem)]  /* QUAN TRỌNG: Không bao giờ rộng hơn màn hình trừ lề */
+                                max-h-80 overflow-y-auto 
                                 bg-slate-900 border border-slate-700 
                                 rounded-lg shadow-xl custom-scrollbar animate-in fade-in zoom-in-95 duration-100
                                 ${alignRight ? 'right-0 origin-top-right' : 'left-0 origin-top-left'}
@@ -123,20 +105,19 @@ export default function MultiSelectDropdown({ title, options, selectedOptions, o
                                             : 'text-slate-300 hover:bg-slate-800 hover:text-white'}
                                     `}
                                 >
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-3 overflow-hidden">
                                         <div className={`
-                                            w-5 h-5 rounded border flex items-center justify-center transition-all duration-200
-                                            ${isSelected
-                                                ? 'bg-blue-600 border-blue-600 shadow-sm'
-                                                : 'bg-slate-800 border-slate-600 group-hover:border-slate-500'}
+                                            flex-shrink-0 w-5 h-5 rounded border flex items-center justify-center transition-all
+                                            ${isSelected ? 'bg-blue-600 border-blue-600' : 'bg-slate-800 border-slate-600'}
                                         `}>
                                             {isSelected && <Check size={14} className="text-white" strokeWidth={3} />}
                                         </div>
-                                        <span className="capitalize">{option}</span>
+                                        {/* truncate text nếu dài quá */}
+                                        <span className="capitalize truncate">{option}</span>
                                     </div>
 
                                     {displayOrder && (
-                                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold shadow-sm">
+                                        <span className="flex-shrink-0 ml-2 flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold shadow-sm">
                                             {displayOrder}
                                         </span>
                                     )}
