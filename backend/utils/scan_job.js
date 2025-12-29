@@ -91,7 +91,7 @@ const runScanJob = async (io) => {
             // TẠO LIÊN KẾT MỚI (HÀNG LOẠT) VÀ GỬI EMAIL
             if (newPostsToLink.length > 0) {
                 try {
-                    await alert.addPosts(newPostsToLink);
+                    await alert.addPosts(newPostsToLink, { ignoreDuplicates: true });
                     totalNewLinksCreated += newPostsToLink.length;
                     console.log(`✅ [NODE-CRON] [Alert ID ${alert.id}] Associated ${newPostsToLink.length} NEW Posts.`);
 
@@ -103,7 +103,11 @@ const runScanJob = async (io) => {
                         });
                     }
                 } catch (dbError) {
-                    console.error(`❌ [NODE-CRON] LỖI LƯU DB cho Alert ID ${alert.id}:`, dbError.message);
+                    if (dbError.name === 'SequelizeUniqueConstraintError') {
+                        console.log(`⚠️ [Info] Alert ID ${alert.id} đã có liên kết tồn tại (Skipped duplicates).`);
+                    } else {
+                        console.error(`❌ [NODE-CRON] LỖI LƯU DB cho Alert ID ${alert.id}:`, dbError.message);
+                    }
                     continue;
                 }
 
