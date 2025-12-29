@@ -645,7 +645,6 @@ export default function DashboardContent() {
                             <label className="block text-sm font-medium text-slate-300 mb-1">
                                 Export Columns
                             </label>
-                            {/* Dùng component MultiSelectDropdown có sẵn */}
                             <MultiSelectDropdown
                                 title={selectedColumns.length === EXPORT_COLUMN_OPTIONS.length
                                     ? "All Columns"
@@ -654,6 +653,7 @@ export default function DashboardContent() {
                                 options={EXPORT_COLUMN_OPTIONS}
                                 selectedOptions={selectedColumns}
                                 onChange={setSelectedColumns}
+                                showOrder={true}
                             />
                         </div>
 

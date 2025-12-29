@@ -2,21 +2,21 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { ChevronDown, X } from 'lucide-react';
+import { ChevronDown, X, Check } from 'lucide-react';
 import { useClickAway } from 'react-use';
 
 /**
  * Props:
  * - title: "Platform" | "Sentiment"
- * - options: Mảng các chuỗi, vd: ['Facebook', 'X', 'Forum']
- * - selectedOptions: Mảng các chuỗi đã chọn, vd: ['Facebook']
- * - onChange: Hàm (newSelected) => {} được gọi khi lựa chọn thay đổi
+ * - options: Mảng các chuỗi
+ * - selectedOptions: Mảng các chuỗi đã chọn
+ * - onChange: Hàm (newSelected) => {}
+ * - showOrder: (Boolean) Có hiện số thứ tự chọn hay không (Mặc định: false)
  */
-export default function MultiSelectDropdown({ title, options, selectedOptions, onChange }) {
+export default function MultiSelectDropdown({ title, options, selectedOptions, onChange, showOrder = false }) {
     const [isOpen, setIsOpen] = useState(false);
     const ref = useRef(null);
 
-    // Sử dụng hook này để đóng dropdown khi click ra ngoài
     useClickAway(ref, () => {
         setIsOpen(false);
     });
@@ -24,22 +24,25 @@ export default function MultiSelectDropdown({ title, options, selectedOptions, o
     const handleSelect = (option) => {
         let newSelected;
         if (selectedOptions.includes(option)) {
-            // Nếu đã chọn -> Bỏ chọn
+            // Logic cũ: Bỏ chọn
             newSelected = selectedOptions.filter(item => item !== option);
         } else {
-            // Nếu chưa chọn -> Thêm vào
+            // Logic cũ: Thêm vào cuối (giữ thứ tự click)
             newSelected = [...selectedOptions, option];
         }
-        onChange(newSelected); // Cập nhật state ở component cha
+        onChange(newSelected);
     };
 
     const clearSelection = (e) => {
-        e.stopPropagation(); // Ngăn việc mở/đóng dropdown
+        e.stopPropagation();
         onChange([]);
         setIsOpen(false);
     };
 
-    // Hiển thị text trên nút
+    const selectAll = () => {
+        onChange([...options]);
+    };
+
     const getButtonText = () => {
         if (selectedOptions.length === 0) return title;
         if (selectedOptions.length === 1) return selectedOptions[0];
@@ -47,48 +50,73 @@ export default function MultiSelectDropdown({ title, options, selectedOptions, o
     };
 
     return (
-        // z-index ở div gốc sẽ tạo ra Stacking Context MỚI,
-        // khiến menu con (dù có z-index cao) vẫn bị kẹt bên dưới
         <div className="relative" ref={ref}>
-            {/* Nút bấm để mở/đóng */}
             <button
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                aria-expanded={isOpen}
-                className="flex items-center justify-between gap-2 px-3 py-1.5 text-sm bg-slate-800 border border-slate-600 rounded-md hover:bg-slate-700 w-full sm:w-auto min-w-[120px]"
+                className="flex items-center justify-between gap-2 px-3 py-2 text-sm bg-slate-800 border border-slate-600 rounded-md hover:bg-slate-700 w-full min-w-[140px] text-white transition-colors"
             >
-                <span className="truncate">{getButtonText()}</span>
-
-                {/* Nút 'X' để xóa nhanh */}
-                {selectedOptions.length > 0 && (
-                    <X size={14} onClick={clearSelection} className="hover:text-white flex-shrink-0" />
-                )}
-                <ChevronDown size={16} className={`transition-transform flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
+                <span className="truncate font-medium">{getButtonText()}</span>
+                <div className="flex items-center gap-1">
+                    {selectedOptions.length > 0 && (
+                        <div onClick={clearSelection} className="p-0.5 hover:bg-slate-600 rounded-full cursor-pointer transition-colors">
+                            <X size={14} className="text-slate-400 hover:text-white" />
+                        </div>
+                    )}
+                    <ChevronDown size={16} className={`text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                </div>
             </button>
 
-            {/* Danh sách checkbox */}
             {isOpen && (
-                // Menu này đã có `absolute` và `z-[9999]` (cao nhất)
-                // Nó sẽ "nổi" lên trên mọi thứ khác
-                <div className="absolute z-[9999] top-full left-0 mt-2 
-                                w-full min-w-[220px] sm:w-56 max-h-60 overflow-y-auto 
-                                bg-slate-800 border border-slate-600 
-                                rounded-lg shadow-lg">
-                    <div className="p-2 space-y-1">
-                        {options.map(option => (
-                            <label
-                                key={option}
-                                className="flex items-center gap-2 p-2 rounded-md hover:bg-slate-700 cursor-pointer"
-                            >
-                                <input
-                                    type="checkbox"
-                                    checked={selectedOptions.includes(option)}
-                                    onChange={() => handleSelect(option)}
-                                    className="h-4 w-4 rounded bg-slate-600 border-slate-500 text-blue-500 focus:ring-blue-500"
-                                />
-                                <span>{option}</span>
-                            </label>
-                        ))}
+                <div className="absolute z-[9999] top-full left-0 mt-2 w-full min-w-[220px] max-h-80 overflow-y-auto bg-slate-900 border border-slate-700 rounded-lg shadow-xl custom-scrollbar animate-in fade-in zoom-in-95 duration-100">
+                    <div className="sticky top-0 bg-slate-900 p-2 border-b border-slate-700 flex justify-between z-10">
+                        <button onClick={selectAll} className="text-xs text-blue-400 hover:text-blue-300 font-medium px-2 py-1 hover:bg-slate-800 rounded">
+                            Select All
+                        </button>
+                        <button onClick={(e) => clearSelection(e)} className="text-xs text-red-400 hover:text-red-300 font-medium px-2 py-1 hover:bg-slate-800 rounded">
+                            Clear
+                        </button>
+                    </div>
+
+                    <div className="p-1 space-y-0.5">
+                        {options.map(option => {
+                            const selectedIndex = selectedOptions.indexOf(option);
+                            const isSelected = selectedIndex !== -1;
+                            // Chỉ tính số thứ tự nếu prop showOrder = true
+                            const displayOrder = (showOrder && isSelected) ? selectedIndex + 1 : null;
+
+                            return (
+                                <div
+                                    key={option}
+                                    onClick={() => handleSelect(option)}
+                                    className={`
+                                        flex items-center justify-between px-3 py-2.5 rounded-md cursor-pointer text-sm transition-all
+                                        ${isSelected
+                                            ? 'bg-blue-900/30 text-blue-100 hover:bg-blue-900/50'
+                                            : 'text-slate-300 hover:bg-slate-800 hover:text-white'}
+                                    `}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className={`
+                                            w-5 h-5 rounded border flex items-center justify-center transition-all duration-200
+                                            ${isSelected
+                                                ? 'bg-blue-600 border-blue-600 shadow-sm'
+                                                : 'bg-slate-800 border-slate-600 group-hover:border-slate-500'}
+                                        `}>
+                                            {isSelected && <Check size={14} className="text-white" strokeWidth={3} />}
+                                        </div>
+                                        <span className="capitalize">{option}</span>
+                                    </div>
+
+                                    {/* Chỉ hiển thị số nếu showOrder = true */}
+                                    {displayOrder && (
+                                        <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold shadow-sm">
+                                            {displayOrder}
+                                        </span>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             )}
