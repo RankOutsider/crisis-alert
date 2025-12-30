@@ -34,9 +34,7 @@ const PostAlert = sequelize.define('PostAlert', {
     timestamps: true // Giữ nguyên vì bảng có createdAt/updatedAt
 });
 
-// --- HOOKS THAY THẾ TRIGGER ---
-// Logic giữ nguyên, chỉ đảm bảo model định nghĩa đúng để hook chạy được
-
+// --- HOOKS (Trigger) ---
 PostAlert.afterCreate(async (postAlert, options) => {
     try {
         await Alert.increment('postCount', {

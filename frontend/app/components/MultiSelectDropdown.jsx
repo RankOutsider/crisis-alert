@@ -19,8 +19,6 @@ export default function MultiSelectDropdown({ title, options, selectedOptions, o
             const rect = ref.current.getBoundingClientRect();
             const screenCenter = window.innerWidth / 2;
 
-            // Nếu nút bấm nằm ở nửa bên phải màn hình -> Căn phải (để menu đổ về phía trái cho đỡ tràn)
-            // Ngược lại thì căn trái
             setAlignRight(rect.left > screenCenter);
         }
         setIsOpen(prev => !prev);

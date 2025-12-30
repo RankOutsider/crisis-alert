@@ -33,7 +33,6 @@ const AuthGuard = ({ children }) => {
         const userPayload = parseJwt(token);
 
         // 3. LOGIC QUAN TRỌNG: Chặn User thường vào trang Admin
-        // Nếu URL bắt đầu bằng /admin VÀ role trong token KHÔNG PHẢI là 'admin'
         if (pathname?.startsWith('/admin') && userPayload?.role !== 'admin') {
             // Đá về Dashboard
             router.replace('/dashboard');

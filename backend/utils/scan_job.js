@@ -1,3 +1,4 @@
+// backend/utils/scan_job.js
 const { Alert, Post, User, sequelize } = require('../models/associations');
 const { Op } = require('sequelize');
 const { sendNotificationEmail } = require('./emailService');
@@ -23,7 +24,6 @@ const runScanJob = async (io) => {
         }
 
         // --- 2. LẤY CÁC LIÊN KẾT ĐÃ TỒN TẠI TỪ DATABASE (ĐỂ LỌC RAM) ---
-        // Lưu ý: Tên bảng là 'postalerts' dựa trên ảnh bạn cung cấp
         const existingLinksRaw = await sequelize.query(
             "SELECT `AlertId`, `PostId` FROM `postalerts`",
             { type: sequelize.QueryTypes.SELECT, raw: true }
@@ -95,7 +95,7 @@ const runScanJob = async (io) => {
                 }
             }
 
-            // --- 6. INSERT IGNORE (PHẦN QUAN TRỌNG NHẤT) ---
+            // --- 6. INSERT IGNORE ---
             if (newPostsToLink.length > 0) {
                 try {
                     // Chuẩn bị thời gian hiện tại cho SQL
@@ -104,13 +104,12 @@ const runScanJob = async (io) => {
                     // Tạo chuỗi Values cho câu lệnh SQL: (AlertId, PostId, createdAt, updatedAt)
                     const values = newPostsToLink.map(pId => `(${alert.id}, ${pId}, '${now}', '${now}')`).join(',');
 
-                    // Câu lệnh BẤT TỬ: INSERT IGNORE INTO ...
                     // Nếu trùng AlertId + PostId -> Nó sẽ tự bỏ qua, không báo lỗi.
                     const query = `INSERT IGNORE INTO postalerts (AlertId, PostId, createdAt, updatedAt) VALUES ${values}`;
 
                     await sequelize.query(query);
 
-                    // --- LOG XANH (Thành công) ---
+                    // --- LOG XANH ---
                     totalNewLinksCreated += newPostsToLink.length;
                     console.log(`✅ [NODE-CRON] [Alert ID ${alert.id}] Processed ${newPostsToLink.length} posts (Duplicates ignored automatically).`);
 
